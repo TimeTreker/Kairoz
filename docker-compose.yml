@@ -1,0 +1,22 @@
+# Local development database. Credentials are for local development only.
+services:
+  postgres:
+    image: postgres:18-alpine
+    container_name: kairoz-postgres
+    environment:
+      POSTGRES_USER: kairoz
+      POSTGRES_PASSWORD: kairoz
+      POSTGRES_DB: kairoz
+    ports:
+      - "127.0.0.1:55432:5432"
+    volumes:
+      - kairoz-pgdata:/var/lib/postgresql
+      - ./infra/postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kairoz -d kairoz"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+volumes:
+  kairoz-pgdata:
