@@ -43,6 +43,10 @@ export function buildApp(options: AppOptions): FastifyInstance {
       // Data exceptions, e.g. NUL characters in text or out-of-range numbers.
       return reply.code(400).send({ error: { code: 'INVALID_INPUT', message: 'the request contains invalid values', details: null } });
     }
+    if (code === '57014' || code === '55P03') {
+      // Statement timeout or lock not available: the server is busy, not the request wrong.
+      return reply.code(503).send({ error: { code: 'BUSY', message: 'the request timed out waiting; retry later', details: null } });
+    }
     if (code === '40001' || code === '40P01') {
       return reply.code(409).send({ error: { code: 'RETRY', message: 'concurrent update; retry the request', details: null } });
     }

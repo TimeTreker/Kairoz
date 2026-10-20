@@ -116,7 +116,7 @@ describe('config authoring', () => {
     assert.equal(spec.templateId, 'template-bin_log@1');
     assert.equal(spec.edgePipelineId, 'edge-bin-log@1');
     assert.equal(spec.requiresReview, false);
-    assert.deepEqual(updated.dataItems[brakeKey], { dataCode: 'chassis.brake.brake.debug', status: 'PENDING', overlapSuspects: [] });
+    assert.deepEqual(updated.dataItems[brakeKey], { dataCode: 'chassis.brake.brake.debug', ownerGroupId: 'brake', status: 'PENDING', overlapSuspects: [], overlapsOtherGroups: false });
     assert.equal(updated.revision, feature.revision + 1);
     assert.deepEqual(updated.changes.sinceBase.files.added, [brakeKey]);
   });
@@ -276,7 +276,7 @@ describe('config authoring', () => {
       }),
     );
     const key = Object.keys(feature.draft.files)[0]!;
-    assert.deepEqual(feature.dataItems[key], { dataCode: 'chassis.brake.data', status: 'REVIEW', overlapSuspects: [brakeKey] });
+    assert.deepEqual(feature.dataItems[key], { dataCode: 'chassis.brake.data', ownerGroupId: 'brake', status: 'REVIEW', overlapSuspects: [brakeKey], overlapsOtherGroups: false });
 
     const blocked = await business.post(`/api/v1/features/${feature.id}/submit`, { expectedRevision: feature.revision });
     const issue = expectError(blocked, 422, 'SUBMIT_BLOCKED').details.issues[0];

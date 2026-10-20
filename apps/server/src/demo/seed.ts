@@ -214,5 +214,39 @@ export async function seedDemo(app: FastifyInstance): Promise<string[]> {
     message: '首版制动采集',
   });
   log.push(`feature guided_brake submitted as ${submitted.commit.displayName} (${submitted.feature.stage})`);
+
+  // A parking camera Feature waiting in the DCL intake queue for sensitive review.
+  const parking = await login('adc_parking');
+  let camera = await post(parking, '/api/v1/workspaces/team-adc-parking/features', {
+    groupId: 'adc-parking',
+    name: 'parking_camera',
+    description: '泊车环视视频采集',
+  });
+  camera = await post(parking, `/api/v1/features/${camera.id}/files`, {
+    expectedRevision: camera.revision,
+    source: { unit: 'ADC', directory: '/data/camera/surround', pattern: 'surround_*.mp4' },
+    name: '环视视频',
+    purpose: '复现自动泊车擦碰',
+  });
+  const videoKey = Object.keys(camera.draft.files)[0];
+  camera = await call(parking, 'PUT', `/api/v1/features/${camera.id}/policies/adc.parking.scrape_risk`, {
+    expectedRevision: camera.revision,
+    name: '泊车擦碰风险',
+    trigger: 'apa.active AND min_obstacle_distance < 0.2',
+    captures: [videoKey],
+    preSeconds: 15,
+    postSeconds: 5,
+  });
+  const inIntake = await post(parking, `/api/v1/features/${camera.id}/submit`, { expectedRevision: camera.revision });
+  log.push(`feature parking_camera submitted (${inIntake.feature.stage}, awaiting DCL review)`);
+
+  // Steering asks brake for read-only use of the brake debug data; brake has not decided yet.
+  const steering = await login('steering');
+  await post(steering, '/api/v1/reference-requests', {
+    dataKey,
+    readerGroupId: 'steering',
+    reason: '转向事件分析需要制动压力上下文',
+  });
+  log.push('reference request: steering -> brake debug data (pending owner decision)');
   return log;
 }

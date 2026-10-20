@@ -12,7 +12,17 @@ after(() => t.close());
 
 test('the demo data loads through the API into a clean installation, once', async () => {
   const log = await seedDemo(t.app);
-  assert.match(log.at(-1)!, /guided_brake submitted as initial \/ chassis\.brake \/ guided_brake \/ r001 \(DCL_READY\)/);
+  assert.ok(log.some((l) => /guided_brake submitted as initial \/ chassis\.brake \/ guided_brake \/ r001 \(DCL_READY\)/.test(l)));
+  assert.ok(log.some((l) => /parking_camera submitted \(SUBMITTED/.test(l)));
+  const dcl = await t.login('dcl');
+  const queue = ok(await dcl.get('/api/v1/intake'));
+  assert.deepEqual(
+    queue.features.map((f: any) => f.name),
+    ['parking_camera'],
+  );
+  const business0 = await t.login('business');
+  const pending = ok(await business0.get('/api/v1/reference-requests?groupId=brake&side=owner&status=PENDING'));
+  assert.equal(pending.length, 1);
   const business = await t.login('business');
   const features = ok(await business.get('/api/v1/workspaces/team-brake/features'));
   assert.deepEqual(

@@ -1,5 +1,7 @@
 // Configuration content owned by one business group: its file list and its collection policies.
 // A Feature edits a full working copy (draft); submitting it creates immutable versions.
+// The file list may also hold read-only references to other groups' files, pinned to one of
+// their immutable FileSpec versions; the definition stays with its owner.
 
 import { canonicalJson } from './canonical.ts';
 import type { DataSource } from './data-source.ts';
@@ -42,12 +44,25 @@ export interface PolicyContent {
 }
 
 export interface GroupConfig {
+  /** Files this group owns and defines. */
   files: Record<string, FileSpecContent>;
   policies: Record<string, PolicyContent>;
+  /** Other groups' files used read-only: data_key -> pinned file_spec_versions.id. */
+  references: Record<string, string>;
 }
 
 export function emptyConfig(): GroupConfig {
-  return { files: {}, policies: {} };
+  return { files: {}, policies: {}, references: {} };
+}
+
+/** Tolerates stored drafts written before a section existed. */
+export function normalizeConfig(raw: Partial<GroupConfig>): GroupConfig {
+  return { files: raw.files ?? {}, policies: raw.policies ?? {}, references: raw.references ?? {} };
+}
+
+/** Keys a policy may capture: owned files and referenced files. */
+export function capturableKeys(config: GroupConfig): Set<string> {
+  return new Set([...Object.keys(config.files), ...Object.keys(config.references)]);
 }
 
 export function normalizeTags(tags: readonly string[]): string[] {
@@ -111,6 +126,8 @@ export interface SectionDiff {
 export interface ConfigDiff {
   files: SectionDiff;
   policies: SectionDiff;
+  /** A changed reference means the pinned version moved. */
+  references: SectionDiff;
   empty: boolean;
 }
 
@@ -130,11 +147,25 @@ function diffSection<T extends object>(from: Record<string, T>, to: Record<strin
   return { added, removed, changed };
 }
 
+function diffPins(from: Record<string, string>, to: Record<string, string>): SectionDiff {
+  return {
+    added: Object.keys(to).filter((k) => !(k in from)).sort(),
+    removed: Object.keys(from).filter((k) => !(k in to)).sort(),
+    changed: Object.keys(to)
+      .filter((k) => k in from && from[k] !== to[k])
+      .sort()
+      .map((key) => ({ key, fields: ['version'] })),
+  };
+}
+
 export function diffConfig(from: GroupConfig, to: GroupConfig): ConfigDiff {
   const files = diffSection(from.files, to.files);
   const policies = diffSection(from.policies, to.policies);
-  const empty = [files, policies].every((s) => s.added.length === 0 && s.removed.length === 0 && s.changed.length === 0);
-  return { files, policies, empty };
+  const references = diffPins(from.references, to.references);
+  const empty = [files, policies, references].every(
+    (s) => s.added.length === 0 && s.removed.length === 0 && s.changed.length === 0,
+  );
+  return { files, policies, references, empty };
 }
 
 export function sameConfig(a: GroupConfig, b: GroupConfig): boolean {

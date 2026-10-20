@@ -28,6 +28,14 @@ export const ACTIONS = {
   'feature.create': { roles: ['BUSINESS_DEV'], env: 'development' },
   'feature.edit': { roles: ['BUSINESS_DEV'], env: 'development' },
   'feature.submit': { roles: ['BUSINESS_DEV'], env: 'development' },
+  'feature.review': { roles: ['DCL_ENGINEER'], env: 'development' },
+  'feature.return': { roles: ['DCL_ENGINEER'], env: 'development' },
+  'feature.editBinding': { roles: ['DCL_ENGINEER'], env: 'development' },
+  'reference.request': { roles: ['BUSINESS_DEV'], env: 'development' },
+  /** The owner group's business development decides on references to its data. */
+  'reference.decide': { roles: ['BUSINESS_DEV'], env: 'development' },
+  /** Platform operations may administer reference grants for any group. */
+  'reference.administer': { roles: ['PLATFORM_OPS'], env: 'all' },
 } as const satisfies Record<string, { roles: readonly Role[]; env: Env | 'all' }>;
 
 export type Action = keyof typeof ACTIONS;

@@ -18,6 +18,7 @@ Copy `.env.example` to `.env` first. Run a single test file with `node --env-fil
 - `src/domain` is pure (no IO). Services in `src/modules/<name>/service.ts` load → `ctx.allow(action, target)` → business rules → SQL. Routes only parse with zod and call services.
 - Every write goes through `writer()` (transaction, audit, idempotency). Mutations of existing objects take `expectedRevision`.
 - Authorization is always one complete grant (`authorize()` in `src/domain/authz.ts`); never union grants.
+- Anything that reads or changes a group's approval state (review, submit, reference revocation) takes `lockIntake(groupId)` before any Feature row lock.
 - Errors: throw `DomainError` helpers (`rule` 422, `conflict` 409, `notFound` 404, `ForbiddenError` 403) with a stable `code`.
 - Migrations are append-only SQL files in `apps/server/migrations/`; never edit an applied one.
 - Test through the HTTP API (`test/helpers.ts`), plus unit tests for domain functions.

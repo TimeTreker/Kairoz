@@ -1,15 +1,19 @@
 // Config authoring. A Feature (研发分支) holds a full working copy of its group's file list and
-// policies. Saving the draft never creates versions; submitting creates immutable,
-// content-addressed FileSpec / Policy / Manifest versions and a commit. Unchanged content is reused.
+// policies, plus read-only references to other groups' files. Saving the draft never creates
+// versions; submitting creates immutable, content-addressed FileSpec / Policy / Manifest
+// versions and a commit. Unchanged content is reused.
 
 import type { Db } from '../../db/pool.ts';
 import { many, one } from '../../db/pool.ts';
+import type { Action } from '../../domain/authz.ts';
 import { canReadGroupConfig } from '../../domain/authz.ts';
 import { digestOf } from '../../domain/canonical.ts';
 import {
   assertPolicyIdForGroup,
+  capturableKeys,
   diffConfig,
   emptyConfig,
+  normalizeConfig,
   normalizePolicy,
   normalizeTags,
   policyIssues,
@@ -18,7 +22,7 @@ import {
 import type { ConfigDiff, FileSpecContent, GroupConfig, PolicyContent, Priority } from '../../domain/config.ts';
 import { dataCodeStem, globsIntersect, normalizeSource } from '../../domain/data-source.ts';
 import type { DataSource } from '../../domain/data-source.ts';
-import { conflict, ForbiddenError, notFound, revisionConflict, rule } from '../../domain/errors.ts';
+import { conflict, notFound, revisionConflict, rule } from '../../domain/errors.ts';
 import { assertNotDowngraded, inferFileType, requiresSensitiveReview } from '../../domain/file-types.ts';
 import type { FileType, Privacy } from '../../domain/file-types.ts';
 import { FEATURE_NAME, newId } from '../../domain/ids.ts';
@@ -27,11 +31,19 @@ import type { ReadCtx, WriteCtx } from '../../http/context.ts';
 import { getGroup, workspaceForAction } from '../org/service.ts';
 import type { GroupView } from '../org/service.ts';
 import { bindingIssues, currentTemplate } from '../processing/service.ts';
+import { assertCanRead } from './access.ts';
+import { intakeStage, lockIntake, reviewItems } from './approvals.ts';
+import type { ReviewItem } from './approvals.ts';
+import { addFeedback, CHANGE_REQUESTS } from './feedback.ts';
+import type { FeedbackKind } from './feedback.ts';
+import { approvedReference } from './references.ts';
+import { commitSnapshot, latestCommittedVersion, referencedVersions, resolveFiles } from './snapshots.ts';
+import type { ReferencedVersion } from './snapshots.ts';
 
 export type FeatureStage = 'DRAFT' | 'SUBMITTED' | 'DCL_READY';
 const EDITABLE_STAGES: readonly FeatureStage[] = ['DRAFT', 'SUBMITTED', 'DCL_READY'];
 
-interface FeatureRow {
+export interface FeatureRow {
   id: string;
   workspace_id: string;
   group_id: string;
@@ -67,7 +79,7 @@ interface DataItemRow {
 
 const sourceOf = (r: DataItemRow): DataSource => ({ unit: r.source_unit, directory: r.source_directory, pattern: r.source_pattern });
 
-function displayName(baseReleaseId: string | null, groupCode: string, featureName: string, sequence: number): string {
+export function displayName(baseReleaseId: string | null, groupCode: string, featureName: string, sequence: number): string {
   return `${baseReleaseId ?? 'initial'} / ${groupCode} / ${featureName} / r${String(sequence).padStart(3, '0')}`;
 }
 
@@ -81,38 +93,11 @@ function baseConfig(baseReleaseId: string | null): GroupConfig {
 // Read side
 // ---------------------------------------------------------------------------
 
-function assertCanRead(ctx: ReadCtx, group: GroupView, workspaceId?: string): void {
-  const target = { groupId: group.id, domain: group.domain, ...(workspaceId !== undefined ? { workspaceId } : {}) };
-  if (!canReadGroupConfig(ctx.actor.grants, target)) {
-    throw new ForbiddenError('config.read', 'NOT_VISIBLE', { type: 'group', id: group.id, ...target });
-  }
-}
-
-async function getFeatureRow(db: Db, id: string, lock = false): Promise<FeatureRow> {
+export async function getFeatureRow(db: Db, id: string, lock = false): Promise<FeatureRow> {
   const row = await one<FeatureRow>(db, `SELECT * FROM features WHERE id = $1${lock ? ' FOR UPDATE' : ''}`, [id]);
   if (!row) throw notFound('feature', id);
+  row.draft = normalizeConfig(row.draft);
   return row;
-}
-
-async function commitSnapshot(db: Db, commitId: string): Promise<GroupConfig> {
-  const files = await many<{ data_key: string; content: FileSpecContent }>(
-    db,
-    `SELECT e.data_key, v.content FROM commits c
-       JOIN manifest_entries e ON e.manifest_version_id = c.manifest_version_id
-       JOIN file_spec_versions v ON v.id = e.file_spec_version_id
-     WHERE c.id = $1`,
-    [commitId],
-  );
-  const policies = await many<{ policy_id: string; content: PolicyContent }>(
-    db,
-    `SELECT cp.policy_id, v.content FROM commit_policies cp JOIN policy_versions v ON v.id = cp.policy_version_id
-     WHERE cp.commit_id = $1`,
-    [commitId],
-  );
-  return {
-    files: Object.fromEntries(files.map((f) => [f.data_key, f.content])),
-    policies: Object.fromEntries(policies.map((p) => [p.policy_id, p.content])),
-  };
 }
 
 export interface FeatureSummary {
@@ -131,6 +116,7 @@ export interface FeatureSummary {
   sequence: number;
   revision: number;
   fileCount: number;
+  referenceCount: number;
   policyCount: number;
   createdBy: string;
   createdAt: string;
@@ -154,6 +140,7 @@ function featureSummary(row: FeatureRow, group: GroupView): FeatureSummary {
     sequence: row.sequence,
     revision: row.revision,
     fileCount: Object.keys(row.draft.files).length,
+    referenceCount: Object.keys(row.draft.references).length,
     policyCount: Object.keys(row.draft.policies).length,
     createdBy: row.created_by,
     createdAt: row.created_at.toISOString(),
@@ -161,27 +148,103 @@ function featureSummary(row: FeatureRow, group: GroupView): FeatureSummary {
   };
 }
 
+export interface FeedbackView {
+  id: string;
+  kind: FeedbackKind;
+  commitId: string | null;
+  dataKey: string | null;
+  reason: string;
+  author: string;
+  createdAt: string;
+}
+
+/**
+ * Overlap suspects as a business group may see them: its own data keys, plus only a flag for
+ * other groups' sources (their keys would reveal hidden source paths).
+ */
+async function visibleSuspects(db: Db, groupId: string, suspects: string[]) {
+  const owners = await many<{ data_key: string; owner_group_id: string }>(
+    db,
+    'SELECT data_key, owner_group_id FROM data_items WHERE data_key = ANY($1)',
+    [suspects],
+  );
+  return {
+    overlapSuspects: owners.filter((o) => o.owner_group_id === groupId).map((o) => o.data_key).sort(),
+    overlapsOtherGroups: owners.some((o) => o.owner_group_id !== groupId),
+  };
+}
+
 export interface FeatureDetail extends FeatureSummary {
   draft: GroupConfig;
-  dataItems: Record<string, { dataCode: string; status: DataItemRow['status']; overlapSuspects: string[] }>;
-  /** Draft files that need DCL sensitive review before the Feature can become DCL Ready. */
+  dataItems: Record<
+    string,
+    { dataCode: string; ownerGroupId: string; status: DataItemRow['status']; overlapSuspects: string[]; overlapsOtherGroups: boolean }
+  >;
+  /** Content of referenced files, as pinned. */
+  referencedFiles: Record<string, Omit<ReferencedVersion, 'dataKey'>>;
+  /** Draft files (owned or referenced) that need DCL sensitive review. */
   reviewRequired: string[];
+  /** Review state of the head commit while it is in DCL intake. */
+  intake: { commitId: string; reviews: ReviewItem[] } | null;
+  feedback: FeedbackView[];
   changes: { sinceHead: ConfigDiff; sinceBase: ConfigDiff };
 }
 
-async function featureDetail(db: Db, row: FeatureRow, group: GroupView): Promise<FeatureDetail> {
-  const keys = Object.keys(row.draft.files);
+export async function featureDetail(db: Db, row: FeatureRow, group: GroupView): Promise<FeatureDetail> {
+  const draft = row.draft;
+  const keys = [...capturableKeys(draft)];
   const items = await many<DataItemRow>(db, 'SELECT * FROM data_items WHERE data_key = ANY($1)', [keys]);
+  const versions = await referencedVersions(db, Object.values(draft.references));
+  const resolved = await resolveFiles(db, draft);
   const base = baseConfig(row.base_release_id);
   const head = row.head_commit_id ? await commitSnapshot(db, row.head_commit_id) : base;
+  const feedback = await many<{
+    id: string;
+    kind: FeedbackKind;
+    commit_id: string | null;
+    data_key: string | null;
+    reason: string;
+    author: string;
+    created_at: Date;
+  }>(db, 'SELECT * FROM feature_feedback WHERE feature_id = $1 ORDER BY created_at DESC, id DESC LIMIT 20', [row.id]);
+  const inIntake = row.head_commit_id !== null && (row.stage === 'SUBMITTED' || row.stage === 'DCL_READY');
+  const dataItems: FeatureDetail['dataItems'] = {};
+  for (const i of items) {
+    dataItems[i.data_key] = {
+      dataCode: i.data_code,
+      ownerGroupId: i.owner_group_id,
+      status: i.status,
+      ...(await visibleSuspects(db, row.group_id, i.overlap_suspects)),
+    };
+  }
   return {
     ...featureSummary(row, group),
-    draft: row.draft,
-    dataItems: Object.fromEntries(
-      items.map((i) => [i.data_key, { dataCode: i.data_code, status: i.status, overlapSuspects: i.overlap_suspects }]),
+    draft,
+    dataItems,
+    referencedFiles: Object.fromEntries(
+      Object.entries(draft.references).flatMap(([dataKey, versionId]) => {
+        const v = versions.get(versionId);
+        if (!v) return [];
+        const { dataKey: _, ...rest } = v;
+        return [[dataKey, rest]];
+      }),
     ),
-    reviewRequired: keys.filter((k) => row.draft.files[k]!.requiresReview).sort(),
-    changes: { sinceHead: diffConfig(head, row.draft), sinceBase: diffConfig(base, row.draft) },
+    reviewRequired: Object.keys(resolved)
+      .filter((k) => resolved[k]!.requiresReview)
+      .sort(),
+    intake: inIntake
+      ? { commitId: row.head_commit_id!, reviews: await reviewItems(db, head, { groupId: row.group_id, workspaceId: row.workspace_id }) }
+      : null,
+    feedback: feedback.map((f) => ({
+      id: f.id,
+      kind: f.kind,
+      commitId: f.commit_id,
+      dataKey: f.data_key,
+      reason: f.reason,
+      author: f.author,
+      createdAt: f.created_at.toISOString(),
+    })),
+    changes: { sinceHead: diffConfig(head, draft), sinceBase: diffConfig(base, draft) },
   };
 }
 
@@ -194,6 +257,7 @@ export async function listFeatures(ctx: ReadCtx, filter: { workspaceId: string; 
   const groups = new Map<string, GroupView>();
   const result: FeatureSummary[] = [];
   for (const row of rows) {
+    row.draft = normalizeConfig(row.draft);
     let group = groups.get(row.group_id);
     if (!group) {
       group = await getGroup(ctx.db, row.group_id);
@@ -256,7 +320,22 @@ export async function createFeature(
       ctx.actor.username,
     ],
   );
+  row!.draft = normalizeConfig(row!.draft);
   return featureDetail(ctx.db, row!, group);
+}
+
+type FeatureAction = Extract<Action, `feature.${string}`>;
+
+/**
+ * Authorizes against a Feature's (immutable) workspace and group, then locks the row. Actions
+ * that read or change approval state also take the group's intake lock first.
+ */
+export async function lockFeatureFor(ctx: WriteCtx, action: FeatureAction, featureId: string, options: { intake?: boolean } = {}) {
+  const unlocked = await getFeatureRow(ctx.db, featureId);
+  const group = await getGroup(ctx.db, unlocked.group_id);
+  ctx.allow(action, { type: 'feature', id: featureId, workspaceId: unlocked.workspace_id, groupId: group.id, scope: group.domain });
+  if (options.intake) await lockIntake(ctx.db, group.id);
+  return { feature: await getFeatureRow(ctx.db, featureId, true), group };
 }
 
 interface EditScope {
@@ -264,25 +343,18 @@ interface EditScope {
   group: GroupView;
 }
 
-/** Authorizes against a Feature's (immutable) workspace and group, then locks the row. */
-async function lockFeatureFor(ctx: WriteCtx, action: 'feature.edit' | 'feature.submit', featureId: string) {
-  const unlocked = await getFeatureRow(ctx.db, featureId);
-  const group = await getGroup(ctx.db, unlocked.group_id);
-  ctx.allow(action, { type: 'feature', id: featureId, workspaceId: unlocked.workspace_id, groupId: group.id, scope: group.domain });
-  return { feature: await getFeatureRow(ctx.db, featureId, true), group };
-}
-
 /**
  * Shared frame for every draft edit: authorize, lock, check the revision and stage, apply the
  * change, and fall back to DRAFT if content changed. Earlier commits remain untouched.
  */
-async function editDraft(
+export async function editDraft(
   ctx: WriteCtx,
   featureId: string,
   expectedRevision: number,
   change: (draft: GroupConfig, scope: EditScope) => Promise<GroupConfig>,
+  options: { action?: FeatureAction; feedback?: { kind: FeedbackKind; dataKey?: string; reason: string } } = {},
 ): Promise<FeatureDetail> {
-  const { feature, group } = await lockFeatureFor(ctx, 'feature.edit', featureId);
+  const { feature, group } = await lockFeatureFor(ctx, options.action ?? 'feature.edit', featureId);
   if (feature.revision !== expectedRevision) throw revisionConflict('feature', feature.id, feature.revision);
   if (!EDITABLE_STAGES.includes(feature.stage)) throw rule('FEATURE_IMMUTABLE', `feature in stage ${feature.stage} cannot change`);
   const workspace = await workspaceForAction(ctx.db, feature.workspace_id);
@@ -296,6 +368,10 @@ async function editDraft(
      WHERE id = $1 RETURNING *`,
     [feature.id, JSON.stringify(next)],
   );
+  if (options.feedback) {
+    await addFeedback(ctx.db, { featureId: feature.id, commitId: feature.head_commit_id, author: ctx.actor.username, ...options.feedback });
+  }
+  updated!.draft = normalizeConfig(updated!.draft);
   return featureDetail(ctx.db, updated!, group);
 }
 
@@ -393,9 +469,12 @@ export async function addFile(
     let dataKey: string;
     if (existing) {
       if (existing.owner_group_id !== group.id) {
+        // The data key is only disclosed to a group that may already reference it; otherwise
+        // an exact guess would map a hidden source path to a catalog entry.
+        const referable = await approvedReference(ctx.db, existing.data_key, group.id, false);
         throw rule('DATA_SOURCE_OWNED_ELSEWHERE', 'this source is already registered by another group; reference it instead', {
-          dataKey: existing.data_key,
           ownerGroupId: existing.owner_group_id,
+          ...(referable ? { dataKey: existing.data_key } : {}),
         });
       }
       if (draft.files[existing.data_key]) {
@@ -458,6 +537,11 @@ export async function addFile(
   });
 }
 
+async function templateRequiresReview(db: Db, templateId: string): Promise<boolean> {
+  const row = await one<{ requires_review: boolean }>(db, 'SELECT requires_review FROM processing_templates WHERE id = $1', [templateId]);
+  return row?.requires_review ?? true;
+}
+
 /** Edits business attributes. The source is the data identity and cannot change. */
 export async function updateFile(
   ctx: WriteCtx,
@@ -470,7 +554,7 @@ export async function updateFile(
     if (!current) throw notFound('file in draft', dataKey);
     const fileType = input.fileType ?? current.fileType;
     let binding: Pick<FileSpecContent, 'templateId' | 'format' | 'schema' | 'edgePipelineId' | 'cloudPipelineId'> = current;
-    let templateRequiresReview: boolean;
+    let reviewByTemplate: boolean;
     if (fileType !== current.fileType) {
       // A new type takes that type's current default binding.
       assertNotDowngraded(current.source.pattern, fileType);
@@ -482,13 +566,10 @@ export async function updateFile(
         edgePipelineId: template.edgePipelineId,
         cloudPipelineId: template.cloudPipelineId,
       };
-      templateRequiresReview = template.requiresReview;
+      reviewByTemplate = template.requiresReview;
     } else {
-      // Same type keeps its original binding even if a newer template exists.
-      const row = await one<{ requires_review: boolean }>(ctx.db, 'SELECT requires_review FROM processing_templates WHERE id = $1', [
-        current.templateId,
-      ]);
-      templateRequiresReview = row?.requires_review ?? true;
+      // Same type keeps its binding (including DCL adjustments) even if a newer template exists.
+      reviewByTemplate = await templateRequiresReview(ctx.db, current.templateId);
     }
     const privacy = input.privacy ?? current.privacy;
     const contentTags = input.contentTags ? normalizeTags(input.contentTags) : current.contentTags;
@@ -502,7 +583,13 @@ export async function updateFile(
       retentionDays: input.retentionDays ?? current.retentionDays,
       contentTags,
       priority: input.priority ?? current.priority,
-      requiresReview: requiresSensitiveReview({ fileType, privacy, contentTags, templateRequiresReview, pattern: current.source.pattern }),
+      requiresReview: requiresSensitiveReview({
+        fileType,
+        privacy,
+        contentTags,
+        templateRequiresReview: reviewByTemplate,
+        pattern: current.source.pattern,
+      }),
     };
     checkAttributes(spec);
     draft.files[dataKey] = spec;
@@ -510,20 +597,52 @@ export async function updateFile(
   });
 }
 
+function assertNotCaptured(draft: GroupConfig, dataKey: string): void {
+  const capturing = Object.entries(draft.policies)
+    .filter(([, p]) => p.captures.includes(dataKey))
+    .map(([id]) => id)
+    .sort();
+  if (capturing.length > 0) {
+    throw rule('FILE_CAPTURED_BY_POLICY', 'remove the file from these policies first', { policyIds: capturing });
+  }
+}
+
 export async function removeFile(ctx: WriteCtx, featureId: string, dataKey: string, expectedRevision: number) {
   return editDraft(ctx, featureId, expectedRevision, async (draft) => {
     const spec = draft.files[dataKey];
     if (!spec) throw notFound('file in draft', dataKey);
-    const capturing = Object.entries(draft.policies)
-      .filter(([, p]) => p.captures.includes(dataKey))
-      .map(([id]) => id)
-      .sort();
-    if (capturing.length > 0) {
-      throw rule('FILE_CAPTURED_BY_POLICY', 'remove the file from these policies first', { policyIds: capturing });
-    }
+    assertNotCaptured(draft, dataKey);
     delete draft.files[dataKey];
     await lockSourceDirectory(ctx.db, spec.source);
     await releaseIfUnused(ctx.db, dataKey, featureId);
+    return draft;
+  });
+}
+
+/**
+ * Adds (or re-pins) a read-only reference to another group's file. The reference pins the
+ * owner's latest committed FileSpec version and requires an approved reference grant.
+ */
+export async function putReference(ctx: WriteCtx, featureId: string, dataKey: string, expectedRevision: number) {
+  return editDraft(ctx, featureId, expectedRevision, async (draft, { group }) => {
+    const item = await one<DataItemRow>(ctx.db, 'SELECT * FROM data_items WHERE data_key = $1', [dataKey]);
+    if (!item) throw notFound('data item', dataKey);
+    if (item.owner_group_id === group.id) throw rule('OWN_DATA_ITEM', 'this group owns the data item; add it as a file instead');
+    if (!(await approvedReference(ctx.db, dataKey, group.id, false))) {
+      throw rule('REFERENCE_NOT_GRANTED', `group ${group.id} has no approved reference to ${dataKey}; request one first`);
+    }
+    const latest = await latestCommittedVersion(ctx.db, dataKey);
+    if (!latest) throw rule('NOT_COMMITTED', `data item ${dataKey} has no committed definition yet`);
+    draft.references[dataKey] = latest.id;
+    return draft;
+  });
+}
+
+export async function removeReference(ctx: WriteCtx, featureId: string, dataKey: string, expectedRevision: number) {
+  return editDraft(ctx, featureId, expectedRevision, async (draft) => {
+    if (!draft.references[dataKey]) throw notFound('reference in draft', dataKey);
+    assertNotCaptured(draft, dataKey);
+    delete draft.references[dataKey];
     return draft;
   });
 }
@@ -557,7 +676,7 @@ export async function putPolicy(
       throw rule('POLICY_NAMESPACE_TAKEN', `policy id ${policyId} falls in another group's namespace`);
     }
     const content = normalizePolicy({ ...input, priority: input.priority ?? 'NORMAL' });
-    const issues = policyIssues(content, new Set(Object.keys(draft.files)));
+    const issues = policyIssues(content, capturableKeys(draft));
     if (issues.length > 0) throw rule('INVALID_POLICY', 'the policy is invalid', { issues });
     draft.policies[policyId] = content;
     return draft;
@@ -621,6 +740,7 @@ async function policyVersion(ctx: WriteCtx, policyId: string, content: PolicyCon
   ))!;
 }
 
+/** A group's file list version: owned files and pinned references, sorted by data_key. */
 async function manifestVersion(
   ctx: WriteCtx,
   groupId: string,
@@ -651,7 +771,7 @@ async function manifestVersion(
 }
 
 export interface SubmitIssue {
-  kind: 'file' | 'policy';
+  kind: 'file' | 'reference' | 'policy';
   key: string;
   problems: string[];
 }
@@ -674,7 +794,15 @@ async function submitIssues(ctx: WriteCtx, group: GroupView, draft: GroupConfig)
     problems.push(...(await bindingIssues(ctx.db, draft.files[key]!)));
     if (problems.length) issues.push({ kind: 'file', key, problems });
   }
-  const available = new Set(keys);
+  const versions = await referencedVersions(ctx.db, Object.values(draft.references));
+  for (const [key, versionId] of Object.entries(draft.references).sort(([a], [b]) => a.localeCompare(b))) {
+    const problems: string[] = [];
+    if (versions.get(versionId)?.dataKey !== key) problems.push('pinned version does not belong to this data item');
+    // FOR SHARE: a revocation either commits first and blocks this submit, or waits for it.
+    if (!(await approvedReference(ctx.db, key, group.id, true))) problems.push('reference is not (or no longer) granted');
+    if (problems.length) issues.push({ kind: 'reference', key, problems });
+  }
+  const available = capturableKeys(draft);
   for (const [policyId, policy] of Object.entries(draft.policies).sort(([a], [b]) => a.localeCompare(b))) {
     const problems = policyIssues(policy, available);
     const owner = await one<{ owner_group_id: string }>(ctx.db, 'SELECT owner_group_id FROM policies WHERE policy_id = $1', [policyId]);
@@ -689,15 +817,25 @@ export async function submitFeature(
   featureId: string,
   input: { expectedRevision: number; message?: string },
 ): Promise<{ commit: CommitView; feature: FeatureDetail; reused: boolean }> {
-  const { feature, group } = await lockFeatureFor(ctx, 'feature.submit', featureId);
+  const { feature, group } = await lockFeatureFor(ctx, 'feature.submit', featureId, { intake: true });
   if (feature.revision !== input.expectedRevision) throw revisionConflict('feature', feature.id, feature.revision);
   if (!EDITABLE_STAGES.includes(feature.stage)) throw rule('FEATURE_IMMUTABLE', `feature in stage ${feature.stage} cannot change`);
 
   const draft = feature.draft;
-  // Ordinary content is DCL Ready at once; sensitive files wait for DCL review (next slice).
-  const stage: FeatureStage = Object.values(draft.files).some((f) => f.requiresReview) ? 'SUBMITTED' : 'DCL_READY';
+  const issues = await submitIssues(ctx, group, draft);
+  if (issues.length > 0) throw rule('SUBMIT_BLOCKED', 'the draft cannot be submitted yet', { issues });
+  // DCL Ready at once unless a file needs sensitive review without a current approval.
+  const stage = intakeStage(await reviewItems(ctx.db, draft, { groupId: group.id, workspaceId: feature.workspace_id }));
   if (feature.head_commit_id) {
     if (sameConfig(draft, await commitSnapshot(ctx.db, feature.head_commit_id))) {
+      const requested = await many<{ kind: FeedbackKind; reason: string }>(
+        ctx.db,
+        'SELECT kind, reason FROM feature_feedback WHERE feature_id = $1 AND commit_id = $2 AND kind = ANY($3) ORDER BY created_at, id',
+        [feature.id, feature.head_commit_id, CHANGE_REQUESTS],
+      );
+      if (requested.length > 0) {
+        throw rule('CHANGES_REQUESTED', 'changes were requested on this commit; submit a changed draft', { feedback: requested });
+      }
       // Edited back to the committed content: reuse the head commit instead of creating a duplicate.
       const current =
         feature.stage === stage
@@ -707,19 +845,23 @@ export async function submitFeature(
               'UPDATE features SET stage = $2, revision = revision + 1, updated_at = now() WHERE id = $1 RETURNING *',
               [feature.id, stage],
             ))!;
+      current.draft = normalizeConfig(current.draft);
       return { commit: await commitView(ctx.db, feature.head_commit_id), feature: await featureDetail(ctx.db, current, group), reused: true };
     }
   } else if (sameConfig(draft, baseConfig(feature.base_release_id))) {
     throw conflict('NO_CHANGES', 'nothing changed compared with the base configuration');
   }
 
-  const issues = await submitIssues(ctx, group, draft);
-  if (issues.length > 0) throw rule('SUBMIT_BLOCKED', 'the draft cannot be submitted yet', { issues });
-
   const entries: { dataKey: string; spec: VersionRef }[] = [];
-  for (const dataKey of Object.keys(draft.files).sort()) {
+  for (const dataKey of Object.keys(draft.files)) {
     entries.push({ dataKey, spec: await fileSpecVersion(ctx, dataKey, draft.files[dataKey]!) });
   }
+  const pinned = await referencedVersions(ctx.db, Object.values(draft.references));
+  for (const [dataKey, versionId] of Object.entries(draft.references)) {
+    const v = pinned.get(versionId)!;
+    entries.push({ dataKey, spec: { id: v.id, version: v.version, digest: v.digest } });
+  }
+  entries.sort((a, b) => (a.dataKey < b.dataKey ? -1 : a.dataKey > b.dataKey ? 1 : 0));
   const manifest = await manifestVersion(ctx, group.id, entries);
   const policies: { policyId: string; version: VersionRef }[] = [];
   for (const policyId of Object.keys(draft.policies).sort()) {
@@ -763,7 +905,7 @@ export async function submitFeature(
   }
   await ctx.db.query(
     "UPDATE data_items SET status = 'ACTIVE', updated_at = now() WHERE data_key = ANY($1) AND status = 'PENDING'",
-    [entries.map((e) => e.dataKey)],
+    [Object.keys(draft.files)],
   );
   const updated = await one<FeatureRow>(
     ctx.db,
@@ -771,6 +913,7 @@ export async function submitFeature(
      WHERE id = $1 RETURNING *`,
     [feature.id, commitId, sequence, stage],
   );
+  updated!.draft = normalizeConfig(updated!.draft);
   return { commit: await commitView(ctx.db, commitId), feature: await featureDetail(ctx.db, updated!, group), reused: false };
 }
 
@@ -793,13 +936,14 @@ export interface CommitView {
   author: string;
   createdAt: string;
   manifest: VersionRef;
-  files: { dataKey: string; dataCode: string; version: VersionRef; content: FileSpecContent }[];
+  /** Owned files and pinned references; `owned` tells them apart. */
+  files: { dataKey: string; dataCode: string; ownerGroupId: string; owned: boolean; version: VersionRef; content: FileSpecContent }[];
   policies: { policyId: string; version: VersionRef; content: PolicyContent }[];
   /** Changes relative to the parent commit, or to the base for the first commit. */
   changes: ConfigDiff;
 }
 
-async function commitView(db: Db, id: string): Promise<CommitView> {
+export async function commitView(db: Db, id: string): Promise<CommitView> {
   const c = await one<{
     id: string;
     feature_id: string;
@@ -828,9 +972,17 @@ async function commitView(db: Db, id: string): Promise<CommitView> {
     [id],
   );
   if (!c) throw notFound('commit', id);
-  const files = await many<{ data_key: string; data_code: string; id: string; version: number; digest: string; content: FileSpecContent }>(
+  const files = await many<{
+    data_key: string;
+    data_code: string;
+    owner_group_id: string;
+    id: string;
+    version: number;
+    digest: string;
+    content: FileSpecContent;
+  }>(
     db,
-    `SELECT e.data_key, d.data_code, v.id, v.version, v.digest, v.content
+    `SELECT e.data_key, d.data_code, d.owner_group_id, v.id, v.version, v.digest, v.content
      FROM manifest_entries e
        JOIN file_spec_versions v ON v.id = e.file_spec_version_id
        JOIN data_items d ON d.data_key = e.data_key
@@ -844,10 +996,7 @@ async function commitView(db: Db, id: string): Promise<CommitView> {
      WHERE cp.commit_id = $1 ORDER BY cp.policy_id`,
     [id],
   );
-  const snapshot: GroupConfig = {
-    files: Object.fromEntries(files.map((f) => [f.data_key, f.content])),
-    policies: Object.fromEntries(policies.map((p) => [p.policy_id, p.content])),
-  };
+  const snapshot = await commitSnapshot(db, id);
   const previous = c.parent_commit_id ? await commitSnapshot(db, c.parent_commit_id) : baseConfig(c.base_release_id);
   return {
     id: c.id,
@@ -867,6 +1016,8 @@ async function commitView(db: Db, id: string): Promise<CommitView> {
     files: files.map((f) => ({
       dataKey: f.data_key,
       dataCode: f.data_code,
+      ownerGroupId: f.owner_group_id,
+      owned: f.owner_group_id === c.group_id,
       version: { id: f.id, version: f.version, digest: f.digest },
       content: f.content,
     })),
@@ -914,7 +1065,7 @@ export async function listCommits(ctx: ReadCtx, featureId: string) {
 // Data items
 // ---------------------------------------------------------------------------
 
-function dataItemView(r: DataItemRow & { latest_version?: number | null }) {
+export function dataItemView(r: DataItemRow & { latest_version?: number | null }) {
   return {
     dataKey: r.data_key,
     dataCode: r.data_code,
@@ -941,7 +1092,17 @@ export async function listDataItems(ctx: ReadCtx, workspaceId: string, groupId: 
      FROM data_items d WHERE owner_group_id = $1 ORDER BY data_code`,
     [groupId],
   );
-  return rows.map(dataItemView);
+  const views = [];
+  for (const r of rows) views.push({ ...dataItemView(r), ...(await visibleSuspects(ctx.db, groupId, r.overlap_suspects)) });
+  return views;
+}
+
+/** Groups that own `dataKey` or one of its overlap suspects. */
+export async function overlapOwners(db: Db, item: { owner_group_id: string; overlap_suspects: string[] }): Promise<Set<string>> {
+  const rows = await many<{ owner_group_id: string }>(db, 'SELECT owner_group_id FROM data_items WHERE data_key = ANY($1)', [
+    item.overlap_suspects,
+  ]);
+  return new Set([item.owner_group_id, ...rows.map((r) => r.owner_group_id)]);
 }
 
 /** DCL decision on a source whose pattern overlaps another: distinct data, or a duplicate to drop. */
@@ -953,14 +1114,7 @@ export async function reviewOverlap(
   const unlocked = await one<DataItemRow>(ctx.db, 'SELECT * FROM data_items WHERE data_key = $1', [dataKey]);
   if (!unlocked) throw notFound('data item', dataKey);
   // The decision concerns every group whose source overlaps, so one grant must cover all of them.
-  const owners = new Set([
-    unlocked.owner_group_id,
-    ...(
-      await many<{ owner_group_id: string }>(ctx.db, 'SELECT owner_group_id FROM data_items WHERE data_key = ANY($1)', [
-        unlocked.overlap_suspects,
-      ])
-    ).map((r) => r.owner_group_id),
-  ]);
+  const owners = await overlapOwners(ctx.db, unlocked);
   ctx.allow('dataItem.reviewOverlap', {
     type: 'dataItem',
     id: dataKey,
