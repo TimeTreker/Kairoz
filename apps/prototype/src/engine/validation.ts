@@ -144,7 +144,12 @@ export function dispatchFeature(ctx: Ctx, featureId: string, input: { commitId: 
 }
 
 function settle(d: Draft<Deployment>, now: string): void {
-  if (d.targets.every((t) => t.status !== 'PENDING') && d.status === 'PENDING') {
+  // A failed vehicle pauses a rollout; nothing further is sent until it is resumed.
+  if (d.kind === 'OTA' && d.status === 'PENDING' && d.targets.some((t) => t.status === 'FAILED')) {
+    d.status = 'PAUSED';
+    d.pauseReason = null; // paused by the failure itself, not by a person
+  }
+  if (d.status === 'PENDING' && d.targets.every((t) => t.status !== 'PENDING' && t.status !== 'QUEUED')) {
     d.status = 'COMPLETED';
   }
   d.updatedAt = now;
@@ -284,6 +289,7 @@ export function recordFeatureTest(
     versionId: input.commitId,
     resourceId: r.id,
     resourceType: r.type,
+    integrationVersion: r.integrationVersion,
     env: r.env,
     resolvedConfigId: r.appliedConfigId!,
     result: input.result,
@@ -421,6 +427,7 @@ export function recordCandidateTest(
     versionId: c.id,
     resourceId: r.id,
     resourceType: r.type,
+    integrationVersion: r.integrationVersion,
     env: r.env,
     resolvedConfigId: c.resolvedConfigId,
     result: input.result,

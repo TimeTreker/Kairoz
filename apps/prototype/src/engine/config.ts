@@ -31,7 +31,7 @@ import { bindingIssues, currentTemplate } from './processing.ts';
 import { approvedReference } from './references.ts';
 import { commitSnapshot, latestCommittedVersion, resolveFiles } from './snapshots.ts';
 import { stageAfterIntake } from './stages.ts';
-import type { BusinessGroup, Feature, FeatureStage, FeedbackKind, State } from './types.ts';
+import type { BusinessGroup, Feature, FeatureStage, FeedbackKind, Release, State } from './types.ts';
 
 /** Stages in which the draft may change. Changing it always returns the Feature to DRAFT. */
 export const EDITABLE_STAGES: readonly FeatureStage[] = ['DRAFT', 'SUBMITTED', 'DCL_READY', 'TESTING', 'VERIFIED'];
@@ -45,6 +45,13 @@ export function displayName(s: State, commitId: string): string {
   const base = c.baseReleaseId ? (s.releases[c.baseReleaseId]?.dclVersion ?? c.baseReleaseId) : 'initial';
   const name = c.featureId ? s.features[c.featureId]!.name : `merge:${c.mergeLabel ?? ''}`;
   return `${base} / ${g.code} / ${name} / r${String(c.sequence).padStart(3, '0')}`;
+}
+
+/** The newest formal release of a vehicle model: what new work builds on. */
+export function latestRelease(s: State, vehicleModelId: string): Release | undefined {
+  return Object.values(s.releases)
+    .filter((r) => r.vehicleModelId === vehicleModelId)
+    .sort((a, b) => b.sequence - a.sequence)[0];
 }
 
 /** The configuration a Feature starts from. Until a release exists it is the empty initial config. */
@@ -133,7 +140,7 @@ export function createFeature(ctx: Ctx, input: { workspaceId: string; groupId: s
     description: input.description ?? '',
     kind: 'BUSINESS',
     stage: 'DRAFT',
-    baseReleaseId: null,
+    baseReleaseId: latestRelease(ctx.s, workspace.vehicleModelId)?.id ?? null,
     headCommitId: null,
     verifiedCommitId: null,
     sequence: 0,

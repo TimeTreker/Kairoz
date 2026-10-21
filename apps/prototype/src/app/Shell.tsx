@@ -31,6 +31,7 @@ import { IntakePage } from '../pages/IntakePage.tsx';
 import { IntegrationPage } from '../pages/IntegrationPage.tsx';
 import { OrgPage } from '../pages/OrgPage.tsx';
 import { ProcessingPage } from '../pages/ProcessingPage.tsx';
+import { ReleasePage } from '../pages/ReleasePage.tsx';
 import { SimulatorPage } from '../pages/SimulatorPage.tsx';
 import { WorkbenchPage } from '../pages/WorkbenchPage.tsx';
 import { useActor, useWorkspace } from './hooks.ts';
@@ -69,7 +70,7 @@ const NAV: NavItem[] = [
 ];
 
 /** Pages not built yet in this phase show a placeholder instead of a broken link. */
-const READY = new Set(['workbench', 'features', 'data', 'intake', 'processing', 'fleet', 'integration', 'org', 'accounts', 'audit', 'guide', 'simulator']);
+const READY = new Set(['workbench', 'features', 'data', 'intake', 'processing', 'fleet', 'integration', 'release', 'org', 'accounts', 'audit', 'guide', 'simulator']);
 
 function Placeholder({ title }: { title: string }) {
   const { L } = useI18n();
@@ -115,6 +116,7 @@ export function Shell() {
       intake: <IntakePage />,
       processing: <ProcessingPage />,
       fleet: <FleetPage />,
+      release: <ReleasePage key={workspace?.id} tab={route[1]} />,
       simulator: <SimulatorPage />,
       org: <OrgPage />,
       accounts: <AccountsPage />,

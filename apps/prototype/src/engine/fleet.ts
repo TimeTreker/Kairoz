@@ -29,8 +29,19 @@ export function pendingDeploymentOf(s: State, resourceId: string): string | unde
   return Object.values(s.deployments).find((d) => d.status !== 'CANCELLED' && d.targets.some((t) => t.resourceId === resourceId && t.status === 'PENDING'))?.id;
 }
 
+/** An unfinished OTA rollout the vehicle is still part of (queued, waiting or failed). */
+export function openOtaOf(s: State, resourceId: string, except?: string): string | undefined {
+  return Object.values(s.deployments).find(
+    (d) =>
+      d.kind === 'OTA' &&
+      d.id !== except &&
+      (d.status === 'PENDING' || d.status === 'PAUSED') &&
+      d.targets.some((t) => t.resourceId === resourceId && ['QUEUED', 'PENDING', 'FAILED'].includes(t.status)),
+  )?.id;
+}
+
 function assertIdle(s: State, resourceId: string): void {
-  const pending = pendingDeploymentOf(s, resourceId);
+  const pending = pendingDeploymentOf(s, resourceId) ?? openOtaOf(s, resourceId);
   if (pending) throw rule('VEHICLE_BUSY', `vehicle ${resourceId} is waiting for deployment ${pending}`, { deploymentId: pending });
 }
 
@@ -189,7 +200,8 @@ export function assignableVehicles(s: State, workspaceId: string): Resource[] {
     (r) =>
       !assigned.has(r.id) &&
       r.status !== 'RETIRED' &&
-      r.env !== 'production' &&
+      // Production vehicles only serve project workspaces, where production vehicle groups live.
+      (r.env !== 'production' || ws.kind === 'PROJECT') &&
       r.vehicleModelId === ws.vehicleModelId &&
       (ws.scopes.includes(r.pool) || ws.scopes.includes('Vehicle')) &&
       (r.type === 'PHYSICAL' || r.homeWorkspaceId === ws.id),

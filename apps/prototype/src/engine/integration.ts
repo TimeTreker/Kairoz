@@ -11,20 +11,15 @@ import { mergeGroup, PROCESSING_FIELDS } from '../domain/merge.ts';
 import { WILDCARD } from '../domain/vocabulary.ts';
 import { reviewItems } from './approvals.ts';
 import type { ReviewItem } from './approvals.ts';
-import { baseConfig, fileSpecVersion, manifestVersion, policyVersion } from './config.ts';
+import { baseConfig, fileSpecVersion, latestRelease, manifestVersion, policyVersion } from './config.ts';
+
+export { latestRelease };
 import type { Ctx } from './engine.ts';
 import { getWorkspace } from './org.ts';
 import { bindingIssues } from './processing.ts';
 import { commitSnapshot, resolveFiles } from './snapshots.ts';
 import type { Candidate, Feature, MergeConflict, MergePlan, Release, State } from './types.ts';
 import { resolveConfig } from './validation.ts';
-
-/** The newest formal release of a vehicle model: the target integration builds on. */
-export function latestRelease(s: State, vehicleModelId: string): Release | undefined {
-  return Object.values(s.releases)
-    .filter((r) => r.vehicleModelId === vehicleModelId)
-    .sort((a, b) => b.sequence - a.sequence)[0];
-}
 
 /** Verified Features a project workspace may collect: from its declared sources, same vehicle model. */
 export function verifiedSources(s: State, workspaceId: string): Feature[] {

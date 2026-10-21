@@ -8,7 +8,7 @@ import type { FileType, Privacy } from '../domain/file-types.ts';
 import type { ReviewControls } from '../domain/intake.ts';
 import type { Domain, Env, GroupPurpose, Scope, WorkspaceKind } from '../domain/vocabulary.ts';
 
-export const STATE_SCHEMA = 3;
+export const STATE_SCHEMA = 4;
 
 export interface Account {
   username: string;
@@ -240,8 +240,11 @@ export interface Release {
   /** group id -> commit id included for that group */
   groups: Record<string, string>;
   candidateId: string | null;
+  /** The complete vehicle configuration vehicles resolve to. */
+  resolvedConfigId: string;
   /** Publication order within the vehicle model. */
   sequence: number;
+  notes: string;
   publishedBy: string;
   publishedAt: string;
 }
@@ -361,7 +364,8 @@ export interface DeploymentTarget {
   resourceId: string;
   vehicleGroupId: string | null;
   attempt: number;
-  status: 'PENDING' | 'APPLIED' | 'FAILED' | 'CANCELLED';
+  /** QUEUED: part of a staged rollout, not sent to the vehicle yet. */
+  status: 'QUEUED' | 'PENDING' | 'APPLIED' | 'FAILED' | 'CANCELLED';
   previousConfigId: string | null;
   error: string | null;
   updatedAt: string;
@@ -379,9 +383,12 @@ export interface Deployment {
   commitId: string | null;
   resolvedConfigId: string;
   env: Env;
-  status: 'PENDING' | 'COMPLETED' | 'CANCELLED' | 'PAUSED';
+  status: 'PENDING' | 'COMPLETED' | 'CANCELLED' | 'PAUSED' | 'ROLLED_BACK';
   vehicleGroupIds: string[];
   targets: DeploymentTarget[];
+  /** OTA only: the rollout this one rolls back, and why things paused. */
+  rollbackOf?: string | null;
+  pauseReason?: string | null;
   dispatchedBy: string;
   createdAt: string;
   updatedAt: string;
@@ -417,6 +424,8 @@ export interface TestRun {
   resourceId: string;
   resourceType: 'PHYSICAL' | 'SIMULATION';
   env: Env;
+  /** The whole-vehicle software the vehicle ran when tested. */
+  integrationVersion: string | null;
   resolvedConfigId: string;
   result: 'PASS' | 'FAIL';
   summary: string;

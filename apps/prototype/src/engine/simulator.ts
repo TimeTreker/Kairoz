@@ -16,7 +16,7 @@ export function setAgent(ctx: Ctx, resourceId: string, patch: Partial<AgentState
 /** What each vehicle has been asked to apply and has not answered yet. */
 export function pendingForVehicles(s: State) {
   return Object.values(s.deployments).flatMap((d) =>
-    d.status === 'PENDING' ? d.targets.filter((t) => t.status === 'PENDING').map((t) => ({ deployment: d, target: t })) : [],
+    d.status === 'PENDING' || d.status === 'PAUSED' ? d.targets.filter((t) => t.status === 'PENDING').map((t) => ({ deployment: d, target: t })) : [],
   );
 }
 

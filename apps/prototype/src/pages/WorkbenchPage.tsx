@@ -8,6 +8,8 @@ import { authorize } from '../domain/authz.ts';
 import { visibleFeatures } from '../engine/config.ts';
 import { intakeQueue } from '../engine/intake.ts';
 import { isConfirmed, verifiedSources } from '../engine/integration.ts';
+import { otaRollouts } from '../engine/ota.ts';
+import { releaseFor, releasesOf } from '../engine/release.ts';
 import { managedResources, pendingDeploymentOf, vehicleGroupsOf, workspaceVehicles } from '../engine/fleet.ts';
 import { referenceRequestsFor } from '../engine/references.ts';
 import { candidateTestStatus, featureTestStatus } from '../engine/validation.ts';
@@ -150,6 +152,33 @@ export function WorkbenchPage() {
             <LabelTag map={CANDIDATE_STATUS_LABELS} value={c.status} color={CANDIDATE_STATUS_COLORS[c.status]} />
           </Row2>
         ))}
+      </Card>,
+    );
+  }
+  if (roles.includes('CONFIG_RELEASE') && workspace) {
+    const toRelease = Object.values(state.candidates).filter((c) => c.vehicleModelId === workspace.vehicleModelId && c.status === 'VERIFIED');
+    const rollouts = otaRollouts(state).filter((d) => state.workspaces[d.workspaceId]?.vehicleModelId === workspace.vehicleModelId);
+    const production = Object.values(state.resources).filter((r) => r.env === 'production' && r.vehicleModelId === workspace.vehicleModelId && r.status !== 'RETIRED');
+    const due = production.filter((r) => {
+      const target = releaseFor(state, r).release;
+      return target && r.appliedConfigId !== target.resolvedConfigId;
+    });
+    const latest = releasesOf(state, workspace.vehicleModelId)[0];
+    cards.push(
+      <Card key="cr" title={<RoleTag role="CONFIG_RELEASE" />} extra={<Button size="small" onClick={() => navigate('release')}>{L('发布与配置 OTA', 'Release & OTA')}</Button>}>
+        <Row gutter={16} style={{ marginBottom: 12 }}>
+          <Col span={6}><Statistic title={L('最新正式版本', 'Latest release')} value={latest ? latest.dclVersion : '—'} /></Col>
+          <Col span={6}><Statistic title={L('待发布候选', 'To release')} value={toRelease.length} /></Col>
+          <Col span={6}><Statistic title={L('进行中 / 暂停的 OTA', 'Running / paused')} value={`${rollouts.filter((d) => d.status === 'PENDING').length} / ${rollouts.filter((d) => d.status === 'PAUSED').length}`} /></Col>
+          <Col span={6}><Statistic title={L('待更新的量产车', 'Vehicles due')} value={due.length} /></Col>
+        </Row>
+        {toRelease.map((c) => (
+          <Row2 key={c.id} onClick={() => navigate('release')}>
+            <Mono>{c.label}</Mono>
+            <LabelTag map={CANDIDATE_STATUS_LABELS} value={c.status} color={CANDIDATE_STATUS_COLORS[c.status]} />
+          </Row2>
+        ))}
+        {rollouts.some((d) => d.status === 'PAUSED') && <Typography.Text type="danger">{L('有 OTA 因车辆失败而暂停', 'A rollout is paused after a vehicle failure')}</Typography.Text>}
       </Card>,
     );
   }

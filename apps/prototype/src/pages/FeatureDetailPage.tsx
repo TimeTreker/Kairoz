@@ -1,5 +1,5 @@
 import { ArrowLeftOutlined } from '@ant-design/icons';
-import { Alert, App, Button, Card, Descriptions, Input, Modal, Result, Space, Tabs, Typography } from 'antd';
+import { Alert, App, Button, Card, Descriptions, Input, Modal, Result, Space, Tabs, Tag, Typography } from 'antd';
 import { useState } from 'react';
 import { useActor, useCan, useRun } from '../app/hooks.ts';
 import { navigate } from '../app/router.ts';
@@ -8,7 +8,7 @@ import { Mono, StageTag, when } from '../components/common.tsx';
 import { canReadFeature, displayName, draftReviewRequired, EDITABLE_STAGES, featureChanges, submitFeature } from '../engine/config.ts';
 import { returnFeature } from '../engine/intake.ts';
 import { useI18n } from '../i18n/i18n.tsx';
-import { FEEDBACK_LABELS, STAGE_LABELS } from '../i18n/vocab.ts';
+import { CANDIDATE_STATUS_LABELS, FEEDBACK_LABELS, STAGE_LABELS } from '../i18n/vocab.ts';
 import { FilesTab } from './feature/FilesTab.tsx';
 import { ChangesTab, CommitsTab, FeedbackTimeline } from './feature/HistoryTab.tsx';
 import { IntakeTab } from './feature/IntakeTab.tsx';
@@ -36,6 +36,7 @@ export function FeatureDetailPage({ featureId }: { featureId: string }) {
   const canReturn = (feature.stage === 'SUBMITTED' || feature.stage === 'DCL_READY') && can('feature.return', target);
   const unsubmitted = !featureChanges(state, feature).sinceHead.empty;
   const latestFeedback = state.feedback.filter((f) => f.featureId === feature.id && f.commitId === feature.headCommitId).at(-1);
+  const integratedIn = Object.values(state.candidates).filter((c) => c.sources.some((x) => x.featureId === feature.id));
   const review = draftReviewRequired(state, feature);
 
   return (
@@ -69,11 +70,26 @@ export function FeatureDetailPage({ featureId }: { featureId: string }) {
             </Descriptions.Item>
             <Descriptions.Item label={L('工作区', 'Workspace')}>{state.workspaces[feature.workspaceId]?.name}</Descriptions.Item>
             <Descriptions.Item label={L('基线', 'Base')}>
-              {feature.baseReleaseId ? <Mono>{state.releases[feature.baseReleaseId]?.dclVersion}</Mono> : L('初始研发配置（暂无正式版本）', 'Initial development config (no release yet)')}
+              {feature.baseReleaseId ? <Mono>{state.releases[feature.baseReleaseId]?.dclVersion}</Mono> : L('初始研发配置', 'Initial development config')}
             </Descriptions.Item>
             <Descriptions.Item label={L('最新提交', 'Head commit')}>{feature.headCommitId ? <Mono>{displayName(state, feature.headCommitId)}</Mono> : '—'}</Descriptions.Item>
             <Descriptions.Item label={L('车型', 'Vehicle model')}>{feature.vehicleModelId}</Descriptions.Item>
             <Descriptions.Item label={L('更新', 'Updated')}>{when(feature.updatedAt)}</Descriptions.Item>
+            {integratedIn.length > 0 && (
+              <Descriptions.Item label={L('集成与发布', 'Integrated in')} span={3}>
+                <Space wrap>
+                  {integratedIn.map((c) => {
+                    const release = Object.values(state.releases).find((r) => r.candidateId === c.id);
+                    return (
+                      <Tag key={c.id} style={{ cursor: 'pointer' }} onClick={() => navigate(`integration/${c.id}`)}>
+                        {c.label}
+                        {release ? ` → DCL ${release.dclVersion}` : ` · ${B(CANDIDATE_STATUS_LABELS[c.status])}`}
+                      </Tag>
+                    );
+                  })}
+                </Space>
+              </Descriptions.Item>
+            )}
           </Descriptions>
           {feature.description && <Typography.Text type="secondary">{feature.description}</Typography.Text>}
           {feature.stage === 'DRAFT' && latestFeedback && (

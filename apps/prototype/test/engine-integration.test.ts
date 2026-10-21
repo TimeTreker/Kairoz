@@ -101,11 +101,11 @@ function verifyBrake(e: Engine, featureId: string, vg: string) {
 describe('integration', () => {
   test('preview → DCL confirmation → frozen candidate → independent integration tests → Verified', () => {
     const { e, feature, vehicleGroup } = setup();
-    const steering = feature('steering_angle_jump');
-    assert.equal(steering.stage, 'VERIFIED', 'the demo has a Verified steering Feature');
+    const steering = feature('steering_return_rate');
+    assert.equal(steering.stage, 'VERIFIED', 'the demo has a Verified steering Feature on DCL 1.0.0');
     assert.deepEqual(
       integ.verifiedSources(e.getState(), 'x89-project').map((f) => f.name),
-      ['steering_angle_jump'],
+      ['steering_return_rate'],
     );
     fails(() => e.run('steering', (c) => integ.previewMerge(c, { workspaceId: 'x89-project', featureIds: [steering.id] })), 'FORBIDDEN');
     fails(() => e.run('integrator', (c) => integ.previewMerge(c, { workspaceId: 'x89-integration', featureIds: [steering.id] })), 'NOT_A_PROJECT_WORKSPACE');
@@ -113,13 +113,18 @@ describe('integration', () => {
     fails(() => e.run('integrator', (c) => integ.previewMerge(c, { workspaceId: 'x89-project', featureIds: [brake.id] })), 'SOURCE_NOT_ALLOWED');
 
     const plan = e.run('integrator', (c) => integ.previewMerge(c, { workspaceId: 'x89-project', featureIds: [steering.id] }));
-    assert.equal(e.getState().mergePlans[plan]!.status, 'READY');
-    fails(() => e.run('integrator', (c) => integ.freezeCandidate(c, plan, { label: 'X89-C1' })), 'PROCESSING_NOT_CONFIRMED');
+    const preview = e.getState().mergePlans[plan]!;
+    assert.equal(preview.status, 'READY');
+    assert.equal(e.getState().releases[preview.targetReleaseId!]!.dclVersion, '1.0.0');
+    // Three-way onto the target: the changed window and the new policy both arrive.
+    assert.equal(preview.merged.steering!.policies['chassis.steering.angle_jump']!.postSeconds, 15);
+    assert.ok(preview.merged.steering!.policies['chassis.steering.return_rate']);
+    fails(() => e.run('integrator', (c) => integ.freezeCandidate(c, plan, { label: 'X89-C2' })), 'PROCESSING_NOT_CONFIRMED');
     fails(() => e.run('integrator', (c) => integ.confirmProcessing(c, plan, { note: '' })), 'FORBIDDEN');
     e.run('dcl', (c) => integ.confirmProcessing(c, plan, { note: '处理集合确认' }));
     fails(() => e.run('dcl', (c) => integ.confirmProcessing(c, plan, { note: '' })), 'ALREADY_CONFIRMED');
 
-    const cand = e.run('integrator', (c) => integ.freezeCandidate(c, plan, { label: 'X89-C1' }));
+    const cand = e.run('integrator', (c) => integ.freezeCandidate(c, plan, { label: 'X89-C2' }));
     let s = e.getState();
     const candidate = s.candidates[cand]!;
     assert.equal(s.features[steering.id]!.stage, 'INTEGRATED');
@@ -172,7 +177,7 @@ describe('integration', () => {
     fails(() => e.run('dcl', (c) => integ.confirmProcessing(c, plan, { note: '' })), 'PLAN_NOT_READY');
 
     // Without the conflicting source the set is ready; a new preview supersedes the old one.
-    const steering = feature('steering_angle_jump');
+    const steering = feature('steering_return_rate');
     const plan2 = e.run('integrator', (c) => integ.previewMerge(c, { workspaceId: 'x89-project', featureIds: [brake.id, steering.id] }));
     assert.equal(e.getState().mergePlans[plan]!.status, 'SUPERSEDED');
     assert.equal(e.getState().mergePlans[plan2]!.status, 'READY');
@@ -180,15 +185,15 @@ describe('integration', () => {
     e.run('dcl', (c) => integ.confirmProcessing(c, plan2, { note: '' }));
     // The source moves on after the preview: freezing must refuse the stale preview.
     e.run('steering', (c) => config.updateFile(c, steering.id, Object.keys(steering.draft.files)[0]!, { purpose: '转角突变与路面激励分析' }));
-    fails(() => e.run('integrator', (c) => integ.freezeCandidate(c, plan2, { label: 'X89-C1' })), 'SOURCE_CHANGED');
+    fails(() => e.run('integrator', (c) => integ.freezeCandidate(c, plan2, { label: 'X89-C2' })), 'SOURCE_CHANGED');
 
     const plan3 = e.run('integrator', (c) => integ.previewMerge(c, { workspaceId: 'x89-project', featureIds: [brake.id] }));
     e.run('dcl', (c) => integ.confirmProcessing(c, plan3, { note: '' }));
-    const cand = e.run('integrator', (c) => integ.freezeCandidate(c, plan3, { label: 'X89-C1' }));
+    const cand = e.run('integrator', (c) => integ.freezeCandidate(c, plan3, { label: 'X89-C2' }));
     assert.equal(e.getState().features[brake.id]!.stage, 'INTEGRATED');
     const plan4 = e.run('integrator', (c) => integ.previewMerge(c, { workspaceId: 'x89-project', featureIds: [abs] }));
     e.run('dcl', (c) => integ.confirmProcessing(c, plan4, { note: '' }));
-    fails(() => e.run('integrator', (c) => integ.freezeCandidate(c, plan4, { label: 'X89-C2' })), 'CANDIDATE_OPEN');
+    fails(() => e.run('integrator', (c) => integ.freezeCandidate(c, plan4, { label: 'X89-C3' })), 'CANDIDATE_OPEN');
     e.run('integrator', (c) => integ.cancelCandidate(c, cand, { reason: '重新组合' }));
     assert.equal(e.getState().candidates[cand]!.status, 'CANCELLED');
     assert.equal(e.getState().features[brake.id]!.stage, 'VERIFIED');

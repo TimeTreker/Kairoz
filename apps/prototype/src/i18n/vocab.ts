@@ -168,6 +168,7 @@ export const VEHICLE_GROUP_PURPOSE_LABELS: Record<string, Bilingual> = {
 };
 
 export const TARGET_STATUS_LABELS: Record<string, Bilingual> = {
+  QUEUED: b('待放量', 'Queued'),
   PENDING: b('等待回执', 'Awaiting receipt'),
   APPLIED: b('已生效', 'Applied'),
   FAILED: b('失败', 'Failed'),
@@ -175,6 +176,7 @@ export const TARGET_STATUS_LABELS: Record<string, Bilingual> = {
 };
 
 export const TARGET_STATUS_COLORS: Record<string, string> = {
+  QUEUED: 'default',
   PENDING: 'processing',
   APPLIED: 'success',
   FAILED: 'error',
@@ -186,6 +188,7 @@ export const DEPLOYMENT_STATUS_LABELS: Record<string, Bilingual> = {
   COMPLETED: b('已结束', 'Finished'),
   CANCELLED: b('已取消', 'Cancelled'),
   PAUSED: b('已暂停', 'Paused'),
+  ROLLED_BACK: b('已回滚', 'Rolled back'),
 };
 
 Object.assign(ERROR_LABELS, {
@@ -258,4 +261,21 @@ Object.assign(ERROR_LABELS, {
   CANDIDATE_CLOSED: b('候选已结束', 'The candidate is closed'),
   REASON_REQUIRED: b('请填写原因', 'Give a reason'),
   USE_ROLLOUT_CONTROLS: b('请使用发布控制操作该下发', 'Use the rollout controls for this deployment'),
+});
+
+Object.assign(ERROR_LABELS, {
+  CANDIDATE_NOT_VERIFIED: b('只有通过集成测试的候选才能发布', 'Only a candidate verified by integration testing can be released'),
+  INVALID_DCL_VERSION: b('DCL 版本格式为 major.minor.patch，例如 1.0.1', 'A DCL version is major.minor.patch, e.g. 1.0.1'),
+  DCL_VERSION_TAKEN: b('该 DCL 版本已存在', 'That DCL version already exists'),
+  DCL_VERSION_NOT_NEWER: b('新版本必须高于已发布的最新版本', 'The version must be newer than the latest release'),
+  NO_VEHICLE_VERSIONS: b('请选择适用的整车软件版本', 'Choose the whole-vehicle software versions it applies to'),
+  VERSION_NOT_TESTED: b('部分适用版本没有通过的集成测试', 'Some listed software versions have no passing integration test'),
+  OTA_BLOCKED: b('OTA 被拒绝：并非所有车辆都满足条件', 'OTA blocked: not every vehicle qualifies'),
+  NOTHING_TO_ROLL_OUT: b('所有车辆都已运行该版本', 'Every vehicle already runs this release'),
+  OTA_PAUSED: b('OTA 已暂停，请先恢复', 'The rollout is paused; resume it first'),
+  OTA_CLOSED: b('OTA 已结束', 'The rollout is finished'),
+  OTA_NOT_RUNNING: b('只有进行中的 OTA 可以暂停', 'Only a running rollout can be paused'),
+  OTA_NOT_PAUSED: b('OTA 未暂停', 'The rollout is not paused'),
+  NOTHING_QUEUED: b('请选择待放量的车辆', 'Choose queued vehicles'),
+  ROLLBACK_BLOCKED: b('回滚被拒绝：并非所有车辆都能回到兼容的上一正式配置', 'Rollback blocked: not every vehicle can return to a compatible earlier formal configuration'),
 });
