@@ -1,0 +1,96 @@
+import { App } from 'antd';
+import { useCallback, useMemo } from 'react';
+import { authorize } from '../domain/authz.ts';
+import type { Action, AuthzTarget } from '../domain/authz.ts';
+import { DomainError, ForbiddenError } from '../domain/errors.ts';
+import type { Actor, Ctx } from '../engine/engine.ts';
+import { workspaceAccess } from '../engine/identity.ts';
+import { useI18n } from '../i18n/i18n.tsx';
+import { DENY_REASON_LABELS, ERROR_LABELS } from '../i18n/vocab.ts';
+import { engine, setSession, useEngineState, useSession } from './store.ts';
+
+/** The signed-in account as an engine actor, or null. */
+export function useActor(): Actor | null {
+  const state = useEngineState();
+  const { username } = useSession();
+  return useMemo(() => {
+    const account = username ? state.accounts[username] : undefined;
+    if (!account || account.status !== 'ACTIVE') return null;
+    return { username: account.username, displayName: account.displayName, grants: account.grants };
+  }, [state, username]);
+}
+
+/** The current workspace, falling back to the first one the actor can use. */
+export function useWorkspace() {
+  const state = useEngineState();
+  const actor = useActor();
+  const { workspaceId } = useSession();
+  return useMemo(() => {
+    if (!actor) return { access: [], workspace: null, roles: [] };
+    const access = workspaceAccess(state, actor);
+    const chosen = access.find((a) => a.workspaceId === workspaceId) ?? access[0];
+    return { access, workspace: chosen ? state.workspaces[chosen.workspaceId]! : null, roles: chosen?.roles ?? [] };
+  }, [state, actor, workspaceId]);
+}
+
+export function useErrorText() {
+  const { L, B } = useI18n();
+  return useCallback(
+    (e: unknown): string => {
+      if (e instanceof DomainError) {
+        let text = B(ERROR_LABELS[e.code], e.message);
+        if (e instanceof ForbiddenError) text += L('：', ': ') + B(DENY_REASON_LABELS[e.reason], e.reason);
+        const details = e.details as { issues?: unknown[] } | undefined;
+        if (details?.issues?.length) {
+          const lines = details.issues.map((i) =>
+            typeof i === 'string' ? i : `${(i as { key?: string }).key ?? ''}: ${((i as { problems?: string[] }).problems ?? []).join('; ')}`,
+          );
+          text += ` — ${lines.join(' | ')}`;
+        }
+        return text;
+      }
+      return e instanceof Error ? e.message : String(e);
+    },
+    [L, B],
+  );
+}
+
+/**
+ * Runs an engine operation as the signed-in user. Shows a localized error and returns undefined
+ * on failure; shows `success` (if given) on success.
+ */
+export function useRun() {
+  const { message } = App.useApp();
+  const { username } = useSession();
+  const errorText = useErrorText();
+  return useCallback(
+    <R,>(operation: (ctx: Ctx) => R, success?: string): R | undefined => {
+      try {
+        const result = engine.run(username, operation);
+        if (success) message.success(success);
+        return result;
+      } catch (e) {
+        if (e instanceof DomainError && e.code === 'UNAUTHENTICATED') setSession({ username: null });
+        message.error({ content: errorText(e), duration: 6 });
+        return undefined;
+      }
+    },
+    [username, message, errorText],
+  );
+}
+
+/** Whether the actor holds one grant allowing `action` on `target` (for showing controls). */
+export function useCan() {
+  const actor = useActor();
+  return useCallback(
+    (action: Action, target: AuthzTarget) => {
+      if (!actor) return false;
+      try {
+        return authorize(actor.grants, action, target).ok;
+      } catch {
+        return false;
+      }
+    },
+    [actor],
+  );
+}

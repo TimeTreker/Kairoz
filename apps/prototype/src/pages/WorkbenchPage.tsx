@@ -1,0 +1,147 @@
+import { Badge, Button, Card, Col, Flex, Row, Space, Statistic, Typography } from 'antd';
+import type { ReactNode } from 'react';
+import { useActor, useWorkspace } from '../app/hooks.ts';
+import { navigate } from '../app/router.ts';
+import { useEngineState } from '../app/store.ts';
+import { Mono, RoleTag, StageTag } from '../components/common.tsx';
+import { authorize } from '../domain/authz.ts';
+import { visibleFeatures } from '../engine/config.ts';
+import { intakeQueue } from '../engine/intake.ts';
+import { referenceRequestsFor } from '../engine/references.ts';
+import type { Feature } from '../engine/types.ts';
+import { useI18n } from '../i18n/i18n.tsx';
+import { FEEDBACK_LABELS } from '../i18n/vocab.ts';
+
+function Row2({ onClick, children }: { onClick: () => void; children: ReactNode }) {
+  return (
+    <Flex justify="space-between" align="center" onClick={onClick} style={{ cursor: 'pointer', padding: '8px 0', borderBottom: '1px solid #f0f0f0' }}>
+      {children}
+    </Flex>
+  );
+}
+
+function FeatureList({ items, empty }: { items: Feature[]; empty: string }) {
+  if (items.length === 0) return <Typography.Text type="secondary">{empty}</Typography.Text>;
+  return (
+    <div>
+      {items.map((f) => (
+        <Row2 key={f.id} onClick={() => navigate(`features/${f.id}`)}>
+          <Mono>{f.name}</Mono>
+          <StageTag stage={f.stage} />
+        </Row2>
+      ))}
+    </div>
+  );
+}
+
+export function WorkbenchPage() {
+  const state = useEngineState();
+  const actor = useActor()!;
+  const { workspace, roles } = useWorkspace();
+  const { L, B } = useI18n();
+  const cards: ReactNode[] = [];
+  const features = workspace ? visibleFeatures(state, actor, workspace.id) : [];
+
+  if (roles.includes('BUSINESS_DEV') && workspace) {
+    const mine = features.filter((f) => authorize(actor.grants, 'feature.edit', { workspaceId: f.workspaceId, groupId: f.groupId }).ok);
+    const returned = mine.filter((f) => f.stage === 'DRAFT' && state.feedback.some((x) => x.featureId === f.id && x.commitId === f.headCommitId));
+    const ownedGroups = workspace.groupIds.filter((g) => authorize(actor.grants, 'reference.decide', { groupId: g }).ok);
+    const pendingRefs = ownedGroups.flatMap((g) => referenceRequestsFor(state, actor, g, 'owner').filter((r) => r.status === 'PENDING'));
+    cards.push(
+      <Card key="dev" title={<RoleTag role="BUSINESS_DEV" />} extra={<Button size="small" onClick={() => navigate('features')}>{L('全部 Feature', 'All Features')}</Button>}>
+        <Row gutter={16} style={{ marginBottom: 12 }}>
+          <Col span={8}><Statistic title={L('草稿', 'Drafts')} value={mine.filter((f) => f.stage === 'DRAFT').length} /></Col>
+          <Col span={8}><Statistic title={L('待 DCL 审核', 'In DCL review')} value={mine.filter((f) => f.stage === 'SUBMITTED').length} /></Col>
+          <Col span={8}><Statistic title="DCL Ready" value={mine.filter((f) => f.stage === 'DCL_READY').length} /></Col>
+        </Row>
+        {returned.length > 0 && (
+          <>
+            <Typography.Text strong>{L('需要处理的反馈', 'Feedback to handle')}</Typography.Text>
+            {returned.map((f) => {
+              const fb = state.feedback.filter((x) => x.featureId === f.id && x.commitId === f.headCommitId).at(-1)!;
+              return (
+                <Row2 key={f.id} onClick={() => navigate(`features/${f.id}`)}>
+                  <Space orientation="vertical" size={0}>
+                    <Mono>{f.name}</Mono>
+                    <Typography.Text type="danger">
+                      {B(FEEDBACK_LABELS[fb.kind])}: {fb.reason}
+                    </Typography.Text>
+                  </Space>
+                </Row2>
+              );
+            })}
+          </>
+        )}
+        {pendingRefs.length > 0 && (
+          <Button type="link" onClick={() => navigate('data')}>
+            <Badge count={pendingRefs.length} size="small" offset={[10, 0]}>
+              {L('待本组决定的引用申请', 'Reference requests awaiting your group')}
+            </Badge>
+          </Button>
+        )}
+      </Card>,
+    );
+  }
+  if (roles.includes('BUSINESS_TEST') && workspace) {
+    cards.push(
+      <Card key="test" title={<RoleTag role="BUSINESS_TEST" />}>
+        <Typography.Paragraph type="secondary">{L('DCL Ready 之后的 Feature 可下发到车辆组并测试。', 'Features become testable on vehicle groups once DCL Ready.')}</Typography.Paragraph>
+        <FeatureList items={features.filter((f) => ['DCL_READY', 'TESTING'].includes(f.stage))} empty={L('暂无待测 Feature', 'Nothing to test')} />
+      </Card>,
+    );
+  }
+  if (actor.grants.some((g) => g.role === 'DCL_ENGINEER')) {
+    const q = intakeQueue(state, actor);
+    cards.push(
+      <Card key="dcl" title={<RoleTag role="DCL_ENGINEER" />} extra={<Button size="small" onClick={() => navigate('intake')}>{L('打开接入队列', 'Open intake')}</Button>}>
+        <Row gutter={16}>
+          <Col span={12}><Statistic title={L('待敏感审核的 Feature', 'Features awaiting review')} value={q.features.length} /></Col>
+          <Col span={12}><Statistic title={L('待判定的来源重叠', 'Overlaps to decide')} value={q.overlaps.length} /></Col>
+        </Row>
+      </Card>,
+    );
+  }
+  if (actor.grants.some((g) => g.role === 'PLATFORM_OPS')) {
+    cards.push(
+      <Card key="ops" title={<RoleTag role="PLATFORM_OPS" />}>
+        <Row gutter={16}>
+          <Col span={8}><Statistic title={L('账号', 'Accounts')} value={Object.keys(state.accounts).length} /></Col>
+          <Col span={8}><Statistic title={L('工作区', 'Workspaces')} value={Object.keys(state.workspaces).length} /></Col>
+          <Col span={8}><Statistic title={L('业务分组', 'Groups')} value={Object.keys(state.groups).length} /></Col>
+        </Row>
+        <Space style={{ marginTop: 12 }}>
+          <Button onClick={() => navigate('org')}>{L('组织与工作区', 'Organization')}</Button>
+          <Button onClick={() => navigate('accounts')}>{L('账号与授权', 'Accounts')}</Button>
+        </Space>
+      </Card>,
+    );
+  }
+
+  return (
+    <div className="kz-page">
+      <Typography.Title level={3}>
+        {L(`你好，${actor.displayName}`, `Hello, ${actor.displayName}`)}
+      </Typography.Title>
+      <Space style={{ marginBottom: 16 }} wrap>
+        {roles.map((r) => (
+          <RoleTag key={r} role={r} />
+        ))}
+      </Space>
+      {cards.length === 0 ? (
+        <Card>
+          <Typography.Text type="secondary">
+            {L('当前工作区没有本账号的待办。可在左侧菜单进入相关页面，或查看“原型工具 → 场景手册”。', 'Nothing to do in this workspace. Use the menu, or see “Prototype → Scenario guide”.')}
+          </Typography.Text>
+        </Card>
+      ) : (
+        <Row gutter={[16, 16]}>
+          {cards.map((c, i) => (
+            <Col xs={24} xl={12} key={i}>
+              {c}
+            </Col>
+          ))}
+        </Row>
+      )}
+    </div>
+  );
+}

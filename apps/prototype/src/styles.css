@@ -1,0 +1,42 @@
+:root {
+  --kz-nav: #0f1e33;
+  --kz-accent: #2865e8;
+}
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+body {
+  font-family: Inter, 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
+}
+.kz-mono {
+  font-family: ui-monospace, 'JetBrains Mono', Menlo, monospace;
+  font-size: 12px;
+}
+.kz-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 18px 20px;
+  color: #fff;
+  font-weight: 600;
+  font-size: 16px;
+}
+.kz-brand-mark {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  background: var(--kz-accent);
+  display: grid;
+  place-items: center;
+  font-weight: 700;
+}
+.kz-page {
+  padding: 20px 24px 40px;
+  max-width: 1440px;
+}
+.kz-sim-banner {
+  background: repeating-linear-gradient(135deg, #fff7e6, #fff7e6 12px, #ffe7ba 12px, #ffe7ba 24px);
+}

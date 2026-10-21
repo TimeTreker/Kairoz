@@ -1,0 +1,151 @@
+// Bilingual labels for the closed vocabularies of the platform.
+
+import type { Bilingual } from './i18n.tsx';
+
+const b = (zh: string, en: string): Bilingual => ({ zh, en });
+
+export const ROLE_LABELS: Record<string, Bilingual> = {
+  BUSINESS_DEV: b('业务研发', 'Business Development'),
+  BUSINESS_TEST: b('业务测试', 'Business Testing'),
+  INTEGRATION_TEST: b('集成测试', 'Integration Testing'),
+  DCL_ENGINEER: b('DCL 工程', 'DCL Engineering'),
+  CONFIG_INTEGRATOR: b('配置集成', 'Config Integration'),
+  CONFIG_RELEASE: b('配置发布', 'Config Release'),
+  VEHICLE_RESOURCE: b('车辆资源', 'Vehicle Resources'),
+  WORKSPACE_ADMIN: b('工作区管理员', 'Workspace Admin'),
+  PLATFORM_OPS: b('平台运维', 'Platform Operations'),
+};
+
+export const ROLE_GOALS: Record<string, Bilingual> = {
+  BUSINESS_DEV: b('把本组数据需求变成可验证的文件与采集策略变更', 'Turn the group’s data needs into verifiable file and policy changes'),
+  BUSINESS_TEST: b('用仿真与实车证明固定提交可用', 'Prove a fixed commit works on simulation and real vehicles'),
+  INTEGRATION_TEST: b('独立验证冻结的完整集成候选', 'Independently verify the frozen integration candidate'),
+  DCL_ENGINEER: b('保障文件从车端到云端的接入、处理与合规', 'Keep vehicle-to-cloud intake, processing and compliance sound'),
+  CONFIG_INTEGRATOR: b('收集已验证变更，解决冲突，冻结完整集合', 'Collect verified changes, resolve conflicts, freeze the full set'),
+  CONFIG_RELEASE: b('发布已验证集合，控制量产下发风险', 'Release verified sets and control production rollout risk'),
+  VEHICLE_RESOURCE: b('维护车辆归属、真实软件版本与环境', 'Maintain vehicle ownership, actual software and environment'),
+  WORKSPACE_ADMIN: b('提供本工作区可用的实车与仿真资源', 'Provide usable physical and simulated vehicles to the workspace'),
+  PLATFORM_OPS: b('维护组织、账号与授权，保障平台运行', 'Maintain organization, accounts and grants; keep the platform running'),
+};
+
+export const ENV_LABELS: Record<string, Bilingual> = {
+  development: b('研发', 'Development'),
+  testing: b('测试', 'Testing'),
+  production: b('量产', 'Production'),
+};
+
+export const STAGE_LABELS: Record<string, Bilingual> = {
+  DRAFT: b('草稿', 'Draft'),
+  SUBMITTED: b('待 DCL 审核', 'Awaiting DCL review'),
+  DCL_READY: b('DCL Ready', 'DCL Ready'),
+  TESTING: b('测试中', 'Testing'),
+  VERIFIED: b('已验证', 'Verified'),
+  INTEGRATED: b('已集成', 'Integrated'),
+  ARCHIVED: b('已归档', 'Archived'),
+};
+
+export const STAGE_COLORS: Record<string, string> = {
+  DRAFT: 'default',
+  SUBMITTED: 'orange',
+  DCL_READY: 'blue',
+  TESTING: 'purple',
+  VERIFIED: 'green',
+  INTEGRATED: 'cyan',
+  ARCHIVED: 'default',
+};
+
+export const WORKSPACE_KIND_LABELS: Record<string, Bilingual> = {
+  TEAM: b('团队', 'Team'),
+  PROJECT: b('项目', 'Project'),
+  INTEGRATION: b('集成', 'Integration'),
+};
+
+export const FILE_TYPE_LABELS: Record<string, Bilingual> = {
+  text_log: b('文本日志', 'Text log'),
+  bin_log: b('二进制日志', 'Binary log'),
+  can_log: b('CAN 日志', 'CAN log'),
+  camera_image: b('摄像头图像', 'Camera image'),
+  camera_video: b('摄像头视频', 'Camera video'),
+  pointcloud: b('点云', 'Point cloud'),
+  gnss: b('GNSS / 轨迹', 'GNSS / trajectory'),
+  unknown: b('未知格式', 'Unknown'),
+};
+
+export const DATA_STATUS_LABELS: Record<string, Bilingual> = {
+  PENDING: b('已登记', 'Registered'),
+  REVIEW: b('待查重', 'Overlap review'),
+  ACTIVE: b('已提交', 'Committed'),
+  ARCHIVED: b('已归档', 'Archived'),
+};
+
+export const REVIEW_STATUS_LABELS: Record<string, Bilingual> = {
+  PENDING: b('待审核', 'Pending'),
+  APPROVED: b('已批准', 'Approved'),
+  REJECTED: b('已拒绝', 'Rejected'),
+};
+
+export const REFERENCE_STATUS_LABELS: Record<string, Bilingual> = {
+  NONE: b('未申请', 'Not requested'),
+  PENDING: b('待决定', 'Pending'),
+  APPROVED: b('已授权', 'Granted'),
+  REJECTED: b('已拒绝', 'Rejected'),
+  REVOKED: b('已撤销', 'Revoked'),
+};
+
+export const FEEDBACK_LABELS: Record<string, Bilingual> = {
+  RETURNED: b('DCL 退回', 'Returned by DCL'),
+  REVIEW_REJECTED: b('敏感审核拒绝', 'Sensitive review rejected'),
+  BINDING_CHANGED: b('DCL 调整处理绑定', 'Binding changed by DCL'),
+  REFERENCE_REVOKED: b('引用被撤销', 'Reference revoked'),
+};
+
+export const DENY_REASON_LABELS: Record<string, Bilingual> = {
+  ROLE_NOT_GRANTED: b('没有该角色的授权', 'no grant with the required role'),
+  WORKSPACE_NOT_GRANTED: b('授权未覆盖该工作区', 'no grant covers this workspace'),
+  GROUP_NOT_GRANTED: b('授权未覆盖该业务分组', 'no grant covers this business group'),
+  SCOPE_NOT_GRANTED: b('授权未覆盖该范围', 'no grant covers this scope'),
+  ENV_NOT_GRANTED: b('授权未覆盖所需环境', 'no grant covers the required environment'),
+  DISPATCH_ONLY_GRANT: b('仅下发授权不能执行此操作', 'dispatch-only grants cannot do this'),
+  NO_SINGLE_GRANT: b('各条件分别被不同授权满足，但授权不能拼接', 'conditions are met only by combining grants, which is not allowed'),
+  NOT_VISIBLE: b('无权查看该分组配置', 'not allowed to view this group’s configuration'),
+};
+
+/** Error codes with friendlier text; others fall back to the engine message. */
+export const ERROR_LABELS: Record<string, Bilingual> = {
+  FORBIDDEN: b('无权执行', 'Not authorized'),
+  UNAUTHENTICATED: b('账号已失效，请重新进入', 'The account is no longer active; sign in again'),
+  NOT_FOUND: b('对象不存在', 'Not found'),
+  VALIDATION_FAILED: b('输入不完整或格式不正确', 'Some input is missing or invalid'),
+  TEMPLATE_MISSING: b('该文件类型尚无 DCL 发布的默认处理模板，请联系 DCL 工程', 'No default processing template for this file type yet; ask DCL engineering'),
+  SENSITIVE_TYPE_DOWNGRADE: b('文件来源显示为敏感类型，不能申报为普通类型', 'The source looks sensitive; it cannot be declared as a non-sensitive type'),
+  DATA_SOURCE_OWNED_ELSEWHERE: b('该来源已由其他分组登记，请申请只读引用', 'Another group registered this source; request a read-only reference'),
+  FILE_ALREADY_IN_DRAFT: b('该来源已在草稿中', 'This source is already in the draft'),
+  FILE_CAPTURED_BY_POLICY: b('仍有策略采集该文件，请先从策略中移除', 'Policies still capture this file; remove it from them first'),
+  INVALID_POLICY: b('策略无效', 'The policy is invalid'),
+  INVALID_POLICY_ID: b('策略 ID 必须以本组代码开头', 'The policy id must start with the group code'),
+  POLICY_OWNED_ELSEWHERE: b('该策略由其他分组维护', 'Another group maintains this policy'),
+  POLICY_NAMESPACE_TAKEN: b('策略 ID 属于其他分组的命名空间', 'The policy id belongs to another group’s namespace'),
+  SUBMIT_BLOCKED: b('草稿暂不能提交', 'The draft cannot be submitted yet'),
+  NO_CHANGES: b('内容未变化，无需提交', 'Nothing changed'),
+  CHANGES_REQUESTED: b('DCL 已对该提交提出修改要求，请修改后再提交', 'Changes were requested on this commit; change the draft first'),
+  FEATURE_IMMUTABLE: b('当前阶段不能修改', 'The Feature cannot change in this stage'),
+  FEATURE_NAME_TAKEN: b('本组已有同名 Feature', 'The group already has a Feature with this name'),
+  INVALID_FEATURE_NAME: b('Feature 名称须为小写字母开头，3–46 位字母、数字、_ 或 -', 'Feature names: lower-case start, 3–46 letters, digits, _ or -'),
+  TEST_GROUP_CANNOT_OWN_CONFIG: b('测试用途分组不能维护文件和策略', 'Test groups do not maintain files or policies'),
+  INCOMPLETE_CONTROLS: b('批准前须确认全部控制项', 'Confirm every control before approving'),
+  STALE_COMMIT: b('Feature 已有更新的提交，请审核最新提交', 'The Feature has a newer commit; review that one'),
+  NOT_IN_INTAKE: b('Feature 不在 DCL 接入中', 'The Feature is not in DCL intake'),
+  REVIEW_NOT_REQUIRED: b('该文件不需要敏感审核', 'This file does not need sensitive review'),
+  REASON_REQUIRED: b('请填写原因', 'Give a reason'),
+  INCOMPATIBLE_BINDING: b('车端 / 云端处理绑定不兼容', 'The Edge/Cloud binding is not compatible'),
+  REFERENCE_NOT_GRANTED: b('没有有效的引用授权', 'No approved reference'),
+  REFERENCE_ALREADY_OPEN: b('已有进行中的申请或有效授权', 'A request or grant is already open'),
+  NOT_COMMITTED: b('该数据尚未提交，不能引用', 'This data is not committed yet'),
+  OWN_DATA_ITEM: b('这是本组自己的数据', 'This is the group’s own data'),
+  LAST_ADMINISTRATOR: b('必须保留至少一名覆盖全部环境的平台运维', 'At least one platform administrator covering every environment must remain'),
+  INVALID_GRANTS: b('授权配置不正确', 'The grants are invalid'),
+  ACCOUNT_EXISTS: b('账号已存在', 'The account already exists'),
+  ID_TAKEN: b('ID 已被使用', 'The id is already used'),
+  GROUP_CODE_NESTED: b('分组代码不能与其他分组代码互为前缀', 'Group codes cannot nest inside each other'),
+  ORG_CYCLE: b('不能移动到自己的下级', 'A unit cannot move beneath itself'),
+};

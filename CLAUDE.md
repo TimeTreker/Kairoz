@@ -1,24 +1,26 @@
 # Kairoz
 
-Clean rewrite of the DCL data acquisition platform. Requirements come from the prototype v0.13 design docs (Chinese); see `docs/architecture.md` for decisions and roadmap. The prototype code is a behavioural reference only — never copy it.
+A runnable **product prototype** of the DCL data acquisition platform. It is not a production backend. All state and rules run in the browser (React + Ant Design, state in localStorage); vehicles, OTA agents and processing are simulated. Requirements come from the prototype v0.13 design docs (Chinese). Don't add servers, databases or deployment unless asked.
 
 ## Commands
 
-- `npm run db:up` — start Postgres 18 (Docker, 127.0.0.1:55432; databases `kairoz` and `kairoz_test`)
-- `npm run dev` — server on 127.0.0.1:8081 (migrates and bootstraps `admin` on start)
-- `npm test` — all tests against real Postgres; one schema per test file
-- `npm run typecheck` — `tsc --noEmit` (TypeScript 7)
-- `npm run seed:demo` — demo data into a clean database only
+- `npm run dev`: Vite dev server on 127.0.0.1:5173.
+- `npm test`: engine and domain tests (`node --test`, no browser).
+- `npm run typecheck`: `tsc --noEmit` (TypeScript 7).
+- `npm run build`: static build in `apps/prototype/dist` (relative base, works from any static host).
 
-Copy `.env.example` to `.env` first. Run a single test file with `node --env-file-if-exists=../../.env --test test/<file>.test.ts` from `apps/server`.
+## Architecture
+
+- `src/domain`: pure rules (authz single-grant rule, trigger grammar, data source and glob overlap, config diff, review signatures). No IO, no React.
+- `src/engine`: the platform. `Engine.run(username, ctx => op(ctx, …))` runs one operation as an immer transaction; a throw discards everything. Operations call `ctx.allow(action, target)` before changing state, which audits allowed decisions; denials are audited separately. Read helpers take `(state, actor)`.
+- `src/app`: store (persistence, session), hooks (`useRun`, `useCan`, `useActor`, `useWorkspace`), hash router, shell.
+- `src/pages`: role pages. Show controls only when `useCan(action, target)` says the actor holds one complete grant.
 
 ## Conventions
 
-- Node runs `.ts` directly via type stripping: only erasable syntax (no `enum`, `namespace`, parameter properties); relative imports end in `.ts`; type-only imports use `import type`.
-- `src/domain` is pure (no IO). Services in `src/modules/<name>/service.ts` load → `ctx.allow(action, target)` → business rules → SQL. Routes only parse with zod and call services.
-- Every write goes through `writer()` (transaction, audit, idempotency). Mutations of existing objects take `expectedRevision`.
-- Authorization is always one complete grant (`authorize()` in `src/domain/authz.ts`); never union grants.
-- Anything that reads or changes a group's approval state (review, submit, reference revocation) takes `lockIntake(groupId)` before any Feature row lock.
-- Errors: throw `DomainError` helpers (`rule` 422, `conflict` 409, `notFound` 404, `ForbiddenError` 403) with a stable `code`.
-- Migrations are append-only SQL files in `apps/server/migrations/`; never edit an applied one.
-- Test through the HTTP API (`test/helpers.ts`), plus unit tests for domain functions.
+- Bilingual text sits at the point of use: `L('中文', 'English')`. Closed vocabularies (roles, stages, statuses, error codes) are in `src/i18n/vocab.ts`.
+- Authorization is always one complete grant (`authorize()` in `src/domain/authz.ts`); never union grants. New actions go in `ACTIONS` with their environment (`all`, a fixed env, or `target`).
+- Errors are `DomainError` helpers with a stable `code`; add a friendly label in `ERROR_LABELS` when users will see it.
+- Engine results leaving `run()` must be plain data (ids or detached values), never drafts.
+- Simulated external systems (vehicles, receipts, uploads) live in the simulator and run with `engine.run(null, …)`; role pages never fake results.
+- Only erasable TypeScript (Node runs tests via type stripping); relative imports end in `.ts` / `.tsx`.
