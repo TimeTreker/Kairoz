@@ -704,6 +704,7 @@ function Catalogs() {
   const run = useRun();
   const [open, setOpen] = useState<'version' | 'image' | null>(null);
   const [form] = Form.useForm();
+  const model = Form.useWatch('vehicleModelId', form);
   const canVersion = can('softwareVersion.record', { scope: 'Vehicle' });
   const canImage = can('image.register', { workspaceId: '*', groupId: '*' });
   return (
@@ -767,7 +768,7 @@ function Catalogs() {
       >
         <Form form={form} name="catalog" layout="vertical" initialValues={{ vehicleModelId: Object.keys(state.vehicleModels)[0], simulator: 'SimOne 3' }}>
           <Form.Item name="vehicleModelId" label={L('车型', 'Model')}>
-            <Select options={Object.keys(state.vehicleModels).map((m) => ({ value: m, label: m }))} />
+            <Select options={Object.keys(state.vehicleModels).map((m) => ({ value: m, label: m }))} onChange={() => form.setFieldValue('integrationVersion', undefined)} />
           </Form.Item>
           {open === 'version' ? (
             <>
@@ -784,7 +785,12 @@ function Catalogs() {
                 <Input placeholder="x89-1.1-sim" />
               </Form.Item>
               <Form.Item name="integrationVersion" label={L('整车版本（留空 = 研发镜像）', 'Software version (blank = development image)')}>
-                <Select allowClear options={Object.values(state.softwareVersions).map((v) => ({ value: v.version, label: `${v.vehicleModelId} ${v.version}` }))} />
+                <Select
+                  allowClear
+                  options={Object.values(state.softwareVersions)
+                    .filter((v) => v.vehicleModelId === model)
+                    .map((v) => ({ value: v.version, label: `${v.vehicleModelId} ${v.version}` }))}
+                />
               </Form.Item>
               <Form.Item name="build" label="Build" rules={[{ required: true }]}>
                 <Input />

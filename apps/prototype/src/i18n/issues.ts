@@ -101,8 +101,8 @@ const PROBLEMS: Pattern[] = [
   [/captured files incomplete/, () => '捕获文件不完整'],
   [/quality unknown/, () => '质量未知'],
   [/quality (\S+)/, ([q]) => `质量 ${q}`],
-  [/training use not confirmed/, () => '训练用途未确认'],
-  [/training use denied/, () => '训练用途被拒绝'],
+  [/training use not confirmed/, () => '训练用途待确认'],
+  [/training use denied/, () => '不允许训练'],
 ];
 
 const COMPILED = PROBLEMS.map(([re, zh]) => [new RegExp(`^(?:(.+?): )?${re.source}$`), zh] as const);

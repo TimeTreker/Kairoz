@@ -51,6 +51,18 @@ function persist(state: State): void {
 
 export const engine = new Engine(loadState(), persist);
 
+// Tabs of one browser share the saved platform. When another tab saves, follow it, so an older
+// tab never writes stale data back (and a tab signed in as a disabled account drops to sign-in).
+window.addEventListener('storage', (e) => {
+  if (e.key !== STATE_KEY || !e.newValue) return;
+  try {
+    const parsed = JSON.parse(e.newValue) as State;
+    if (parsed.schema === STATE_SCHEMA) engine.replace(parsed);
+  } catch {
+    // Ignore a save this version cannot read.
+  }
+});
+
 export function useEngineState(): State {
   return useSyncExternalStore(engine.subscribe, engine.getState);
 }
