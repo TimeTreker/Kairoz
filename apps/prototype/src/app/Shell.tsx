@@ -25,10 +25,12 @@ import { AuditPage } from '../pages/AuditPage.tsx';
 import { DataCatalogPage } from '../pages/DataCatalogPage.tsx';
 import { FeatureDetailPage } from '../pages/FeatureDetailPage.tsx';
 import { FeaturesPage } from '../pages/FeaturesPage.tsx';
+import { FleetPage } from '../pages/FleetPage.tsx';
 import { GuidePage } from '../pages/GuidePage.tsx';
 import { IntakePage } from '../pages/IntakePage.tsx';
 import { OrgPage } from '../pages/OrgPage.tsx';
 import { ProcessingPage } from '../pages/ProcessingPage.tsx';
+import { SimulatorPage } from '../pages/SimulatorPage.tsx';
 import { WorkbenchPage } from '../pages/WorkbenchPage.tsx';
 import { useActor, useWorkspace } from './hooks.ts';
 import { PrototypeMenu } from './PrototypeMenu.tsx';
@@ -66,7 +68,7 @@ const NAV: NavItem[] = [
 ];
 
 /** Pages not built yet in this phase show a placeholder instead of a broken link. */
-const READY = new Set(['workbench', 'features', 'data', 'intake', 'processing', 'org', 'accounts', 'audit', 'guide']);
+const READY = new Set(['workbench', 'features', 'data', 'intake', 'processing', 'fleet', 'org', 'accounts', 'audit', 'guide', 'simulator']);
 
 function Placeholder({ title }: { title: string }) {
   const { L } = useI18n();
@@ -110,6 +112,8 @@ export function Shell() {
       data: <DataCatalogPage />,
       intake: <IntakePage />,
       processing: <ProcessingPage />,
+      fleet: <FleetPage />,
+      simulator: <SimulatorPage />,
       org: <OrgPage />,
       accounts: <AccountsPage />,
       audit: <AuditPage />,
@@ -166,7 +170,7 @@ export function Shell() {
           </Dropdown>
         </Layout.Header>
         <Layout.Content>
-          {workspace && page !== 'org' && page !== 'accounts' && page !== 'audit' && page !== 'guide' && (
+          {workspace && !['org', 'accounts', 'audit', 'guide', 'simulator'].includes(page) && (
             <div style={{ padding: '12px 24px 0' }}>
               <Breadcrumb
                 items={[

@@ -7,7 +7,9 @@ import { Mono, RoleTag, StageTag } from '../components/common.tsx';
 import { authorize } from '../domain/authz.ts';
 import { visibleFeatures } from '../engine/config.ts';
 import { intakeQueue } from '../engine/intake.ts';
+import { managedResources, pendingDeploymentOf, vehicleGroupsOf, workspaceVehicles } from '../engine/fleet.ts';
 import { referenceRequestsFor } from '../engine/references.ts';
+import { featureTestStatus } from '../engine/validation.ts';
 import type { Feature } from '../engine/types.ts';
 import { useI18n } from '../i18n/i18n.tsx';
 import { FEEDBACK_LABELS } from '../i18n/vocab.ts';
@@ -83,10 +85,40 @@ export function WorkbenchPage() {
     );
   }
   if (roles.includes('BUSINESS_TEST') && workspace) {
+    const testing = features.filter((f) => f.stage === 'TESTING');
+    const waiting = testing.filter((f) => featureTestStatus(state, f).some((t) => !t.applied));
     cards.push(
       <Card key="test" title={<RoleTag role="BUSINESS_TEST" />}>
-        <Typography.Paragraph type="secondary">{L('DCL Ready 之后的 Feature 可下发到车辆组并测试。', 'Features become testable on vehicle groups once DCL Ready.')}</Typography.Paragraph>
+        <Row gutter={16} style={{ marginBottom: 12 }}>
+          <Col span={8}><Statistic title={L('待下发', 'To dispatch')} value={features.filter((f) => f.stage === 'DCL_READY').length} /></Col>
+          <Col span={8}><Statistic title={L('测试中', 'Testing')} value={testing.length} /></Col>
+          <Col span={8}><Statistic title={L('等待车辆回执', 'Awaiting receipts')} value={waiting.length} /></Col>
+        </Row>
         <FeatureList items={features.filter((f) => ['DCL_READY', 'TESTING'].includes(f.stage))} empty={L('暂无待测 Feature', 'Nothing to test')} />
+      </Card>,
+    );
+  }
+  if (roles.includes('WORKSPACE_ADMIN') && workspace) {
+    const vehicles = workspaceVehicles(state, workspace.id);
+    cards.push(
+      <Card key="wa" title={<RoleTag role="WORKSPACE_ADMIN" />} extra={<Button size="small" onClick={() => navigate('fleet')}>{L('车辆与车辆组', 'Vehicles & groups')}</Button>}>
+        <Row gutter={16}>
+          <Col span={8}><Statistic title={L('工作区车辆', 'Vehicles')} value={vehicles.length} /></Col>
+          <Col span={8}><Statistic title={L('未分组', 'Ungrouped')} value={vehicles.filter((r) => !state.groupMembers[r.id]).length} /></Col>
+          <Col span={8}><Statistic title={L('车辆组', 'Vehicle groups')} value={vehicleGroupsOf(state, workspace.id).filter((g) => g.status === 'ACTIVE').length} /></Col>
+        </Row>
+      </Card>,
+    );
+  }
+  if (actor.grants.some((g) => g.role === 'VEHICLE_RESOURCE')) {
+    const managed = managedResources(state, actor);
+    cards.push(
+      <Card key="vr" title={<RoleTag role="VEHICLE_RESOURCE" />} extra={<Button size="small" onClick={() => navigate('fleet')}>{L('车辆台账', 'Registry')}</Button>}>
+        <Row gutter={16}>
+          <Col span={8}><Statistic title={L('管理的车辆', 'Managed vehicles')} value={managed.length} /></Col>
+          <Col span={8}><Statistic title={L('软件版本未知', 'Unknown software')} value={managed.filter((r) => r.type === 'PHYSICAL' && !r.integrationVersion).length} /></Col>
+          <Col span={8}><Statistic title={L('等待回执', 'Awaiting receipts')} value={managed.filter((r) => pendingDeploymentOf(state, r.id)).length} /></Col>
+        </Row>
       </Card>,
     );
   }

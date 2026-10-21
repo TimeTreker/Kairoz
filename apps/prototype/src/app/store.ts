@@ -37,7 +37,10 @@ function loadState(): State {
       // Fall through to a fresh demo.
     }
   }
-  return demoState();
+  // Save a fresh demo at once, so its ids (and links to them) survive a reload.
+  const fresh = demoState();
+  safeSet(STATE_KEY, JSON.stringify(fresh));
+  return fresh;
 }
 
 let saveTimer: ReturnType<typeof setTimeout> | undefined;

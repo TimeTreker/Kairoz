@@ -30,6 +30,7 @@ import { getGroup, getWorkspace } from './org.ts';
 import { bindingIssues, currentTemplate } from './processing.ts';
 import { approvedReference } from './references.ts';
 import { commitSnapshot, latestCommittedVersion, resolveFiles } from './snapshots.ts';
+import { stageAfterIntake } from './stages.ts';
 import type { BusinessGroup, Feature, FeatureStage, FeedbackKind, State } from './types.ts';
 
 /** Stages in which the draft may change. Changing it always returns the Feature to DRAFT. */
@@ -133,6 +134,7 @@ export function createFeature(ctx: Ctx, input: { workspaceId: string; groupId: s
     stage: 'DRAFT',
     baseReleaseId: null,
     headCommitId: null,
+    verifiedCommitId: null,
     sequence: 0,
     draft: emptyConfig(),
     createdBy: ctx.user().username,
@@ -562,7 +564,7 @@ export function submitFeature(ctx: Ctx, featureId: string, input: { message?: st
       });
     }
     if (feature.stage === 'DRAFT') {
-      feature.stage = stage;
+      feature.stage = stageAfterIntake(ctx.s, feature, stage);
       feature.updatedAt = ctx.now;
     }
     return { commitId: feature.headCommitId, reused: true, stage: feature.stage };

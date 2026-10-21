@@ -149,3 +149,66 @@ export const ERROR_LABELS: Record<string, Bilingual> = {
   GROUP_CODE_NESTED: b('分组代码不能与其他分组代码互为前缀', 'Group codes cannot nest inside each other'),
   ORG_CYCLE: b('不能移动到自己的下级', 'A unit cannot move beneath itself'),
 };
+
+export const RESOURCE_TYPE_LABELS: Record<string, Bilingual> = {
+  PHYSICAL: b('实车', 'Physical'),
+  SIMULATION: b('仿真', 'Simulation'),
+};
+
+export const RESOURCE_STATUS_LABELS: Record<string, Bilingual> = {
+  AVAILABLE: b('可用', 'Available'),
+  MAINTENANCE: b('维护中', 'Maintenance'),
+  RETIRED: b('已报废', 'Retired'),
+};
+
+export const VEHICLE_GROUP_PURPOSE_LABELS: Record<string, Bilingual> = {
+  DEV: b('研发', 'Development'),
+  TEST: b('测试', 'Testing'),
+  PRODUCTION: b('量产', 'Production'),
+};
+
+export const TARGET_STATUS_LABELS: Record<string, Bilingual> = {
+  PENDING: b('等待回执', 'Awaiting receipt'),
+  APPLIED: b('已生效', 'Applied'),
+  FAILED: b('失败', 'Failed'),
+  CANCELLED: b('已取消', 'Cancelled'),
+};
+
+export const TARGET_STATUS_COLORS: Record<string, string> = {
+  PENDING: 'processing',
+  APPLIED: 'success',
+  FAILED: 'error',
+  CANCELLED: 'default',
+};
+
+export const DEPLOYMENT_STATUS_LABELS: Record<string, Bilingual> = {
+  PENDING: b('进行中', 'In progress'),
+  COMPLETED: b('已结束', 'Finished'),
+  CANCELLED: b('已取消', 'Cancelled'),
+  PAUSED: b('已暂停', 'Paused'),
+};
+
+Object.assign(ERROR_LABELS, {
+  DISPATCH_BLOCKED: b('下发被拒绝：并非所有车辆都满足条件', 'Dispatch blocked: not every vehicle qualifies'),
+  NOT_DCL_READY: b('只有 DCL Ready 的 Feature 才能下发', 'Only DCL Ready Features can be dispatched'),
+  NO_VEHICLE_GROUPS: b('请选择车辆组', 'Choose vehicle groups'),
+  NOT_APPLIED: b('车辆尚未确认应用该配置', 'The vehicle has not confirmed applying this configuration'),
+  NOT_A_TEST_TARGET: b('该车辆不在本提交的验证目标中', 'This vehicle is not a test target of the commit'),
+  SIMULATION_FIRST: b('实车测试前须先有仿真测试通过', 'A simulation test must pass before a physical one'),
+  VERIFY_BLOCKED: b('暂不能确认 Verified', 'Cannot verify yet'),
+  NOT_TESTING: b('Feature 不在测试中', 'The Feature is not in testing'),
+  SUMMARY_REQUIRED: b('请填写测试说明', 'Describe the test'),
+  VEHICLE_BUSY: b('车辆正在等待另一次下发的回执', 'The vehicle is waiting for another dispatch'),
+  VEHICLE_ALREADY_GROUPED: b('车辆已属于另一个车辆组，请先移出', 'The vehicle is in another vehicle group; remove it there first'),
+  VEHICLE_NOT_ASSIGNABLE: b('车辆不符合本工作区（车型、资源池或环境）或已加入', 'The vehicle does not fit this workspace (model, pool, environment) or is already assigned'),
+  VEHICLE_NOT_IN_WORKSPACE: b('请先把车辆加入工作区', 'Add the vehicle to the workspace first'),
+  VEHICLE_IN_GROUP: b('请先把车辆移出车辆组', 'Remove the vehicle from its vehicle group first'),
+  ENV_MISMATCH: b('车辆环境与车辆组不一致', 'The vehicle’s environment differs from the group'),
+  GROUP_HAS_MEMBERS: b('请先移出全部车辆', 'Move all vehicles out first'),
+  SIMULATION_SOFTWARE_FROM_IMAGE: b('仿真车的软件版本由镜像决定', 'A simulation’s software comes from its image'),
+  UNKNOWN_SOFTWARE_VERSION: b('该软件版本尚未登记', 'That software version is not recorded'),
+  INVALID_VIN: b('VIN 为 17 位，不含 I、O、Q', 'A VIN has 17 characters without I, O or Q'),
+  RECEIPT_CONFLICT: b('该尝试已有不同的回执', 'A different receipt exists for this attempt'),
+  STALE_ATTEMPT: b('回执的尝试次数已过期', 'The receipt is for an old attempt'),
+  TARGET_NOT_PENDING: b('该目标未在等待回执', 'The target is not awaiting a receipt'),
+});

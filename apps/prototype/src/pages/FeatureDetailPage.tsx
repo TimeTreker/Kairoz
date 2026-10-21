@@ -13,6 +13,7 @@ import { FilesTab } from './feature/FilesTab.tsx';
 import { ChangesTab, CommitsTab, FeedbackTimeline } from './feature/HistoryTab.tsx';
 import { IntakeTab } from './feature/IntakeTab.tsx';
 import { PoliciesTab } from './feature/PoliciesTab.tsx';
+import { ValidationTab } from './feature/ValidationTab.tsx';
 
 export function FeatureDetailPage({ featureId }: { featureId: string }) {
   const state = useEngineState();
@@ -90,6 +91,7 @@ export function FeatureDetailPage({ featureId }: { featureId: string }) {
           { key: 'changes', label: L('变更', 'Changes'), children: <ChangesTab feature={feature} /> },
           { key: 'commits', label: L('提交历史', 'Commits'), children: <CommitsTab feature={feature} /> },
           { key: 'intake', label: L('DCL 接入', 'DCL intake'), children: <IntakeTab feature={feature} /> },
+          { key: 'validation', label: L('下发与测试', 'Dispatch & tests'), children: <ValidationTab feature={feature} /> },
           { key: 'feedback', label: L('反馈', 'Feedback'), children: <Card><FeedbackTimeline feature={feature} /></Card> },
         ]}
       />

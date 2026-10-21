@@ -9,6 +9,8 @@ import { createAccount, installAdmin } from './identity.ts';
 import { createGroup, createOrgUnit, createProject, createVehicleModel, createWorkspace } from './org.ts';
 import { createPipeline, createTemplate } from './processing.ts';
 import { requestReference } from './references.ts';
+import { addGroupMember, addWorkspaceVehicle, confirmIntegration, createSimulation, createVehicleGroup, recordSoftwareVersion, registerImage, registerPhysical } from './fleet.ts';
+import { sha256Hex } from '../domain/canonical.ts';
 import { emptyState } from './types.ts';
 import type { State } from './types.ts';
 
@@ -190,6 +192,30 @@ export function demoState(): State {
     }),
   );
   as('adc_parking', (c) => submitFeature(c, parking, { message: '环视视频首版' }));
+
+  // Vehicles: recorded software versions, simulation images, physical vehicles, a brake simulation.
+  as('resource', (c) => recordSoftwareVersion(c, { vehicleModelId: 'X89', version: '1.0', source: '整车 OTA 发布记录 X89-1.0' }));
+  as('resource', (c) => recordSoftwareVersion(c, { vehicleModelId: 'X89', version: '1.1', source: '整车 OTA 发布记录 X89-1.1' }));
+  const digest = (text: string) => `sha256:${sha256Hex(text)}`;
+  as('dcl', (c) => registerImage(c, { id: 'x89-dev-sim', vehicleModelId: 'X89', integrationVersion: null, build: 'x89-dev-2026.10', digest: digest('x89-dev-sim'), simulator: 'SimOne 3' }));
+  as('dcl', (c) => registerImage(c, { id: 'x89-1.0-sim', vehicleModelId: 'X89', integrationVersion: '1.0', build: 'x89-1.0.4', digest: digest('x89-1.0-sim'), simulator: 'SimOne 3' }));
+  for (const [id, vin, plate, env, pool, name, version] of [
+    ['VEH-001', 'LSDEM0X8900000001', '沪A·D0001', 'development', 'Chassis', '制动研发车 1', '1.0'],
+    ['VEH-002', 'LSDEM0X8900000002', '沪A·D0002', 'development', 'ADC', '泊车研发车 1', null],
+    ['VEH-031', 'LSDEM0X8900000031', '沪A·T0031', 'testing', 'Vehicle', '整车集成测试车 1', '1.0'],
+    ['VEH-201', 'LSDEM0X8900000201', '沪A·P0201', 'production', 'Vehicle', '量产车 201', '1.0'],
+    ['VEH-202', 'LSDEM0X8900000202', '沪A·P0202', 'production', 'Vehicle', '量产车 202', '1.0'],
+  ] as const) {
+    as('resource', (c) => registerPhysical(c, { id, vin, licensePlate: plate, vehicleModelId: 'X89', env, pool, displayName: name }));
+    if (version) as('resource', (c) => confirmIntegration(c, id, { version, source: 'DIP 上报 2026-10-15' }));
+  }
+  as('workspace_manager', (c) => createSimulation(c, { id: 'SIM-021', workspaceId: 'team-brake', imageId: 'x89-1.0-sim', env: 'development', pool: 'Chassis', displayName: '制动仿真 21' }));
+  as('workspace_manager', (c) => addWorkspaceVehicle(c, 'team-brake', 'VEH-001'));
+  const brakeGroup = as<string>('workspace_manager', (c) =>
+    createVehicleGroup(c, { workspaceId: 'team-brake', groupId: 'brake', name: '制动研发车组', purpose: 'DEV', env: 'development' }),
+  );
+  as('workspace_manager', (c) => addGroupMember(c, brakeGroup, 'SIM-021', '制动 Feature 仿真验证'));
+  as('workspace_manager', (c) => addGroupMember(c, brakeGroup, 'VEH-001', '制动 Feature 实车验证'));
 
   // Steering asks brake for read-only use of the brake debug data; brake has not decided yet.
   as('steering', (c) => requestReference(c, { dataKey: brakeKey, readerGroupId: 'steering', reason: '转向事件分析需要制动压力上下文' }));

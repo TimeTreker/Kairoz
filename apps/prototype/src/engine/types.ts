@@ -8,7 +8,7 @@ import type { FileType, Privacy } from '../domain/file-types.ts';
 import type { ReviewControls } from '../domain/intake.ts';
 import type { Domain, Env, GroupPurpose, Scope, WorkspaceKind } from '../domain/vocabulary.ts';
 
-export const STATE_SCHEMA = 1;
+export const STATE_SCHEMA = 2;
 
 export interface Account {
   username: string;
@@ -152,6 +152,8 @@ export interface Feature {
   /** NULL: the vehicle model's platform-managed, empty initial development configuration. */
   baseReleaseId: string | null;
   headCommitId: string | null;
+  /** The head commit that business testing verified, if any. */
+  verifiedCommitId: string | null;
   sequence: number;
   draft: GroupConfig;
   createdBy: string;
@@ -241,6 +243,185 @@ export interface Release {
   publishedAt: string;
 }
 
+// ---------------------------------------------------------------------------
+// Vehicles and validation
+// ---------------------------------------------------------------------------
+
+/** A whole-vehicle software version of a model, recorded from a trusted external source. */
+export interface SoftwareVersion {
+  vehicleModelId: string;
+  version: string;
+  source: string;
+  recordedBy: string;
+  createdAt: string;
+}
+
+/** Immutable simulator runtime image. A NULL integration version is a development image. */
+export interface SimulationImage {
+  id: string;
+  vehicleModelId: string;
+  integrationVersion: string | null;
+  build: string;
+  digest: string;
+  simulator: string;
+  createdBy: string;
+  createdAt: string;
+}
+
+/** The simulated on-vehicle agent (prototype only): how it answers configuration requests. */
+export interface AgentState {
+  online: boolean;
+  /** Acknowledge pending configurations automatically when the simulator runs. */
+  autoAck: boolean;
+  /** The next configuration fails to apply. */
+  failNext: boolean;
+}
+
+export interface Resource {
+  id: string;
+  type: 'PHYSICAL' | 'SIMULATION';
+  vehicleModelId: string;
+  env: Env;
+  /** Ownership pool: the whole-vehicle scope or a domain. */
+  pool: Scope;
+  vin: string | null;
+  uvid: string | null;
+  licensePlate: string | null;
+  displayName: string;
+  status: 'AVAILABLE' | 'MAINTENANCE' | 'RETIRED';
+  /** Actual whole-vehicle software. NULL means not yet known; never inferred. */
+  integrationVersion: string | null;
+  integrationSource: string | null;
+  imageId: string | null;
+  /** The workspace that created a simulation instance. */
+  homeWorkspaceId: string | null;
+  /** Confirmed only by an APPLIED receipt. */
+  appliedConfigId: string | null;
+  agent: AgentState;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
+ * What a vehicle is asked to run: one committed configuration per business group, on top of a
+ * base. A Feature dispatch overlays one group's commit on the vehicle model's base.
+ */
+export interface ResolvedConfig {
+  id: string;
+  vehicleModelId: string;
+  kind: 'FEATURE' | 'CANDIDATE' | 'RELEASE';
+  sourceId: string;
+  baseReleaseId: string | null;
+  /** group id -> commit id */
+  groups: Record<string, string>;
+  digest: string;
+  label: string;
+  createdAt: string;
+}
+
+export type VehicleGroupPurpose = 'DEV' | 'TEST' | 'PRODUCTION';
+
+/** Persistent configuration routing group, owned by one workspace (and, below production, one business group). */
+export interface VehicleGroup {
+  id: string;
+  workspaceId: string;
+  groupId: string | null;
+  name: string;
+  purpose: VehicleGroupPurpose;
+  env: Env;
+  status: 'ACTIVE' | 'ARCHIVED';
+  targetConfigId: string | null;
+  bindingRevision: number;
+  createdBy: string;
+  createdAt: string;
+}
+
+export interface VehicleGroupEvent {
+  id: string;
+  vehicleGroupId: string;
+  kind: 'CREATED' | 'MEMBER_ADDED' | 'MEMBER_REMOVED' | 'BOUND' | 'ARCHIVED';
+  resourceId: string | null;
+  reason: string | null;
+  actor: string;
+  createdAt: string;
+}
+
+export interface TargetAttempt {
+  attempt: number;
+  status: 'APPLIED' | 'FAILED' | 'CANCELLED';
+  error: string | null;
+  at: string;
+}
+
+export interface DeploymentTarget {
+  resourceId: string;
+  vehicleGroupId: string | null;
+  attempt: number;
+  status: 'PENDING' | 'APPLIED' | 'FAILED' | 'CANCELLED';
+  previousConfigId: string | null;
+  error: string | null;
+  updatedAt: string;
+  /** Finished earlier attempts, kept as evidence. */
+  history: TargetAttempt[];
+}
+
+/** One dispatch of a fixed configuration to a frozen list of vehicles. */
+export interface Deployment {
+  id: string;
+  kind: 'FEATURE' | 'CANDIDATE' | 'OTA';
+  workspaceId: string;
+  groupId: string | null;
+  subjectId: string;
+  commitId: string | null;
+  resolvedConfigId: string;
+  env: Env;
+  status: 'PENDING' | 'COMPLETED' | 'CANCELLED' | 'PAUSED';
+  vehicleGroupIds: string[];
+  targets: DeploymentTarget[];
+  dispatchedBy: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** A simulated device receipt (the real system verifies device signatures). */
+export interface Receipt {
+  id: string;
+  deploymentId: string;
+  resourceId: string;
+  attempt: number;
+  result: 'APPLIED' | 'FAILED';
+  error: string | null;
+  receivedAt: string;
+}
+
+/** A vehicle a subject (Feature commit, candidate) must be verified on. */
+export interface TestTarget {
+  subjectKind: 'FEATURE' | 'CANDIDATE';
+  subjectId: string;
+  /** Feature commit, or candidate resolved config. */
+  versionId: string;
+  resourceId: string;
+  deploymentId: string;
+}
+
+export interface TestRun {
+  id: string;
+  seq: number;
+  subjectKind: 'FEATURE' | 'CANDIDATE';
+  subjectId: string;
+  versionId: string;
+  resourceId: string;
+  resourceType: 'PHYSICAL' | 'SIMULATION';
+  env: Env;
+  resolvedConfigId: string;
+  result: 'PASS' | 'FAIL';
+  summary: string;
+  evidenceUri: string | null;
+  tester: string;
+  createdAt: string;
+}
+
 export interface AuditEvent {
   id: string;
   seq: number;
@@ -281,6 +462,20 @@ export interface State {
   feedback: Feedback[];
   referenceRequests: Record<string, ReferenceRequest>;
   releases: Record<string, Release>;
+  softwareVersions: Record<string, SoftwareVersion>;
+  images: Record<string, SimulationImage>;
+  resources: Record<string, Resource>;
+  /** workspace id -> resource ids the workspace may use */
+  workspaceResources: Record<string, string[]>;
+  vehicleGroups: Record<string, VehicleGroup>;
+  /** resource id -> vehicle group id (one routing group per vehicle, platform-wide) */
+  groupMembers: Record<string, string>;
+  vehicleGroupEvents: VehicleGroupEvent[];
+  resolvedConfigs: Record<string, ResolvedConfig>;
+  deployments: Record<string, Deployment>;
+  receipts: Receipt[];
+  testTargets: TestTarget[];
+  testRuns: TestRun[];
   audit: AuditEvent[];
 }
 
@@ -308,6 +503,18 @@ export function emptyState(): State {
     feedback: [],
     referenceRequests: {},
     releases: {},
+    softwareVersions: {},
+    images: {},
+    resources: {},
+    workspaceResources: {},
+    vehicleGroups: {},
+    groupMembers: {},
+    vehicleGroupEvents: [],
+    resolvedConfigs: {},
+    deployments: {},
+    receipts: [],
+    testTargets: [],
+    testRuns: [],
     audit: [],
   };
 }

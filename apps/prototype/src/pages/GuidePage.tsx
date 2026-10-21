@@ -48,6 +48,19 @@ export const SCENARIOS: Scenario[] = [
     ],
   },
   {
+    key: 'validation',
+    titleZh: '主线一 · 业务测试：先仿真后实车，确认 Verified',
+    titleEn: 'Flow 1 · Business testing: simulation, then physical, then Verified',
+    steps: [
+      { account: 'workspace_manager', workspace: 'team-brake', page: 'fleet', zh: '查看工作区车辆与“制动研发车组”（SIM-021 仿真、VEH-001 实车）', en: 'Review workspace vehicles and the brake development group (SIM-021, VEH-001)', expectZh: '每辆车只属于一个车辆组；实际软件版本与已生效配置分别显示', expectEn: 'Each vehicle routes through one group; actual software and applied configuration are shown separately' },
+      { account: 'brake_tester', workspace: 'team-brake', page: 'features', zh: '打开 guided_brake →“下发与测试”→ 按车辆组下发', en: 'Open guided_brake → Dispatch & tests → dispatch to the vehicle group', expectZh: '两辆车等待回执；车辆的已生效配置尚未改变', expectEn: 'Both vehicles await receipts; their applied configuration has not changed yet' },
+      { account: 'brake_tester', page: 'simulator', zh: '在车辆模拟器中让 SIM-021 回执成功、VEH-001 回执失败', en: 'In the simulator, SIM-021 applies and VEH-001 fails', expectZh: '只有成功回执更新已生效配置；失败的车辆保留原配置', expectEn: 'Only the applied receipt changes the applied configuration; the failed vehicle keeps its old one' },
+      { account: 'brake_tester', workspace: 'team-brake', page: 'features', zh: '为 SIM-021 登记 PASS；对 VEH-001 再次下发并在模拟器回执成功后登记 PASS', en: 'Record PASS for SIM-021; redispatch VEH-001, apply it in the simulator, record PASS', expectZh: '实车结果必须在仿真通过之后', expectEn: 'Physical results require a passing simulation first' },
+      { account: 'brake_tester', workspace: 'team-brake', page: 'features', zh: '确认 Verified', en: 'Confirm Verified', expectZh: 'Feature 已验证，可交给配置集成', expectEn: 'The Feature is verified and ready for integration' },
+      { account: 'dispatch_operator', workspace: 'team-brake', page: 'features', zh: '用“仅下发”测试账号尝试登记结果', en: 'Try recording a result as the dispatch-only tester', expectZh: '可以下发，但不能登记结果或确认 Verified', expectEn: 'It can dispatch but cannot record results or verify' },
+    ],
+  },
+  {
     key: 'reference',
     titleZh: '跨组只读引用',
     titleEn: 'Cross-group read-only reference',
