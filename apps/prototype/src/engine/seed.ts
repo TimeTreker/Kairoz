@@ -10,6 +10,7 @@ import { createGroup, createOrgUnit, createProject, createVehicleModel, createWo
 import { createPipeline, createTemplate } from './processing.ts';
 import { requestReference } from './references.ts';
 import { addGroupMember, addWorkspaceVehicle, confirmIntegration, createSimulation, createVehicleGroup, recordSoftwareVersion, registerImage, registerPhysical } from './fleet.ts';
+import { captureEvent, processEvent } from './events.ts';
 import { confirmProcessing, freezeCandidate, previewMerge } from './integration.ts';
 import { createOta } from './ota.ts';
 import { promoteCandidate } from './release.ts';
@@ -298,6 +299,24 @@ export function demoState(): State {
   as('steering_tester', (c) => recordFeatureTest(c, returnRate, { commitId: returnCommit, resourceId: 'SIM-022', result: 'PASS', summary: '仿真回放回正场景 12 段，均正确触发' }));
   as('steering_tester', (c) => recordFeatureTest(c, returnRate, { commitId: returnCommit, resourceId: 'VEH-003', result: 'PASS', summary: '实车低附路面回正测试通过' }));
   as('steering_tester', (c) => verifyFeature(c, returnRate));
+
+  // Sample collection events (MOCK_SAMPLE, fixed date 2026-10-18): successes, a parser failure,
+  // unknown quality and unconfirmed use, on vehicles that really run these configurations.
+  for (const [vehicle, policyId, at, failParse, quality, trainingUse] of [
+    ['VEH-201', 'chassis.steering.angle_jump', '2026-10-18T01:12:00.000Z', false, 'A', 'ALLOWED'],
+    ['VEH-201', 'chassis.steering.angle_jump', '2026-10-18T03:40:00.000Z', false, 'B', 'ALLOWED'],
+    ['VEH-201', 'chassis.steering.angle_jump', '2026-10-18T05:05:00.000Z', true, 'UNKNOWN', 'UNCONFIRMED'],
+    ['VEH-202', 'chassis.steering.angle_jump', '2026-10-18T02:30:00.000Z', false, 'UNKNOWN', 'UNCONFIRMED'],
+    ['VEH-202', 'chassis.steering.angle_jump', '2026-10-18T07:15:00.000Z', false, 'C', 'ALLOWED'],
+    ['VEH-003', 'chassis.steering.return_rate', '2026-10-18T06:00:00.000Z', false, 'A', 'ALLOWED'],
+    ['VEH-003', 'chassis.steering.angle_jump', '2026-10-18T06:20:00.000Z', true, 'UNKNOWN', 'UNCONFIRMED'],
+    ['SIM-022', 'chassis.steering.return_rate', '2026-10-18T08:00:00.000Z', false, 'A', 'DENIED'],
+  ] as const) {
+    engine.run(null, (c) => {
+      const id = captureEvent(c, { resourceId: vehicle, policyId, occurredAt: at, failParse, origin: 'MOCK_SAMPLE', quality, trainingUse });
+      processEvent(c, id);
+    });
+  }
 
   // Steering asks brake for read-only use of the brake debug data; brake has not decided yet.
   as('steering', (c) => requestReference(c, { dataKey: brakeKey, readerGroupId: 'steering', reason: '转向事件分析需要制动压力上下文' }));

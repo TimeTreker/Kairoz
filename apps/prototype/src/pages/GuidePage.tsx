@@ -89,6 +89,19 @@ export const SCENARIOS: Scenario[] = [
     ],
   },
   {
+    key: 'query',
+    titleZh: '主线四 · 采集事件与数据查询',
+    titleEn: 'Flow 4 · Collection events and data query',
+    steps: [
+      { account: 'steering', workspace: 'team-steering', page: 'query', zh: '在“售后查询”输入 VEH-003，打开处理失败的事件', en: 'Under After-sales enter VEH-003 and open the failed event', expectZh: '只显示本组该车事件；详情显示 ParserFailure、采集文件与折叠的配置快照', expectEn: 'Only this group’s events of that vehicle; the detail shows the ParserFailure, captured files and the folded configuration snapshot' },
+      { account: 'steering', workspace: 'team-steering', page: 'query', zh: '输入量产车 VEH-201 查询', en: 'Search for the production vehicle VEH-201', expectZh: '没有结果：量产事件属于项目工作区与量产环境，查询条件不能扩大授权', expectEn: 'No results: production events belong to the project workspace and environment; filters never widen grants' },
+      { account: 'release', workspace: 'x89-project', page: 'query', zh: '查询 VEH-201 的售后事件，并切到“训练数据查询”，按质量 A 选择数据并导出清单', en: 'Look up VEH-201’s events, then under Training data pick quality A and export the manifest', expectZh: '训练结果不含车辆身份与整车版本；清单是 JSON', expectEn: 'Training results carry no vehicle identity or software; the manifest is JSON' },
+      { account: 'release', workspace: 'x89-project', page: 'query', zh: '把“数据可用性”改为“全部”', en: 'Set Availability to All', expectZh: '失败、质量未知、用途待确认的记录显示原因，没有选择入口', expectEn: 'Failed, unknown-quality and unconfirmed records show their reasons and cannot be selected' },
+      { account: 'release', page: 'simulator', zh: '在车辆模拟器中为 VEH-201 触发转角突变事件，执行几步', en: 'In the simulator fire the angle-jump policy on VEH-201 and step it', expectZh: '只采集该策略的文件；处理完成后质量与用途仍为“未知 / 待确认”', expectEn: 'Only that policy’s files are captured; once processed, quality and use are still unknown / unconfirmed' },
+      { account: 'dcl', workspace: 'x89-project', page: 'query', zh: '打开处理失败的事件并“重新处理”，再到模拟器执行一步', en: 'Open the failed event, Reprocess, then step the simulator', expectZh: '以相同的固定版本重新解析成功，产物地址不变', expectEn: 'It parses again with the same pinned versions; the artifact address is stable' },
+    ],
+  },
+  {
     key: 'reference',
     titleZh: '跨组只读引用',
     titleEn: 'Cross-group read-only reference',

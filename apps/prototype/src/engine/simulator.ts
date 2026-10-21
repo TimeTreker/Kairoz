@@ -5,6 +5,7 @@ import type { Draft } from 'immer';
 import { notFound } from '../domain/errors.ts';
 import type { Ctx } from './engine.ts';
 import type { AgentState, Resource, State } from './types.ts';
+import { advanceEvent } from './events.ts';
 import { acceptReceipt } from './validation.ts';
 
 export function setAgent(ctx: Ctx, resourceId: string, patch: Partial<AgentState>): void {
@@ -28,7 +29,8 @@ export function sendReceipt(ctx: Ctx, deploymentId: string, resourceId: string, 
   return acceptReceipt(ctx, { deploymentId, resourceId, attempt: t.attempt, result, ...(error ? { error } : {}) });
 }
 
-/** One simulator step: online vehicles in automatic mode answer their pending configurations. */
+/** One simulator step: online vehicles in automatic mode answer their pending configurations,
+ * and in-flight collection events move one processing step. */
 export function tick(ctx: Ctx): number {
   let answered = 0;
   for (const { deployment, target } of pendingForVehicles(ctx.s)) {
@@ -40,6 +42,11 @@ export function tick(ctx: Ctx): number {
     } else {
       sendReceipt(ctx, deployment.id, r.id, 'APPLIED');
     }
+    answered += 1;
+  }
+  for (const e of Object.values(ctx.s.events)) {
+    if (e.status !== 'UPLOADING' && e.status !== 'PROCESSING') continue;
+    advanceEvent(ctx, e.id);
     answered += 1;
   }
   return answered;

@@ -1,15 +1,17 @@
 // The vehicle simulator: plays the vehicles and simulators. It is a prototype tool, clearly
 // separate from the product's role pages, which never fabricate results themselves.
 
-import { App, Alert, Button, Card, Space, Switch, Table, Tag, Typography } from 'antd';
+import { App, Alert, Button, Card, Checkbox, Select, Space, Switch, Table, Tag, Typography } from 'antd';
 import { useEffect, useState } from 'react';
 import { useErrorText } from '../app/hooks.ts';
 import { engine, useEngineState } from '../app/store.ts';
-import { EnvTag, Mono, PageHeader, when } from '../components/common.tsx';
+import { EnvTag, LabelTag, Mono, PageHeader, when } from '../components/common.tsx';
 import type { Ctx } from '../engine/engine.ts';
+import { advanceEvent, assessEvent, capturablePolicies, captureEvent, setFailParse } from '../engine/events.ts';
+import type { Quality, TrainingUse } from '../engine/types.ts';
 import { pendingForVehicles, sendReceipt, setAgent, tick } from '../engine/simulator.ts';
 import { useI18n } from '../i18n/i18n.tsx';
-import { RESOURCE_TYPE_LABELS } from '../i18n/vocab.ts';
+import { EVENT_STATUS_COLORS, EVENT_STATUS_LABELS, QUALITY_LABELS, RESOURCE_TYPE_LABELS, TRAINING_USE_LABELS } from '../i18n/vocab.ts';
 
 let autoTimer: ReturnType<typeof setInterval> | undefined;
 
@@ -41,6 +43,14 @@ export function SimulatorPage() {
 
   const pending = pendingForVehicles(state);
   const vehicles = Object.values(state.resources).sort((a, b) => a.id.localeCompare(b.id));
+  const running = vehicles.filter((r) => r.appliedConfigId);
+  const [vehicle, setVehicle] = useState<string | undefined>(undefined);
+  const [policy, setPolicy] = useState<string | undefined>(undefined);
+  const [failParse, setFailParseNext] = useState(false);
+  const policies = vehicle ? capturablePolicies(state, vehicle) : [];
+  const events = Object.values(state.events)
+    .sort((a, b) => b.seq - a.seq)
+    .slice(0, 15);
 
   return (
     <div className="kz-page">
@@ -109,6 +119,88 @@ export function SimulatorPage() {
               { title: L('自动回执', 'Auto receipt'), render: (_, r) => <Switch size="small" checked={r.agent.autoAck} onChange={(v) => system((c) => setAgent(c, r.id, { autoAck: v }))} /> },
               { title: L('下一次应用失败', 'Fail next apply'), render: (_, r) => <Switch size="small" checked={r.agent.failNext} onChange={(v) => system((c) => setAgent(c, r.id, { failNext: v }))} /> },
               { title: L('已生效配置', 'Applied'), render: (_, r) => <Mono>{r.appliedConfigId ? state.resolvedConfigs[r.appliedConfigId]?.label : '—'}</Mono> },
+            ]}
+          />
+        </Card>
+        <Card title={L('采集事件：车端触发与云端处理', 'Collection events: vehicle triggers and cloud processing')}>
+          <Typography.Paragraph type="secondary">
+            {L(
+              '车辆按已生效配置中的策略触发事件，只采集该策略的 capture 文件；之后车端上传、云端按固定的处理版本解析。质量检查与训练用途授权在这里扮演外部服务，新事件默认“未知 / 待确认”。',
+              'A vehicle fires a policy of its applied configuration and captures only that policy’s files; then the edge uploads and the cloud parses with the pinned processing versions. Quality checks and training-use authorization are played here as external services; new events start as unknown / unconfirmed.',
+            )}
+          </Typography.Paragraph>
+          <Space wrap style={{ marginBottom: 12 }}>
+            <Select
+              style={{ width: 220 }}
+              placeholder={L('选择车辆', 'Vehicle')}
+              value={vehicle}
+              onChange={(v) => (setVehicle(v), setPolicy(undefined))}
+              options={running.map((r) => ({ value: r.id, label: `${r.id} · ${state.resolvedConfigs[r.appliedConfigId!]?.label}` }))}
+            />
+            <Select
+              style={{ width: 260 }}
+              placeholder={L('选择策略', 'Policy')}
+              value={policy}
+              onChange={setPolicy}
+              options={policies.map((p) => ({ value: p.policyId, label: `${p.policyId} · ${p.name}` }))}
+            />
+            <Checkbox checked={failParse} onChange={(e) => setFailParseNext(e.target.checked)}>
+              {L('云端解析将失败', 'Cloud parsing will fail')}
+            </Checkbox>
+            <Button type="primary" disabled={!vehicle || !policy} onClick={() => system((c) => captureEvent(c, { resourceId: vehicle!, policyId: policy!, failParse }), L('事件已触发，开始上传', 'Event fired; uploading'))}>
+              {L('触发事件', 'Fire event')}
+            </Button>
+          </Space>
+          <Table
+            rowKey="id"
+            size="small"
+            pagination={false}
+            dataSource={events}
+            scroll={{ x: 'max-content' }}
+            locale={{ emptyText: L('还没有事件', 'No events yet') }}
+            columns={[
+              { title: L('事件', 'Event'), render: (_, e) => <Mono>{`${e.id.slice(0, 14)}…`}</Mono> },
+              { title: L('车辆', 'Vehicle'), render: (_, e) => <Mono>{e.resourceId}</Mono> },
+              { title: L('策略', 'Policy'), render: (_, e) => e.policyName },
+              { title: L('时间', 'When'), render: (_, e) => when(e.occurredAt) },
+              { title: L('处理', 'Processing'), render: (_, e) => <LabelTag map={EVENT_STATUS_LABELS} value={e.status} color={EVENT_STATUS_COLORS[e.status]} /> },
+              {
+                title: L('解析将失败', 'Parse fails'),
+                render: (_, e) => (e.status === 'UPLOADING' || e.status === 'PROCESSING' ? <Switch size="small" checked={e.failParse} onChange={(v) => system((c) => setFailParse(c, e.id, v))} /> : '—'),
+              },
+              {
+                title: '',
+                render: (_, e) =>
+                  (e.status === 'UPLOADING' || e.status === 'PROCESSING') && (
+                    <Button size="small" onClick={() => system((c) => advanceEvent(c, e.id))}>
+                      {L('推进一步', 'Advance')}
+                    </Button>
+                  ),
+              },
+              {
+                title: L('质量检查（外部）', 'Quality check (external)'),
+                render: (_, e) => (
+                  <Select
+                    size="small"
+                    style={{ width: 96 }}
+                    value={e.quality}
+                    onChange={(v: Quality) => system((c) => assessEvent(c, e.id, { quality: v }))}
+                    options={['A', 'B', 'C', 'UNKNOWN'].map((q) => ({ value: q, label: B(QUALITY_LABELS[q]) }))}
+                  />
+                ),
+              },
+              {
+                title: L('用途授权（外部）', 'Use authorization (external)'),
+                render: (_, e) => (
+                  <Select
+                    size="small"
+                    style={{ width: 128 }}
+                    value={e.trainingUse}
+                    onChange={(v: TrainingUse) => system((c) => assessEvent(c, e.id, { trainingUse: v }))}
+                    options={['ALLOWED', 'DENIED', 'UNCONFIRMED'].map((u) => ({ value: u, label: B(TRAINING_USE_LABELS[u]) }))}
+                  />
+                ),
+              },
             ]}
           />
         </Card>

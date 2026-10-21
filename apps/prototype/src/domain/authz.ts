@@ -67,6 +67,13 @@ export const ACTIONS = {
   'merge.manage': { roles: ['CONFIG_INTEGRATOR'], env: 'testing' },
   'release.promote': { roles: ['CONFIG_RELEASE'], env: 'production' },
   'ota.manage': { roles: ['CONFIG_RELEASE'], env: 'production' },
+  // Data use (数据查询): roles that work with the data, within their grants; never platform ops.
+  'event.query': {
+    roles: ['BUSINESS_DEV', 'BUSINESS_TEST', 'DCL_ENGINEER', 'CONFIG_INTEGRATOR', 'INTEGRATION_TEST', 'CONFIG_RELEASE'],
+    env: 'target',
+    excludeDispatchOnly: true,
+  },
+  'event.reprocess': { roles: ['DCL_ENGINEER'], env: 'target' },
 } as const satisfies Record<string, ActionSpec>;
 
 export type Action = keyof typeof ACTIONS;

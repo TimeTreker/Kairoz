@@ -22,5 +22,5 @@ A runnable **product prototype** of the DCL data acquisition platform. It is not
 - Authorization is always one complete grant (`authorize()` in `src/domain/authz.ts`); never union grants. New actions go in `ACTIONS` with their environment (`all`, a fixed env, or `target`).
 - Errors are `DomainError` helpers with a stable `code`; add a friendly label in `ERROR_LABELS` when users will see it.
 - Engine results leaving `run()` must be plain data (ids or detached values), never drafts.
-- Simulated external systems (vehicles, receipts, uploads) live in the simulator and run with `engine.run(null, …)`; role pages never fake results.
+- Simulated external systems (vehicles, receipts, event capture and processing, quality and usage services) live in the simulator and run with `engine.run(null, …)`; role pages never fake results.
 - Only erasable TypeScript (Node runs tests via type stripping); relative imports end in `.ts` / `.tsx`.

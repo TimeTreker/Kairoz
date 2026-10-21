@@ -8,7 +8,7 @@ import type { FileType, Privacy } from '../domain/file-types.ts';
 import type { ReviewControls } from '../domain/intake.ts';
 import type { Domain, Env, GroupPurpose, Scope, WorkspaceKind } from '../domain/vocabulary.ts';
 
-export const STATE_SCHEMA = 4;
+export const STATE_SCHEMA = 5;
 
 export interface Account {
   username: string;
@@ -502,6 +502,70 @@ export interface Candidate {
   verifiedAt: string | null;
 }
 
+// ---------------------------------------------------------------------------
+// Collection events (采集事件) and data use
+// ---------------------------------------------------------------------------
+
+export type EventStatus = 'UPLOADING' | 'PROCESSING' | 'DONE' | 'FAILED';
+export type Quality = 'A' | 'B' | 'C' | 'UNKNOWN';
+export type TrainingUse = 'ALLOWED' | 'DENIED' | 'UNCONFIRMED';
+
+/** One captured file, pinned to the definition and processing versions in force at capture. */
+export interface EventFile {
+  dataKey: string;
+  fileSpecVersionId: string;
+  name: string;
+  fileType: string;
+  format: string;
+  schema: string;
+  edgePipelineId: string;
+  cloudPipelineId: string;
+  retentionDays: number;
+  sizeBytes: number;
+  edgeStatus: 'PENDING' | 'UPLOADED';
+  cloudStatus: 'PENDING' | 'DONE' | 'PARSER_FAILED';
+  /** Where the processed artifact lives; the same event and file always give the same artifact. */
+  artifactUri: string | null;
+}
+
+/** A trigger that fired on a vehicle, with the configuration snapshot it ran under. */
+export interface CollectionEvent {
+  id: string;
+  seq: number;
+  /** MOCK_SAMPLE: seeded demo data; MOCK_EXECUTION: produced by the vehicle simulator. */
+  origin: 'MOCK_SAMPLE' | 'MOCK_EXECUTION';
+  resourceId: string;
+  vin: string | null;
+  uvid: string | null;
+  licensePlate: string | null;
+  vehicleModelId: string;
+  env: Env;
+  integrationVersion: string | null;
+  /** The workspace whose dispatch put the configuration on the vehicle. */
+  workspaceId: string;
+  /** The business group owning the policy. */
+  groupId: string;
+  resolvedConfigId: string;
+  configLabel: string;
+  releaseId: string | null;
+  commitId: string;
+  policyId: string;
+  policyVersionId: string;
+  policyName: string;
+  trigger: string;
+  preSeconds: number;
+  postSeconds: number;
+  occurredAt: string;
+  files: EventFile[];
+  status: EventStatus;
+  failure: string | null;
+  /** Simulator switch: cloud parsing of this event fails (until reprocessed). */
+  failParse: boolean;
+  processingAttempts: number;
+  quality: Quality;
+  trainingUse: TrainingUse;
+}
+
 export interface AuditEvent {
   id: string;
   seq: number;
@@ -559,6 +623,7 @@ export interface State {
   mergePlans: Record<string, MergePlan>;
   processingConfirmations: ProcessingConfirmation[];
   candidates: Record<string, Candidate>;
+  events: Record<string, CollectionEvent>;
   audit: AuditEvent[];
 }
 
@@ -601,6 +666,7 @@ export function emptyState(): State {
     mergePlans: {},
     processingConfirmations: [],
     candidates: {},
+    events: {},
     audit: [],
   };
 }

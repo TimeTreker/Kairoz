@@ -279,3 +279,55 @@ Object.assign(ERROR_LABELS, {
   NOTHING_QUEUED: b('请选择待放量的车辆', 'Choose queued vehicles'),
   ROLLBACK_BLOCKED: b('回滚被拒绝：并非所有车辆都能回到兼容的上一正式配置', 'Rollback blocked: not every vehicle can return to a compatible earlier formal configuration'),
 });
+
+export const EVENT_STATUS_LABELS: Record<string, Bilingual> = {
+  UPLOADING: b('车端上传中', 'Uploading'),
+  PROCESSING: b('云端处理中', 'Processing'),
+  DONE: b('处理完成', 'Processed'),
+  FAILED: b('处理失败', 'Failed'),
+};
+export const EVENT_STATUS_COLORS: Record<string, string> = { UPLOADING: 'processing', PROCESSING: 'processing', DONE: 'green', FAILED: 'red' };
+
+export const FILE_PROCESS_LABELS: Record<string, Bilingual> = {
+  PENDING: b('等待', 'Pending'),
+  UPLOADED: b('已上传', 'Uploaded'),
+  DONE: b('已完成', 'Done'),
+  PARSER_FAILED: b('解析失败', 'Parser failed'),
+};
+
+export const QUALITY_LABELS: Record<string, Bilingual> = {
+  A: b('A', 'A'),
+  B: b('B', 'B'),
+  C: b('C', 'C'),
+  UNKNOWN: b('未知', 'Unknown'),
+};
+
+export const TRAINING_USE_LABELS: Record<string, Bilingual> = {
+  ALLOWED: b('允许训练', 'Allowed'),
+  DENIED: b('不允许训练', 'Denied'),
+  UNCONFIRMED: b('用途待确认', 'Unconfirmed'),
+};
+
+export const EVENT_ORIGIN_LABELS: Record<string, Bilingual> = {
+  MOCK_SAMPLE: b('演示样例', 'Demo sample'),
+  MOCK_EXECUTION: b('模拟执行', 'Simulated run'),
+};
+
+Object.assign(ERROR_LABELS, {
+  NO_APPLIED_CONFIG: b('车辆没有已生效的配置，不会触发采集', 'The vehicle runs no confirmed configuration, so nothing fires'),
+  POLICY_NOT_ON_VEHICLE: b('该策略不在车辆运行的配置中', 'That policy is not in the configuration the vehicle runs'),
+  EVENT_NOT_FAILED: b('只有处理失败的事件可以重新处理', 'Only a failed event can be reprocessed'),
+  NOTHING_SELECTED: b('请选择要导出的数据', 'Select data to export'),
+  NOT_SELECTABLE: b('部分数据不可用于训练', 'Some data cannot be used for training'),
+});
+
+/** Reasons data is not selectable for training (engine strings). */
+export const TRAINING_BLOCKER_LABELS: Record<string, Bilingual> = {
+  'processing failed': b('处理失败', 'processing failed'),
+  'processing not finished': b('处理未完成', 'processing not finished'),
+  'captured files incomplete': b('捕获文件不完整', 'captured files incomplete'),
+  'quality unknown': b('质量未知', 'quality unknown'),
+  'quality C': b('质量 C', 'quality C'),
+  'training use not confirmed': b('训练用途待确认', 'training use not confirmed'),
+  'training use denied': b('不允许训练', 'training use denied'),
+};

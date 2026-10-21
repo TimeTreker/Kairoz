@@ -14,7 +14,7 @@ import {
   TeamOutlined,
   UserOutlined,
 } from '@ant-design/icons';
-import { Avatar, Breadcrumb, Dropdown, Layout, Menu, Segmented, Select, Space, Tag, Typography } from 'antd';
+import { Avatar, Breadcrumb, Dropdown, Layout, Menu, Segmented, Select, Space, Tag } from 'antd';
 import type { ReactNode } from 'react';
 import type { Role } from '../domain/vocabulary.ts';
 import { unitPath } from '../engine/org.ts';
@@ -31,6 +31,7 @@ import { IntakePage } from '../pages/IntakePage.tsx';
 import { IntegrationPage } from '../pages/IntegrationPage.tsx';
 import { OrgPage } from '../pages/OrgPage.tsx';
 import { ProcessingPage } from '../pages/ProcessingPage.tsx';
+import { QueryPage } from '../pages/QueryPage.tsx';
 import { ReleasePage } from '../pages/ReleasePage.tsx';
 import { SimulatorPage } from '../pages/SimulatorPage.tsx';
 import { WorkbenchPage } from '../pages/WorkbenchPage.tsx';
@@ -63,24 +64,11 @@ const NAV: NavItem[] = [
   { key: 'fleet', icon: <CarOutlined />, zh: '车辆与车辆组', en: 'Vehicles & groups', roles: ['VEHICLE_RESOURCE', 'WORKSPACE_ADMIN', 'BUSINESS_DEV', 'BUSINESS_TEST', 'INTEGRATION_TEST', 'CONFIG_RELEASE', 'DCL_ENGINEER'] },
   { key: 'integration', icon: <ClusterOutlined />, zh: '配置集成', en: 'Integration', roles: ['CONFIG_INTEGRATOR', 'INTEGRATION_TEST', 'DCL_ENGINEER', 'CONFIG_RELEASE'] },
   { key: 'release', icon: <RocketOutlined />, zh: '发布与配置 OTA', en: 'Release & OTA', roles: ['CONFIG_RELEASE', 'VEHICLE_RESOURCE'] },
-  { key: 'query', icon: <FileSearchOutlined />, zh: '数据查询', en: 'Data query', roles: ['BUSINESS_DEV', 'BUSINESS_TEST', 'DCL_ENGINEER', 'CONFIG_INTEGRATOR', 'CONFIG_RELEASE'] },
+  { key: 'query', icon: <FileSearchOutlined />, zh: '数据查询', en: 'Data query', roles: ['BUSINESS_DEV', 'BUSINESS_TEST', 'DCL_ENGINEER', 'CONFIG_INTEGRATOR', 'INTEGRATION_TEST', 'CONFIG_RELEASE'] },
   { key: 'org', icon: <ApartmentOutlined />, zh: '组织与工作区', en: 'Organization', roles: ['PLATFORM_OPS'] },
   { key: 'accounts', icon: <TeamOutlined />, zh: '账号与授权', en: 'Accounts & grants', roles: ['PLATFORM_OPS'] },
   { key: 'audit', icon: <AuditOutlined />, zh: '审计日志', en: 'Audit log', roles: ['PLATFORM_OPS'] },
 ];
-
-/** Pages not built yet in this phase show a placeholder instead of a broken link. */
-const READY = new Set(['workbench', 'features', 'data', 'intake', 'processing', 'fleet', 'integration', 'release', 'org', 'accounts', 'audit', 'guide', 'simulator']);
-
-function Placeholder({ title }: { title: string }) {
-  const { L } = useI18n();
-  return (
-    <div className="kz-page">
-      <Typography.Title level={3}>{title}</Typography.Title>
-      <Typography.Text type="secondary">{L('该模块将在后续阶段实现。', 'This module arrives in a later phase.')}</Typography.Text>
-    </div>
-  );
-}
 
 export function Shell() {
   const state = useEngineState();
@@ -107,7 +95,6 @@ export function Shell() {
   let content: ReactNode;
   if (page === 'features' && route[1]) content = <FeatureDetailPage featureId={route[1]} />;
   else if (page === 'integration') content = <IntegrationPage key={workspace?.id} candidateId={route[1]} />;
-  else if (!READY.has(page)) content = <Placeholder title={L(NAV.find((n) => n.key === page)?.zh ?? page, NAV.find((n) => n.key === page)?.en ?? page)} />;
   else
     content = {
       workbench: <WorkbenchPage />,
@@ -117,12 +104,13 @@ export function Shell() {
       processing: <ProcessingPage />,
       fleet: <FleetPage />,
       release: <ReleasePage key={workspace?.id} tab={route[1]} />,
+      query: <QueryPage key={workspace?.id} tab={route[1]} />,
       simulator: <SimulatorPage />,
       org: <OrgPage />,
       accounts: <AccountsPage />,
       audit: <AuditPage />,
       guide: <GuidePage />,
-    }[page];
+    }[page] ?? <WorkbenchPage />;
 
   return (
     <Layout style={{ minHeight: '100vh' }}>
