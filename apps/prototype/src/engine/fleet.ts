@@ -10,7 +10,7 @@ import { WILDCARD } from '../domain/vocabulary.ts';
 import type { Env, Scope } from '../domain/vocabulary.ts';
 import type { Actor, Ctx } from './engine.ts';
 import { getWorkspace } from './org.ts';
-import type { Resource, State, VehicleGroup, VehicleGroupPurpose } from './types.ts';
+import type { ControllerState, Resource, State, VehicleGroup, VehicleGroupEvent, VehicleGroupPurpose } from './types.ts';
 
 const RESOURCE_ID = /^[A-Z][A-Z0-9-]{2,40}$/;
 const VIN = /^[A-HJ-NPR-Z0-9]{17}$/;
@@ -45,6 +45,14 @@ function assertIdle(s: State, resourceId: string): void {
   if (pending) throw rule('VEHICLE_BUSY', `vehicle ${resourceId} is waiting for deployment ${pending}`, { deploymentId: pending });
 }
 
+/** Moving a vehicle out needs it idle, its simulation instance stopped and no reservation. */
+function assertRemovable(s: State, resourceId: string): void {
+  assertIdle(s, resourceId);
+  const r = s.resources[resourceId]!;
+  if (r.instance === 'RUNNING') throw rule('SIMULATION_RUNNING', `${r.id} is running; stop the instance first`);
+  if (r.reservation) throw rule('VEHICLE_RESERVED', `${r.id} is reserved by ${r.reservation.by} for ${r.reservation.purpose}; release it first`);
+}
+
 // ---------------------------------------------------------------------------
 // Catalogs
 // ---------------------------------------------------------------------------
@@ -71,7 +79,8 @@ export function registerImage(
   if (input.integrationVersion && !ctx.s.softwareVersions[softwareKey(input.vehicleModelId, input.integrationVersion)]) {
     throw rule('UNKNOWN_SOFTWARE_VERSION', `${input.vehicleModelId} ${input.integrationVersion} is not a recorded software version`);
   }
-  if (!/^sha256:[0-9a-f]{64}$/.test(input.digest)) throw rule('INVALID_DIGEST', 'the digest must be sha256:<64 hex>');
+  // Demo images may carry an explicitly labelled mock digest instead of a real one.
+  if (!/^sha256:([0-9a-f]{64}|mock-[a-z0-9-]{1,60})$/.test(input.digest)) throw rule('INVALID_DIGEST', 'the digest must be sha256:<64 hex> or a labelled sha256:mock-…');
   ctx.s.images[input.id] = { ...input, createdBy: ctx.user().username, createdAt: ctx.now };
   return input.id;
 }
@@ -92,6 +101,9 @@ function baseResource(ctx: Ctx, input: { id: string; vehicleModelId: string; env
     pool: input.pool,
     displayName: input.displayName?.trim() ?? '',
     status: 'AVAILABLE' as const,
+    softwareStatus: 'UNKNOWN' as const,
+    controllers: [],
+    reservation: null,
     appliedConfigId: null,
     agent: { online: true, autoAck: false, failNext: false },
     createdBy: ctx.user().username,
@@ -119,6 +131,7 @@ export function registerPhysical(
     licensePlate: input.licensePlate?.trim() || null,
     integrationVersion: null,
     integrationSource: null,
+    instance: null,
     imageId: null,
     homeWorkspaceId: null,
   };
@@ -127,7 +140,7 @@ export function registerPhysical(
 
 /** A workspace creates its own simulation instances from an image of its vehicle model. */
 export function createSimulation(ctx: Ctx, input: { id: string; workspaceId: string; imageId: string; env: Env; pool: Scope; displayName?: string }): string {
-  ctx.allow('simulation.manage', { type: 'resource', id: input.id, workspaceId: input.workspaceId, env: input.env });
+  ctx.allow('simulation.manage', { type: 'resource', id: input.id, workspaceId: input.workspaceId, scope: input.pool, env: input.env });
   const workspace = getWorkspace(ctx.s, input.workspaceId);
   if (input.env === 'production') throw rule('PRODUCTION_SIMULATION', 'simulation instances are for development and testing');
   const image = ctx.s.images[input.imageId];
@@ -146,6 +159,8 @@ export function createSimulation(ctx: Ctx, input: { id: string; workspaceId: str
     // The software of a simulation comes from its image, never from a label.
     integrationVersion: image.integrationVersion,
     integrationSource: `image ${image.id}`,
+    softwareStatus: image.integrationVersion ? ('CONSISTENT' as const) : ('UNKNOWN' as const),
+    instance: 'RUNNING' as const,
     imageId: image.id,
     homeWorkspaceId: workspace.id,
   };
@@ -164,7 +179,73 @@ export function confirmIntegration(ctx: Ctx, resourceId: string, input: { versio
   if (!input.source.trim()) throw rule('SOURCE_REQUIRED', 'name the trusted source (e.g. DIP report, OTA confirmation)');
   r.integrationVersion = input.version;
   r.integrationSource = input.source.trim();
+  r.softwareStatus = input.version ? 'CONSISTENT' : 'UNKNOWN';
+  r.controllers = [];
   r.updatedAt = ctx.now;
+}
+
+/**
+ * A trusted per-controller report (vehicle, DIP or software OTA). Only when every controller runs
+ * the target does the vehicle get that whole-vehicle version; a partial failure claims none.
+ */
+export function reportControllers(ctx: Ctx, resourceId: string, input: { target: string; source: string; controllers: ControllerState[] }): void {
+  const r = getResource(ctx.s, resourceId) as Draft<Resource>;
+  ctx.allow('resource.manage', { type: 'resource', id: r.id, scope: r.pool, env: r.env });
+  if (r.type !== 'PHYSICAL') throw rule('SIMULATION_SOFTWARE_FROM_IMAGE', 'a simulation’s software comes from its image');
+  if (!ctx.s.softwareVersions[softwareKey(r.vehicleModelId, input.target)]) {
+    throw rule('UNKNOWN_SOFTWARE_VERSION', `${r.vehicleModelId} ${input.target} is not a recorded software version`);
+  }
+  if (!input.source.trim()) throw rule('SOURCE_REQUIRED', 'name the trusted source (e.g. DIP report, OTA confirmation)');
+  if (input.controllers.length === 0 || input.controllers.some((c) => !c.name.trim() || !c.version.trim())) {
+    throw rule('CONTROLLERS_REQUIRED', 'report every domain controller with its version and result');
+  }
+  const consistent = input.controllers.every((c) => c.status === 'PASS' && c.version === input.target);
+  r.controllers = input.controllers.map((c) => ({ name: c.name.trim(), version: c.version.trim(), status: c.status }));
+  r.softwareStatus = consistent ? 'CONSISTENT' : 'PARTIAL_FAILURE';
+  // Never write the expected version as the actual one.
+  r.integrationVersion = consistent ? input.target : null;
+  r.integrationSource = input.source.trim();
+  r.updatedAt = ctx.now;
+}
+
+function getSimulation(ctx: Ctx, resourceId: string): Draft<Resource> {
+  const r = getResource(ctx.s, resourceId) as Draft<Resource>;
+  if (r.type !== 'SIMULATION') throw rule('NOT_A_SIMULATION', `${r.id} is not a simulation instance`);
+  ctx.allow('simulation.manage', { type: 'resource', id: r.id, workspaceId: r.homeWorkspaceId ?? undefined, scope: r.pool, env: r.env });
+  return r;
+}
+
+export function startSimulation(ctx: Ctx, resourceId: string): void {
+  const r = getSimulation(ctx, resourceId);
+  if (r.instance === 'RUNNING') throw rule('ALREADY_RUNNING', `${r.id} is already running`);
+  r.instance = 'RUNNING';
+  r.updatedAt = ctx.now;
+}
+
+/** Stops an idle simulation instance; one waiting for a configuration must answer first. */
+export function stopSimulation(ctx: Ctx, resourceId: string): void {
+  const r = getSimulation(ctx, resourceId);
+  if (r.instance === 'STOPPED') throw rule('ALREADY_STOPPED', `${r.id} is already stopped`);
+  assertIdle(ctx.s, r.id);
+  r.instance = 'STOPPED';
+  r.updatedAt = ctx.now;
+}
+
+/** The workspace holds a vehicle for a task (预约) until it releases it. */
+export function reserveVehicle(ctx: Ctx, workspaceId: string, resourceId: string, purpose: string): void {
+  const r = getResource(ctx.s, resourceId) as Draft<Resource>;
+  ctx.allow('workspace.resources', { type: 'reservation', id: r.id, workspaceId, scope: r.pool, env: r.env });
+  if (!(ctx.s.workspaceResources[workspaceId] ?? []).includes(r.id)) throw rule('VEHICLE_NOT_IN_WORKSPACE', 'add the vehicle to the workspace first');
+  if (r.reservation) throw conflict('VEHICLE_RESERVED', `${r.id} is reserved by ${r.reservation.by} for ${r.reservation.purpose}`);
+  if (!purpose.trim()) throw rule('PURPOSE_REQUIRED', 'say what the reservation is for');
+  r.reservation = { by: ctx.user().username, purpose: purpose.trim(), at: ctx.now };
+}
+
+export function releaseReservation(ctx: Ctx, workspaceId: string, resourceId: string): void {
+  const r = getResource(ctx.s, resourceId) as Draft<Resource>;
+  ctx.allow('workspace.resources', { type: 'reservation', id: r.id, workspaceId, scope: r.pool, env: r.env });
+  if (!r.reservation) throw rule('NOT_RESERVED', `${r.id} is not reserved`);
+  r.reservation = null;
 }
 
 export function setResourceStatus(ctx: Ctx, resourceId: string, input: { status: Resource['status']; reason: string }): void {
@@ -200,8 +281,8 @@ export function assignableVehicles(s: State, workspaceId: string): Resource[] {
     (r) =>
       !assigned.has(r.id) &&
       r.status !== 'RETIRED' &&
-      // Production vehicles only serve project workspaces, where production vehicle groups live.
-      (r.env !== 'production' || ws.kind === 'PROJECT') &&
+      // Production vehicles serve project and integration workspaces, never team workspaces.
+      (r.env !== 'production' || ws.kind !== 'TEAM') &&
       r.vehicleModelId === ws.vehicleModelId &&
       (ws.scopes.includes(r.pool) || ws.scopes.includes('Vehicle')) &&
       (r.type === 'PHYSICAL' || r.homeWorkspaceId === ws.id),
@@ -210,7 +291,7 @@ export function assignableVehicles(s: State, workspaceId: string): Resource[] {
 
 export function addWorkspaceVehicle(ctx: Ctx, workspaceId: string, resourceId: string): void {
   const r = getResource(ctx.s, resourceId);
-  ctx.allow('workspace.resources', { type: 'workspaceResource', id: resourceId, workspaceId, env: r.env });
+  ctx.allow('workspace.resources', { type: 'workspaceResource', id: resourceId, workspaceId, scope: r.pool, env: r.env });
   if (!assignableVehicles(ctx.s, workspaceId).some((x) => x.id === resourceId)) {
     throw rule('VEHICLE_NOT_ASSIGNABLE', 'the vehicle does not fit this workspace (model, pool, environment) or is already assigned');
   }
@@ -219,12 +300,12 @@ export function addWorkspaceVehicle(ctx: Ctx, workspaceId: string, resourceId: s
 
 export function removeWorkspaceVehicle(ctx: Ctx, workspaceId: string, resourceId: string): void {
   const r = getResource(ctx.s, resourceId);
-  ctx.allow('workspace.resources', { type: 'workspaceResource', id: resourceId, workspaceId, env: r.env });
+  ctx.allow('workspace.resources', { type: 'workspaceResource', id: resourceId, workspaceId, scope: r.pool, env: r.env });
   const groupId = ctx.s.groupMembers[resourceId];
   if (groupId && ctx.s.vehicleGroups[groupId]?.workspaceId === workspaceId) {
     throw rule('VEHICLE_IN_GROUP', 'remove the vehicle from its vehicle group first');
   }
-  assertIdle(ctx.s, resourceId);
+  assertRemovable(ctx.s, resourceId);
   ctx.s.workspaceResources[workspaceId] = (ctx.s.workspaceResources[workspaceId] ?? []).filter((id) => id !== resourceId);
 }
 
@@ -232,7 +313,7 @@ export function removeWorkspaceVehicle(ctx: Ctx, workspaceId: string, resourceId
 // Vehicle groups
 // ---------------------------------------------------------------------------
 
-function groupEvent(ctx: Ctx, vehicleGroupId: string, kind: 'CREATED' | 'MEMBER_ADDED' | 'MEMBER_REMOVED' | 'BOUND' | 'ARCHIVED', resourceId: string | null, reason: string | null) {
+function groupEvent(ctx: Ctx, vehicleGroupId: string, kind: VehicleGroupEvent['kind'], resourceId: string | null, reason: string | null) {
   ctx.s.vehicleGroupEvents.push({ id: newId('ve'), vehicleGroupId, kind, resourceId, reason, actor: ctx.user().username, createdAt: ctx.now });
 }
 
@@ -245,7 +326,7 @@ export function membersOf(s: State, vehicleGroupId: string): string[] {
 
 export function createVehicleGroup(
   ctx: Ctx,
-  input: { workspaceId: string; groupId: string | null; name: string; purpose: VehicleGroupPurpose; env: Env },
+  input: { workspaceId: string; groupId: string | null; name: string; purpose: VehicleGroupPurpose; env: Env; requiresApproval?: boolean },
 ): string {
   ctx.allow('vehicleGroup.manage', { type: 'vehicleGroup', workspaceId: input.workspaceId, env: input.env });
   const ws = getWorkspace(ctx.s, input.workspaceId);
@@ -275,6 +356,7 @@ export function createVehicleGroup(
     status: 'ACTIVE',
     targetConfigId: null,
     bindingRevision: 0,
+    requiresApproval: input.requiresApproval ?? false,
     createdBy: ctx.user().username,
     createdAt: ctx.now,
   };
@@ -313,9 +395,16 @@ export function removeGroupMember(ctx: Ctx, vehicleGroupId: string, resourceId: 
   const g = authorizeGroup(ctx, vehicleGroupId);
   if (ctx.s.groupMembers[resourceId] !== g.id) throw notFound('member', resourceId);
   if (!reason.trim()) throw rule('REASON_REQUIRED', 'give a reason for the membership change');
-  assertIdle(ctx.s, resourceId);
+  assertRemovable(ctx.s, resourceId);
   delete ctx.s.groupMembers[resourceId];
   groupEvent(ctx, g.id, 'MEMBER_REMOVED', resourceId, reason.trim());
+}
+
+/** Whether dispatches to the group need an approved team test request. */
+export function setGroupApproval(ctx: Ctx, vehicleGroupId: string, requiresApproval: boolean): void {
+  const g = authorizeGroup(ctx, vehicleGroupId);
+  g.requiresApproval = requiresApproval;
+  groupEvent(ctx, g.id, requiresApproval ? 'APPROVAL_REQUIRED' : 'APPROVAL_NOT_REQUIRED', null, null);
 }
 
 export function archiveVehicleGroup(ctx: Ctx, vehicleGroupId: string, reason: string): void {
@@ -324,6 +413,25 @@ export function archiveVehicleGroup(ctx: Ctx, vehicleGroupId: string, reason: st
   if (!reason.trim()) throw rule('REASON_REQUIRED', 'give a reason');
   g.status = 'ARCHIVED';
   groupEvent(ctx, g.id, 'ARCHIVED', null, reason.trim());
+}
+
+/**
+ * Vehicles chosen one by one. Only vehicles that route through no vehicle group may be chosen
+ * directly; a grouped vehicle is reached through its group, never around it.
+ */
+export function directTargetProblems(s: State, workspaceId: string, resourceIds: string[]): string[] {
+  const problems: string[] = [];
+  for (const rid of resourceIds) {
+    if (!s.resources[rid]) problems.push(`${rid}: vehicle does not exist`);
+    else if (!(s.workspaceResources[workspaceId] ?? []).includes(rid)) problems.push(`${rid}: not a vehicle of this workspace`);
+    else if (s.groupMembers[rid]) problems.push(`${rid}: routes through vehicle group ${s.vehicleGroups[s.groupMembers[rid]!]?.name}; dispatch to the group`);
+  }
+  return problems;
+}
+
+/** Vehicles of a workspace that route through no vehicle group. */
+export function ungroupedVehicles(s: State, workspaceId: string): Resource[] {
+  return workspaceVehicles(s, workspaceId).filter((r) => !s.groupMembers[r.id]);
 }
 
 export function vehicleGroupsOf(s: State, workspaceId: string): VehicleGroup[] {

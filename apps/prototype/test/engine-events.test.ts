@@ -52,7 +52,7 @@ describe('collection events', () => {
     const count = (user: string, ws: string) => ev.visibleEvents(s, actor(user), ws).length;
     assert.equal(count('steering', 'team-steering'), 3);
     assert.equal(count('steering', 'x89-project'), 0, 'production events belong to the project workspace');
-    assert.equal(count('business', 'team-brake'), 0);
+    assert.equal(count('business', 'team-brake'), 5, 'brake sees its own vehicles’ events');
     assert.equal(count('release', 'x89-project'), 5);
     assert.equal(count('integrator', 'x89-project'), 0, 'the integrator has no production grant');
     assert.equal(count('dcl', 'x89-project'), 5);
@@ -86,7 +86,7 @@ describe('collection events', () => {
 
   test('the simulator processes new events; DCL reprocesses parser failures with the pinned versions', () => {
     const { e, actor } = setup();
-    fails(() => e.run(null, (c) => ev.captureEvent(c, { resourceId: 'VEH-001', policyId: 'chassis.brake.hard_braking' })), 'NO_APPLIED_CONFIG');
+    fails(() => e.run(null, (c) => ev.captureEvent(c, { resourceId: 'VEH-002', policyId: 'chassis.brake.hard_braking' })), 'NO_APPLIED_CONFIG');
     fails(() => e.run(null, (c) => ev.captureEvent(c, { resourceId: 'VEH-201', policyId: 'chassis.steering.return_rate' })), 'POLICY_NOT_ON_VEHICLE');
     const id = e.run(null, (c) => ev.captureEvent(c, { resourceId: 'VEH-003', policyId: 'chassis.steering.return_rate' }));
     assert.equal(e.getState().events[id]!.status, 'UPLOADING');

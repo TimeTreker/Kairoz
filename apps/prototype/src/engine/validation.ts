@@ -9,9 +9,9 @@ import { newId } from '../domain/ids.ts';
 import type { Env } from '../domain/vocabulary.ts';
 import { authorizeFeature, displayName } from './config.ts';
 import type { Ctx } from './engine.ts';
-import { getResource, membersOf, pendingDeploymentOf, recordGroupBinding } from './fleet.ts';
+import { directTargetProblems, getResource, membersOf, pendingDeploymentOf, recordGroupBinding } from './fleet.ts';
 import { getGroup } from './org.ts';
-import type { Candidate, Deployment, DeploymentTarget, Feature, ResolvedConfig, State, TestRun } from './types.ts';
+import type { Candidate, Deployment, DeploymentTarget, Feature, ResolvedConfig, State, TestRequest, TestRun } from './types.ts';
 
 /** Finds or creates the resolved configuration for a base plus group commits. */
 export function resolveConfig(
@@ -93,17 +93,37 @@ function dispatchProblems(s: State, feature: Feature, vehicleGroupIds: string[],
 
 /** Business development or testing dispatches the Feature's head commit to vehicle groups. */
 export function dispatchFeature(ctx: Ctx, featureId: string, input: { commitId: string; vehicleGroupIds: string[] }): string {
+  return dispatchChecked(ctx, featureId, input, 'feature.dispatch', null);
+}
+
+/** Authorization, stage and per-vehicle checks shared by dispatches and team test requests. */
+function checkDispatch(ctx: Ctx, featureId: string, input: { commitId: string; vehicleGroupIds: string[] }, action: 'feature.dispatch' | 'feature.requestTest'): Feature {
   const groups = input.vehicleGroupIds.map((id) => ctx.s.vehicleGroups[id]).filter(Boolean);
   if (groups.length === 0) throw rule('NO_VEHICLE_GROUPS', 'choose at least one vehicle group');
   const env = groups[0]!.env;
   const feature = ctx.s.features[featureId];
   if (!feature) throw notFound('feature', featureId);
   const group = getGroup(ctx.s, feature.groupId);
-  ctx.allow('feature.dispatch', { type: 'feature', id: featureId, workspaceId: feature.workspaceId, groupId: group.id, scope: group.domain, env });
+  ctx.allow(action, { type: 'feature', id: featureId, workspaceId: feature.workspaceId, groupId: group.id, scope: group.domain, env });
   if (!['DCL_READY', 'TESTING', 'VERIFIED'].includes(feature.stage)) throw rule('NOT_DCL_READY', 'only DCL Ready Features can be dispatched');
   if (input.commitId !== feature.headCommitId) throw rule('STALE_COMMIT', 'the Feature has a newer commit; dispatch that one', { headCommitId: feature.headCommitId });
   const problems = dispatchProblems(ctx.s, feature, input.vehicleGroupIds, env);
   if (problems.length) throw rule('DISPATCH_BLOCKED', 'the dispatch would not reach every vehicle safely', { issues: problems.map((p) => `${p.resourceId ?? p.vehicleGroupId}: ${p.problem}`) });
+  return feature;
+}
+
+function dispatchChecked(
+  ctx: Ctx,
+  featureId: string,
+  input: { commitId: string; vehicleGroupIds: string[] },
+  action: 'feature.dispatch',
+  approvedRequest: string | null,
+): string {
+  const feature = checkDispatch(ctx, featureId, input, action);
+  if (!approvedRequest) {
+    const gated = input.vehicleGroupIds.map((id) => ctx.s.vehicleGroups[id]!).filter((g) => g.requiresApproval);
+    if (gated.length) throw rule('APPROVAL_REQUIRED', 'these vehicle groups take approved team test requests', { issues: gated.map((g) => g.name) });
+  }
 
   const configId = featureConfig(ctx, feature);
   const id = newId('dp');
@@ -127,7 +147,7 @@ export function dispatchFeature(ctx: Ctx, featureId: string, input: { commitId: 
     subjectId: feature.id,
     commitId: input.commitId,
     resolvedConfigId: configId,
-    env,
+    env: ctx.s.vehicleGroups[input.vehicleGroupIds[0]!]!.env,
     status: 'PENDING',
     vehicleGroupIds: [...input.vehicleGroupIds],
     targets,
@@ -156,6 +176,89 @@ function settle(d: Draft<Deployment>, now: string): void {
 }
 
 /** Cancels the pending targets of a Feature dispatch. Vehicle group bindings stay. */
+// ---------------------------------------------------------------------------
+// Team test requests (团队测试申请): fixed commit + vehicle list, approved by the workspace admin
+// ---------------------------------------------------------------------------
+
+export function requestTeamTest(ctx: Ctx, featureId: string, input: { commitId: string; vehicleGroupIds: string[]; goal: string }): string {
+  const feature = checkDispatch(ctx, featureId, input, 'feature.requestTest');
+  if (!input.goal.trim()) throw rule('GOAL_REQUIRED', 'say what the team test should show');
+  const id = newId('tq');
+  ctx.s.testRequests[id] = {
+    id,
+    workspaceId: feature.workspaceId,
+    featureId: feature.id,
+    commitId: input.commitId,
+    vehicleGroupIds: [...input.vehicleGroupIds],
+    members: requestMembers(ctx.s, input.vehicleGroupIds),
+    goal: input.goal.trim(),
+    status: 'PENDING',
+    requestedBy: ctx.user().username,
+    requestedAt: ctx.now,
+    decidedBy: null,
+    decidedAt: null,
+    decisionNote: null,
+    deploymentId: null,
+  };
+  return id;
+}
+
+function requestMembers(s: State, vehicleGroupIds: string[]): string[] {
+  return [...new Set(vehicleGroupIds.flatMap((g) => membersOf(s, g)))].sort();
+}
+
+function getRequest(s: State, id: string): TestRequest {
+  const r = s.testRequests[id];
+  if (!r) throw notFound('test request', id);
+  return r;
+}
+
+/** The workspace admin approves or rejects; never their own request. */
+export function decideTestRequest(ctx: Ctx, requestId: string, input: { decision: 'APPROVED' | 'REJECTED'; note: string }): void {
+  const req = getRequest(ctx.s, requestId);
+  const env = ctx.s.vehicleGroups[req.vehicleGroupIds[0]!]?.env ?? 'development';
+  ctx.allow('testRequest.decide', { type: 'testRequest', id: req.id, workspaceId: req.workspaceId, env });
+  if (req.status !== 'PENDING') throw rule('REQUEST_DECIDED', 'the request is already decided');
+  if (req.requestedBy === ctx.user().username) throw rule('SELF_APPROVAL', 'nobody decides their own request');
+  if (input.decision === 'APPROVED' && requestMembers(ctx.s, req.vehicleGroupIds).join() !== req.members.join()) {
+    throw rule('MEMBERS_CHANGED', 'the vehicle list changed since the request; ask for a new request');
+  }
+  if (!input.note.trim()) throw rule('REASON_REQUIRED', 'give a reason');
+  const draft = ctx.s.testRequests[req.id]!;
+  draft.status = input.decision;
+  draft.decidedBy = ctx.user().username;
+  draft.decidedAt = ctx.now;
+  draft.decisionNote = input.note.trim();
+}
+
+/** Carries out an approved request once; version, members, environment and occupancy are checked again. */
+export function executeTestRequest(ctx: Ctx, requestId: string): string {
+  const req = getRequest(ctx.s, requestId);
+  if (req.status === 'EXECUTED') throw rule('REQUEST_USED', 'an approval is used once; ask again for another test');
+  if (req.status !== 'APPROVED') throw rule('REQUEST_NOT_APPROVED', 'the request is not approved');
+  if (requestMembers(ctx.s, req.vehicleGroupIds).join() !== req.members.join()) {
+    throw rule('MEMBERS_CHANGED', 'the vehicle list changed since the approval; ask for a new request');
+  }
+  const deploymentId = dispatchChecked(ctx, req.featureId, { commitId: req.commitId, vehicleGroupIds: req.vehicleGroupIds }, 'feature.dispatch', req.id);
+  const draft = ctx.s.testRequests[req.id]!;
+  draft.status = 'EXECUTED';
+  draft.deploymentId = deploymentId;
+  return deploymentId;
+}
+
+export function withdrawTestRequest(ctx: Ctx, requestId: string): void {
+  const req = getRequest(ctx.s, requestId);
+  if (req.requestedBy !== ctx.user().username) throw rule('NOT_YOUR_REQUEST', 'only the requester withdraws a request');
+  if (req.status !== 'PENDING' && req.status !== 'APPROVED') throw rule('REQUEST_DECIDED', 'the request is closed');
+  ctx.s.testRequests[req.id]!.status = 'WITHDRAWN';
+}
+
+export function testRequestsOf(s: State, workspaceId: string): TestRequest[] {
+  return Object.values(s.testRequests)
+    .filter((r) => r.workspaceId === workspaceId)
+    .sort((a, b) => b.id.localeCompare(a.id));
+}
+
 export function cancelDeployment(ctx: Ctx, deploymentId: string, reason: string): void {
   const d = ctx.s.deployments[deploymentId];
   if (!d) throw notFound('deployment', deploymentId);
@@ -197,6 +300,8 @@ export function acceptReceipt(
     if (prior.result === input.result) return 'REPLAYED';
     throw rule('RECEIPT_CONFLICT', 'a different receipt was already recorded for this attempt');
   }
+  const vehicle = ctx.s.resources[t.resourceId]!;
+  if (vehicle.instance === 'STOPPED') throw rule('SIMULATION_STOPPED', `${vehicle.id} is stopped and cannot apply configurations`);
   if (input.attempt !== t.attempt) throw rule('STALE_ATTEMPT', `receipt for attempt ${input.attempt}; the current attempt is ${t.attempt}`);
   if (t.status !== 'PENDING') throw rule('TARGET_NOT_PENDING', 'the target is not waiting for a receipt');
   ctx.s.receipts.push({ id: newId('rx'), deploymentId: d.id, resourceId: t.resourceId, attempt: t.attempt, result: input.result, error: input.error ?? null, receivedAt: ctx.now });
@@ -336,15 +441,32 @@ export function candidateVerifyBlockers(s: State, c: Candidate): string[] {
   return blockersFor(s, candidateTestStatus(s, c));
 }
 
-/** Integration testing dispatches a frozen candidate to testing vehicle groups of the integration workspace. */
-export function dispatchCandidate(ctx: Ctx, candidateId: string, input: { vehicleGroupIds: string[] }): string {
+/**
+ * Integration testing dispatches a frozen candidate to testing vehicle groups of the integration
+ * workspace, or to its testing vehicles that route through no group.
+ */
+export function dispatchCandidate(ctx: Ctx, candidateId: string, input: { vehicleGroupIds?: string[]; resourceIds?: string[] }): string {
   const c = getCandidate(ctx.s, candidateId);
   ctx.allow('candidate.dispatch', { type: 'candidate', id: c.id, workspaceId: c.testWorkspaceId, scope: 'Vehicle' });
   if (!['CANDIDATE', 'TESTING', 'VERIFIED'].includes(c.status)) throw rule('CANDIDATE_CLOSED', 'the candidate is closed');
-  if (input.vehicleGroupIds.length === 0) throw rule('NO_VEHICLE_GROUPS', 'choose at least one vehicle group');
-  const problems: string[] = [];
-  const members: { resourceId: string; vehicleGroupId: string }[] = [];
-  for (const id of input.vehicleGroupIds) {
+  const vehicleGroupIds = input.vehicleGroupIds ?? [];
+  const direct = input.resourceIds ?? [];
+  if (vehicleGroupIds.length === 0 && direct.length === 0) throw rule('NO_VEHICLE_GROUPS', 'choose vehicle groups or ungrouped vehicles');
+  const problems: string[] = directTargetProblems(ctx.s, c.testWorkspaceId, direct);
+  const members: { resourceId: string; vehicleGroupId: string | null }[] = [];
+  const checkVehicle = (rid: string, vehicleGroupId: string | null) => {
+    if (members.some((m) => m.resourceId === rid)) return;
+    const r = ctx.s.resources[rid]!;
+    if (r.env !== 'testing') problems.push(`${rid}: not a testing vehicle`);
+    if (r.status !== 'AVAILABLE') problems.push(`${rid}: ${r.status.toLowerCase()}`);
+    if (r.vehicleModelId !== c.vehicleModelId) problems.push(`${rid}: another vehicle model`);
+    // A candidate on a formal baseline is tested on vehicles whose software is known.
+    if (c.targetReleaseId !== null && !r.integrationVersion) problems.push(`${rid}: software version unknown`);
+    const pending = pendingDeploymentOf(ctx.s, rid);
+    if (pending) problems.push(`${rid}: waiting for deployment ${pending}`);
+    members.push({ resourceId: rid, vehicleGroupId });
+  };
+  for (const id of vehicleGroupIds) {
     const g = ctx.s.vehicleGroups[id];
     if (!g) {
       problems.push(`${id}: vehicle group does not exist`);
@@ -356,20 +478,12 @@ export function dispatchCandidate(ctx: Ctx, candidateId: string, input: { vehicl
     if (g.purpose !== 'TEST' || g.env !== 'testing') problems.push(`${g.name}: candidates only go to testing vehicle groups`);
     const list = membersOf(ctx.s, id);
     if (list.length === 0) problems.push(`${g.name}: no vehicles`);
-    for (const rid of list) {
-      if (members.some((m) => m.resourceId === rid)) continue;
-      const r = ctx.s.resources[rid]!;
-      if (r.env !== 'testing') problems.push(`${rid}: not a testing vehicle`);
-      if (r.status !== 'AVAILABLE') problems.push(`${rid}: ${r.status.toLowerCase()}`);
-      if (r.vehicleModelId !== c.vehicleModelId) problems.push(`${rid}: another vehicle model`);
-      const pending = pendingDeploymentOf(ctx.s, rid);
-      if (pending) problems.push(`${rid}: waiting for deployment ${pending}`);
-      members.push({ resourceId: rid, vehicleGroupId: id });
-    }
+    for (const rid of list) checkVehicle(rid, id);
   }
+  if (problems.length === 0) for (const rid of direct) checkVehicle(rid, null);
   if (problems.length) throw rule('DISPATCH_BLOCKED', 'the dispatch would not reach every vehicle safely', { issues: problems });
   const id = newId('dp');
-  for (const vgId of input.vehicleGroupIds) recordGroupBinding(ctx, vgId, c.resolvedConfigId);
+  for (const vgId of vehicleGroupIds) recordGroupBinding(ctx, vgId, c.resolvedConfigId);
   for (const m of members) {
     if (!ctx.s.testTargets.some((t) => t.subjectId === c.id && t.resourceId === m.resourceId)) {
       ctx.s.testTargets.push({ subjectKind: 'CANDIDATE', subjectId: c.id, versionId: c.id, resourceId: m.resourceId, deploymentId: id });
@@ -385,7 +499,7 @@ export function dispatchCandidate(ctx: Ctx, candidateId: string, input: { vehicl
     resolvedConfigId: c.resolvedConfigId,
     env: 'testing',
     status: 'PENDING',
-    vehicleGroupIds: [...input.vehicleGroupIds],
+    vehicleGroupIds: [...vehicleGroupIds],
     targets: members.map((m) => ({
       resourceId: m.resourceId,
       vehicleGroupId: m.vehicleGroupId,

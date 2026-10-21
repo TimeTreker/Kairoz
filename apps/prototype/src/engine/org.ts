@@ -192,9 +192,13 @@ function checkMembership(s: Draft<State>, workspace: Pick<Workspace, 'id' | 'kin
     const group = getGroup(s, groupId);
     if (group.status !== 'ACTIVE') throw rule('GROUP_ARCHIVED', `group ${groupId} is archived`);
     const unit = getUnit(s, group.orgUnitId);
-    assertGroupUnitFitsWorkspace(workspace, unit);
-    if (workspace.kind === 'TEAM' && !unitWithin(s, unit.id, workspace.orgUnitId)) {
-      throw rule('GROUP_OUTSIDE_TEAM', `group ${groupId} is not part of the workspace's team`);
+    // Project and integration workspaces integrate the configurations of team groups as well as
+    // their own; team workspaces hold only groups of their own team.
+    if (workspace.kind === 'TEAM') {
+      assertGroupUnitFitsWorkspace(workspace, unit);
+      if (!unitWithin(s, unit.id, workspace.orgUnitId)) throw rule('GROUP_OUTSIDE_TEAM', `group ${groupId} is not part of the workspace's team`);
+    } else if (unit.kind === 'PROJECT' && unit.projectId !== workspace.projectId) {
+      throw rule('GROUP_TREE_MISMATCH', `group unit ${unit.id} belongs to another project`);
     }
   }
   if (workspace.kind === 'TEAM' && m.sourceWorkspaceIds.length > 0) {

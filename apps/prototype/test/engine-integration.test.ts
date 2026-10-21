@@ -105,10 +105,10 @@ describe('integration', () => {
     assert.equal(steering.stage, 'VERIFIED', 'the demo has a Verified steering Feature on DCL 1.0.0');
     assert.deepEqual(
       integ.verifiedSources(e.getState(), 'x89-project').map((f) => f.name),
-      ['steering_return_rate'],
+      ['brake_monitor', 'steering_return_rate'],
     );
     fails(() => e.run('steering', (c) => integ.previewMerge(c, { workspaceId: 'x89-project', featureIds: [steering.id] })), 'FORBIDDEN');
-    fails(() => e.run('integrator', (c) => integ.previewMerge(c, { workspaceId: 'x89-integration', featureIds: [steering.id] })), 'NOT_A_PROJECT_WORKSPACE');
+    fails(() => e.run('integrator', (c) => integ.previewMerge(c, { workspaceId: 'x89-integration', featureIds: [steering.id] })), 'NOT_A_MERGE_WORKSPACE');
     const brake = feature('guided_brake');
     fails(() => e.run('integrator', (c) => integ.previewMerge(c, { workspaceId: 'x89-project', featureIds: [brake.id] })), 'SOURCE_NOT_ALLOWED');
 
@@ -183,8 +183,10 @@ describe('integration', () => {
     assert.equal(e.getState().mergePlans[plan2]!.status, 'READY');
     assert.deepEqual(Object.keys(e.getState().mergePlans[plan2]!.merged).sort(), ['brake', 'steering']);
     e.run('dcl', (c) => integ.confirmProcessing(c, plan2, { note: '' }));
-    // The source moves on after the preview: freezing must refuse the stale preview.
+    // Editing the draft keeps the verified commit collectible; a new commit makes the preview stale.
     e.run('steering', (c) => config.updateFile(c, steering.id, Object.keys(steering.draft.files)[0]!, { purpose: '转角突变与路面激励分析' }));
+    assert.ok(integ.verifiedSources(e.getState(), 'x89-project').some((f) => f.id === steering.id));
+    e.run('steering', (c) => config.submitFeature(c, steering.id, { message: '用途补充' }));
     fails(() => e.run('integrator', (c) => integ.freezeCandidate(c, plan2, { label: 'X89-C2' })), 'SOURCE_CHANGED');
 
     const plan3 = e.run('integrator', (c) => integ.previewMerge(c, { workspaceId: 'x89-project', featureIds: [brake.id] }));

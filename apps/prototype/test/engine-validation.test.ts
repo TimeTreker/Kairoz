@@ -29,6 +29,7 @@ function setup() {
 describe('dispatch, receipts and tests', () => {
   test('dispatch changes what vehicles should run; only receipts change what they run', () => {
     const { e, feature, vg } = setup();
+    const before = e.getState();
     const d = e.run('brake_tester', (c) => v.dispatchFeature(c, feature.id, { commitId: feature.headCommitId!, vehicleGroupIds: [vg.id] }));
     const s = e.getState();
     assert.equal(s.features[feature.id]!.stage, 'TESTING');
@@ -39,8 +40,8 @@ describe('dispatch, receipts and tests', () => {
         ['VEH-001', 'PENDING'],
       ],
     );
-    assert.equal(s.resources['SIM-021']!.appliedConfigId, null);
-    assert.equal(s.vehicleGroups[vg.id]!.bindingRevision, 1);
+    assert.equal(s.resources['SIM-021']!.appliedConfigId, before.resources['SIM-021']!.appliedConfigId, 'dispatching applies nothing');
+    assert.equal(s.vehicleGroups[vg.id]!.bindingRevision, before.vehicleGroups[vg.id]!.bindingRevision + 1);
     fails(
       () => e.run('brake_tester', (c) => v.recordFeatureTest(c, feature.id, { commitId: feature.headCommitId!, resourceId: 'SIM-021', result: 'PASS', summary: 'x' })),
       'NOT_APPLIED',
@@ -55,7 +56,7 @@ describe('dispatch, receipts and tests', () => {
     const after = e.getState();
     assert.equal(after.deployments[d]!.status, 'COMPLETED');
     assert.equal(after.resources['SIM-021']!.appliedConfigId, after.deployments[d]!.resolvedConfigId);
-    assert.equal(after.resources['VEH-001']!.appliedConfigId, null, 'a failed apply keeps the old configuration');
+    assert.equal(after.resources['VEH-001']!.appliedConfigId, before.resources['VEH-001']!.appliedConfigId, 'a failed apply keeps the old configuration');
   });
 
   test('simulation first, dispatch-only cannot record, Verified needs every target', () => {
@@ -93,6 +94,7 @@ describe('dispatch, receipts and tests', () => {
 
   test('a failed vehicle gets a new dispatch; the simulator answers in automatic mode', () => {
     const { e, feature, vg } = setup();
+    const old = e.getState().resources['VEH-001']!.appliedConfigId;
     e.run(null, (c) => {
       setAgent(c, 'SIM-021', { autoAck: true });
       setAgent(c, 'VEH-001', { autoAck: true, failNext: true });
@@ -100,7 +102,7 @@ describe('dispatch, receipts and tests', () => {
     e.run('brake_tester', (c) => v.dispatchFeature(c, feature.id, { commitId: feature.headCommitId!, vehicleGroupIds: [vg.id] }));
     assert.equal(e.run(null, (c) => tick(c)), 2);
     const s = e.getState();
-    assert.equal(s.resources['VEH-001']!.appliedConfigId, null);
+    assert.equal(s.resources['VEH-001']!.appliedConfigId, old);
     assert.equal(s.resources['VEH-001']!.agent.failNext, false);
     const d2 = e.run('brake_tester', (c) => v.dispatchFeature(c, feature.id, { commitId: feature.headCommitId!, vehicleGroupIds: [vg.id] }));
     e.run(null, (c) => tick(c));

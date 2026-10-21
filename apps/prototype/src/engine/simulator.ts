@@ -35,7 +35,7 @@ export function tick(ctx: Ctx): number {
   let answered = 0;
   for (const { deployment, target } of pendingForVehicles(ctx.s)) {
     const r = ctx.s.resources[target.resourceId]!;
-    if (!r.agent.online || !r.agent.autoAck) continue;
+    if (!r.agent.online || !r.agent.autoAck || r.instance === 'STOPPED') continue;
     if (r.agent.failNext) {
       sendReceipt(ctx, deployment.id, r.id, 'FAILED', 'simulated apply failure');
       r.agent.failNext = false;

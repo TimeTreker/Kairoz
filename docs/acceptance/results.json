@@ -1,0 +1,830 @@
+{
+  "runAt": "2026-10-21T04:46:13.541Z",
+  "layer": "engine",
+  "counts": {
+    "PASS": 85,
+    "FAIL": 0,
+    "GAP": 0,
+    "BLOCKED": 0,
+    "NOT_APPLICABLE": 3,
+    "NOT_WRITTEN": 0
+  },
+  "scripts": [
+    {
+      "script": "startup",
+      "name": "从零启动 · 角色协作",
+      "rows": [
+        {
+          "id": "A01",
+          "title": "部署服务，执行健康检查，写入测试记录后重启。",
+          "actor": "admin / 平台运维",
+          "adaptation": "浏览器原型没有服务器、数据库或部署；状态保存在浏览器本地。部署与重启在浏览器层以“重置为干净安装 + 刷新页面”核对持久化。",
+          "status": "NOT_APPLICABLE",
+          "detail": "服务部署、数据库与存储健康检查、日志检索不属于浏览器原型",
+          "notes": []
+        },
+        {
+          "id": "A02",
+          "title": "初始化管理员；安装八类内置角色，核对测试职责权限。",
+          "actor": "admin / 平台运维",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "A03",
+          "title": "建立三个环境和公司→整车研发中心→底盘部门→制动团队；另建电池、动力团队。",
+          "actor": "admin / 平台运维",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "A04",
+          "title": "建立brake、battery、power和hmi配置组，明确只读引用权限。",
+          "actor": "admin / 平台运维",
+          "adaptation": "跨组只读引用在 Kairoz 中按数据项申请与批准；此时还没有数据项，“读取不等于修改”由 T-N07 验证。",
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "A05",
+          "title": "创建team-brake等TEAM区；选择车型、组织节点、分组和范围，不填项目ID。",
+          "actor": "admin / 平台运维",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "A06",
+          "title": "授予研发、业务测试、工作区管理员、DCL、资源人员最小工作区及环境权限。",
+          "actor": "admin / 平台运维",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "A07",
+          "title": "建立完整X89项目组织模块树，创建x89-integration，配置团队来源和集成测试人员。",
+          "actor": "admin / 平台运维",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "A08",
+          "title": "发布普通日志/CAN双侧默认模板、敏感审核模板；登记x89-dev-r1及接入接口。",
+          "actor": "dcl / DCL 工程",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "A09",
+          "title": "创建SIM-901，选择仿真、development、x89-dev-r1和暂无整车版本。",
+          "actor": "workspace_manager / 工作区管理员",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "A10",
+          "title": "登记VEH-901及唯一VIN，版本留空；接收可信版本上报时另行确认。",
+          "actor": "resource / 车辆资源",
+          "adaptation": "演示 VIN 使用合法的 17 位格式（不含 I/O/Q）。",
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "A11",
+          "title": "纳入本区，核对预约和可用状态，启动仿真并检查连接。",
+          "actor": "workspace_manager / 工作区管理员",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "B01",
+          "title": "选择本组工作区，创建first_brake，不要求选择Bootstrap。",
+          "actor": "business / 业务研发",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "B02",
+          "title": "登记text_log：ADC、/data/brake、debug.log、制动诊断；点击保存一次。",
+          "actor": "business / 业务研发",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "B03",
+          "title": "定义brake_pressure>80 AND vehicle_speed>30，Capture引用逻辑data_key，窗口10/20秒并提交。",
+          "actor": "business / 业务研发",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "B04",
+          "title": "下发固定提交到仿真，先检查Pending，成功回执后运行测试并记录PASS。",
+          "actor": "brake_tester / 测试验证（业务测试）",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "B05",
+          "title": "同一提交下发VEH-901，确认生效再验证；检查当前仿真和实车证据后标记Verified。",
+          "actor": "brake_tester / 测试验证（业务测试）",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "B06",
+          "title": "结束车辆测试任务、停止闲置仿真、释放预约，不擦除历史。",
+          "actor": "workspace_manager / 工作区管理员",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "C01",
+          "title": "新增camera_image、pointcloud或gnss文件，申报用途及内容，创建采集策略并提交。",
+          "actor": "business / 业务研发",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "C02",
+          "title": "审查采集范围、车端处理、上传、云端处理、保留；拒绝或批准具体策略版本并记录理由。",
+          "actor": "dcl / DCL 工程",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "C03",
+          "title": "业务修采集范围/用途；DCL修专用处理，产生新提交，再送审核。",
+          "actor": "business / 业务研发",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "C04",
+          "title": "下发已批准固定版本，用合成数据验证处理和上传结果。",
+          "actor": "brake_tester / 测试验证（业务测试）",
+          "adaptation": "脱敏与上传边界没有真实算子；测试人员在模拟回执生效后登记基于合成样本的结论。仿真在 B06 停止，前置条件“授权仿真可用”由工作区管理员重新启动。",
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "C05",
+          "title": "使用批准版本完成授权实车验证并交付Verified。",
+          "actor": "brake_tester / 测试验证（业务测试）",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "D01",
+          "title": "切集成工作区；核对来源TEAM区、testing池SIM-902/VEH-902。",
+          "actor": "integrator / 配置集成",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "D02",
+          "title": "收集固定来源，预览合并；保留HMI未变配置。",
+          "actor": "integrator / 配置集成",
+          "adaptation": "电池、动力的 Verified 提交没有对应的幕；由前置夹具补齐（平台运维为 workspace_manager 增加电池/动力工作区授权，团队登记仿真与实车并完成业务验证），其中电池两个 Feature 定义同一策略、内容不同，用于检验冲突。",
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "D03",
+          "title": "业务方统一需求修文件/策略，DCL修处理；提交新版本。",
+          "actor": "business / 业务研发",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "D04",
+          "title": "重新下发和验证修复提交；交付新Verified证据。",
+          "actor": "brake_tester / 测试验证（业务测试）",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "D05",
+          "title": "核对最终文件、车云处理、Schema、敏感批准、资源保护，确认集合摘要。",
+          "actor": "dcl / DCL 工程",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "D06",
+          "title": "冻结完整候选与来源清单，移交集成测试。",
+          "actor": "integrator / 配置集成",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "D07",
+          "title": "在SIM-902、VEH-902下发冻结候选，完成整车独立测试。",
+          "actor": "integration_tester / 测试验证（集成测试）",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "E01",
+          "title": "准备正式镜像，确认量产车实际Integration Version、环境与兼容范围。",
+          "actor": "resource / 车辆资源",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "E02",
+          "title": "核对DCL确认、敏感审批、候选测试摘要和回滚目标，Promote正式DCL集合。",
+          "actor": "release / 配置发布",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "E03",
+          "title": "创建灰度，收到签名回执后更新实际已生效集合。",
+          "actor": "release / 配置发布",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "E04",
+          "title": "扩大目标，监控失败比例；出现异常立即暂停并移交恢复。",
+          "actor": "release / 配置发布",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "E05",
+          "title": "测试人员触发虚构售后事件，检查路由、采集、处理、上传、云端产物和业务回调。",
+          "actor": "dcl / DCL 工程",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "F01",
+          "title": "暂停；显式开始新attempt，接收新PASS；无法修复时兼容回滚。",
+          "actor": "release / 配置发布",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "F02",
+          "title": "恢复失败处理，重传分片、去重回调；旧事件继续旧Parser版本。",
+          "actor": "dcl / DCL 工程",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "F03",
+          "title": "修文件或业务策略形成新提交；DCL按需修流程；重新审核和测试。",
+          "actor": "business / 业务研发",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "F04",
+          "title": "记录真实组件状态；外部OTA继续完成或回滚；恢复后确认可信版本和DCL兼容。",
+          "actor": "resource / 车辆资源",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "F05",
+          "title": "结束任务和预约、停止实例、回收配额、移出闲置资源；不移出占用资源。",
+          "actor": "workspace_manager / 工作区管理员",
+          "adaptation": "原型不建模仿真配额；“回收配额”以停止实例与解除预约体现。",
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "F06",
+          "title": "撤销角色/工作区授权，验证旧会话和直接对象请求。",
+          "actor": "admin / 平台运维",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "F07",
+          "title": "备份并在隔离环境恢复，检查版本、回执、事件和审计；提交运维交接。",
+          "actor": "admin / 平台运维",
+          "adaptation": "原型以“导出 / 导入完整状态 JSON”代替数据库与存储备份恢复；监控接手不适用。",
+          "status": "NOT_APPLICABLE",
+          "detail": "隔离环境的数据库与存储备份恢复、恢复窗口与监控交接不属于浏览器原型",
+          "notes": []
+        }
+      ]
+    },
+    {
+      "script": "first-ota",
+      "name": "首次 OTA · 集成与发布",
+      "rows": [
+        {
+          "id": "E01",
+          "title": "部署一个独立空平台",
+          "actor": "终端运维人员",
+          "adaptation": "原型没有服务端：以“干净安装”代替空平台部署；runId 记在验收结果里。",
+          "status": "NOT_APPLICABLE",
+          "detail": "启动服务、健康检查与运行目录属于服务端部署，浏览器原型不适用",
+          "notes": []
+        },
+        {
+          "id": "E02",
+          "title": "建立组织、车型、业务组和工作区",
+          "actor": "admin / 平台运维",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "E03",
+          "title": "创建人员账号并关联九类角色",
+          "actor": "admin / 平台运维",
+          "adaptation": "Kairoz 要求修改共享处理目录的 DCL 授权覆盖全部工作区与分组（`*`）；本安装中“相关组及两个工作区”即全部，故授予 `*`。",
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "E04",
+          "title": "发布普通文件的默认车端和云端处理",
+          "actor": "dcl / DCL 工程",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "E05",
+          "title": "登记无整车版本研发镜像和团队资源",
+          "actor": "dcl → resource → workspace_manager",
+          "adaptation": "剧本中的模拟 VIN “LSDEMOX89000000901” 是 18 位且含字母 O，不是合法 VIN；平台拒绝后改用合法的 17 位模拟 VIN。车辆组设为“需审批”，对应 E06/E07 的团队测试申请流程。",
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "E06",
+          "title": "新增业务文件与事件策略并提交",
+          "actor": "business / 业务研发",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "E07",
+          "title": "审批组下发并应用固定配置",
+          "actor": "workspace_manager → brake_tester",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "E08",
+          "title": "先仿真，再实车模型验证业务提交",
+          "actor": "brake_tester / 业务测试",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "E09",
+          "title": "收集变更、冲突检查与合并",
+          "actor": "integrator / 配置集成",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "E10",
+          "title": "确认处理集合并冻结首个候选",
+          "actor": "dcl → integrator",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "E11",
+          "title": "准备并验证独立集成资源",
+          "actor": "resource → integration_tester",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "E12",
+          "title": "登记真实来源的软件版本并正式发布DCL",
+          "actor": "resource → release",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "E13",
+          "title": "导出首个配置发布材料",
+          "actor": "release / 配置发布",
+          "adaptation": "签名配置包（ZIP、Ed25519 服务端签名）需要服务端；剧本规定离线页不伪造服务端签名，原型提供“导出配置集合”JSON。",
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "E14",
+          "title": "准备量产目标与首版恢复方案",
+          "actor": "resource / 车辆资源",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "E15",
+          "title": "创建灰度并接收签名Mock回执",
+          "actor": "release / 配置发布",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "E16",
+          "title": "扩量、失败暂停、新attempt重试",
+          "actor": "release / 配置发布",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "E17",
+          "title": "验证数据闭环而不只验证配置安装",
+          "actor": "dcl → 业务需求人",
+          "adaptation": "业务节点、Parser 与业务需求人的数据确认未接入；以模拟器的合成事件验证配置快照、分片上传、产物与回调，真实环节记为未执行。",
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "E18",
+          "title": "验收、交接与下一版准备",
+          "actor": "release → admin → 各业务人员",
+          "adaptation": "SQLite 备份与恢复对应原型的“导出 / 导入完整状态 JSON”。",
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "X01",
+          "title": "敏感文件审核支线",
+          "actor": "business → dcl → brake_tester",
+          "adaptation": "首次 OTA 只发布了 text_log 模板；支线开始前由 DCL 发布相机图像的敏感处理模板。",
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "X02",
+          "title": "同业务组两个分支冲突支线",
+          "actor": "business → brake_tester → integrator → dcl",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "X03",
+          "title": "首版中途取消或回滚支线",
+          "actor": "release → resource → dcl",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        }
+      ]
+    },
+    {
+      "script": "data-usage",
+      "name": "数据使用 · 售后与训练",
+      "rows": [
+        {
+          "id": "U01",
+          "title": "售后按车和事件定位采集数据",
+          "actor": "business / 陈明 · 业务研发；制动团队工作区；研发环境",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "U02",
+          "title": "训练按策略和场景选用数据",
+          "actor": "business / 陈明 · 业务研发；制动团队工作区；研发环境",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        }
+      ]
+    },
+    {
+      "script": "negative",
+      "name": "反向用例 T-N01–T-N24",
+      "rows": [
+        {
+          "id": "T-N01",
+          "title": "用business登记仿真资源 → 请求拒绝，资源数与revision不变。",
+          "actor": "DEV",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "T-N02",
+          "title": "在制动工作区登记电池、X90或production资源 → 服务端逐项拒绝，不能靠换筛选绕过。",
+          "actor": "WM",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "T-N03",
+          "title": "并发登记同VIN和同资源ID → 只保留一项，失败请求无部分写入。",
+          "actor": "VR",
+          "adaptation": "浏览器原型中操作逐个在事务中执行，没有并发写入；以先后两次登记同 VIN / 同 ID 验证只保留一项、失败无部分写入。",
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "T-N04",
+          "title": "选择X90镜像创建X89车，或伪造镜像整车版本 → 车型与版本不匹配拒绝。",
+          "actor": "WM",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "T-N05",
+          "title": "相同requestId重放文件创建 → 相同data_key，只有一个身份和双侧绑定。",
+          "actor": "DEV",
+          "adaptation": "原型没有网络请求与 requestId；以重复提交同一文件创建来验证：被拒绝且返回已有的 data_key，只有一个身份与一份双侧绑定。",
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "T-N06",
+          "title": "注入云端策略创建失败，再并发创建同来源文件 → 全事务回滚或复用同一身份；没有孤立文件/单侧策略。",
+          "actor": "DEV",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "T-N07",
+          "title": "读取授权电池文件后尝试修改其定义或绑定 → 读取允许，修改拒绝且原版本不变。",
+          "actor": "DEV",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "T-N08",
+          "title": "未审核camera/pointcloud/GNSS，或仅完成一般接入后直接下发 → 禁止采集；普通Ready不能替代敏感批准。",
+          "actor": "DEV",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "T-N09",
+          "title": "把含敏感内容文本标成普通日志或改低等级 → 平台规则仍要求审核；用户不能自行放行。",
+          "actor": "DEV",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "T-N10",
+          "title": "批准后修改文件范围、车云处理、上传或保留规则 → 新提交审批失效，需按影响重审及重测。",
+          "actor": "DCL",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "T-N11",
+          "title": "升级默认模板后解析旧提交和旧事件 → 固定旧模板版本，不追随latest。",
+          "actor": "DCL",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "T-N12",
+          "title": "无变化再次提交，或仅更改软件Build → 复用原提交和DCL版本；实际配置变更才新建。",
+          "actor": "DEV",
+          "adaptation": "Kairoz 的 DCL 版本只来自正式发布，不随软件 Build 产生；“仅改 Build 不出新版本”自然成立。",
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "T-N13",
+          "title": "仅下发身份记录PASS或业务测试身份测试整车候选 → 拒绝职责越权。",
+          "actor": "TEST",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "T-N14",
+          "title": "回执Pending或车上旧配置时写当前提交PASS → 拒绝，实际生效版本与测试目标必须一致。",
+          "actor": "TEST",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "T-N15",
+          "title": "Feature发量产；候选发研发或量产；正式Release发不兼容车型/版本 → 逐类目标门禁拒绝，无半批应用。",
+          "actor": "REL",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "T-N16",
+          "title": "有冲突冻结候选，或集成人员代改维护方策略 → 拒绝；修复新提交重验再合并。",
+          "actor": "INT",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "T-N17",
+          "title": "候选未获最终DCL确认就绑定测试车辆 → 拒绝候选测试；来源Ready不等于集合确认。",
+          "actor": "TEST",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "T-N18",
+          "title": "未获集合确认、摘要漂移或无当前候选测试即发布 → 拒绝，已审批已测试内容必须与发布摘要一致。",
+          "actor": "REL",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "T-N19",
+          "title": "FAIL后新attempt成功；同attempt矛盾回执；旧attempt迟到 → 新尝试PASS接受，旧失败保留；矛盾和过期回执拒绝。",
+          "actor": "REL",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "T-N20",
+          "title": "重传相同分片、篡改checksum、重复产品回调 → 正常重传幂等；坏校验拒绝；产品及业务回调不重复。",
+          "actor": "DCL",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "T-N21",
+          "title": "撤销授权后继续使用旧token访问同一对象 → 请求拒绝，历史记录保留，不写业务数据。",
+          "actor": "OPS",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "T-N22",
+          "title": "量产车部分ECU升级失败，却申报整体版本成功 → 量产目标不放行，记录真实状态，交外部OTA完成或回滚。",
+          "actor": "VR",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "T-N23",
+          "title": "运行实例或仍有任务/下发/预约时移出资源 → 拒绝，结束占用后才移出。",
+          "actor": "WM",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "T-N24",
+          "title": "真正新装平台初始化时自动载入演示组织/资源/账号 → 仅保留管理员及内置角色；样例夹具必须显式加载。",
+          "actor": "OPS",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        }
+      ]
+    }
+  ]
+}

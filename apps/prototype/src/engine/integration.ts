@@ -2,8 +2,8 @@
 // target set, DCL confirmation of the final processing set, and freezing a complete candidate.
 
 import { digestOf } from '../domain/canonical.ts';
-import { capturableKeys, emptyConfig, sameConfig } from '../domain/config.ts';
-import type { GroupConfig } from '../domain/config.ts';
+import { capturableKeys, diffConfig, emptyConfig, sameConfig } from '../domain/config.ts';
+import type { ConfigDiff, GroupConfig } from '../domain/config.ts';
 import { conflict, notFound, rule } from '../domain/errors.ts';
 import { requiresSensitiveReview } from '../domain/file-types.ts';
 import { newId } from '../domain/ids.ts';
@@ -11,7 +11,7 @@ import { mergeGroup, PROCESSING_FIELDS } from '../domain/merge.ts';
 import { WILDCARD } from '../domain/vocabulary.ts';
 import { reviewItems } from './approvals.ts';
 import type { ReviewItem } from './approvals.ts';
-import { baseConfig, fileSpecVersion, latestRelease, manifestVersion, policyVersion } from './config.ts';
+import { baseConfig, fileSpecVersion, headChangesRequested, latestRelease, manifestVersion, policyVersion } from './config.ts';
 
 export { latestRelease };
 import type { Ctx } from './engine.ts';
@@ -21,14 +21,32 @@ import { commitSnapshot, resolveFiles } from './snapshots.ts';
 import type { Candidate, Feature, MergeConflict, MergePlan, Release, State } from './types.ts';
 import { resolveConfig } from './validation.ts';
 
-/** Verified Features a project workspace may collect: from its declared sources, same vehicle model. */
+/**
+ * Where merges run: a project workspace, or an integration workspace that takes team workspaces
+ * as sources directly (a single-team first integration needs no project workspace).
+ */
+export function isMergeWorkspace(s: State, workspaceId: string): boolean {
+  const ws = s.workspaces[workspaceId];
+  if (!ws) return false;
+  return ws.kind === 'PROJECT' || (ws.kind === 'INTEGRATION' && ws.sourceWorkspaceIds.some((id) => s.workspaces[id]?.kind === 'TEAM'));
+}
+
+/** Verified Features a merge workspace may collect: from its declared sources, same vehicle model. */
 export function verifiedSources(s: State, workspaceId: string): Feature[] {
   const ws = s.workspaces[workspaceId];
   if (!ws) return [];
   const allowed = new Set([ws.id, ...ws.sourceWorkspaceIds]);
   return Object.values(s.features)
-    .filter((f) => allowed.has(f.workspaceId) && f.vehicleModelId === ws.vehicleModelId && f.stage === 'VERIFIED' && f.verifiedCommitId === f.headCommitId)
+    .filter((f) => allowed.has(f.workspaceId) && f.vehicleModelId === ws.vehicleModelId && isCollectible(s, f))
     .sort((a, b) => a.groupId.localeCompare(b.groupId) || a.name.localeCompare(b.name));
+}
+
+/**
+ * A Feature whose head commit is verified. Unsubmitted draft edits do not withdraw it: integration
+ * collects the fixed commit. A new commit, or a change request on the head, does.
+ */
+export function isCollectible(s: State, f: Feature): boolean {
+  return f.verifiedCommitId !== null && f.verifiedCommitId === f.headCommitId && !['INTEGRATED', 'ARCHIVED'].includes(f.stage) && !headChangesRequested(s, f);
 }
 
 function targetGroups(s: State, release: Release | undefined): Record<string, string> {
@@ -82,7 +100,7 @@ function recomputeReview(s: State, config: GroupConfig): void {
 export function previewMerge(ctx: Ctx, input: { workspaceId: string; featureIds: string[] }): string {
   ctx.allow('merge.manage', { type: 'mergePlan', workspaceId: input.workspaceId, scope: 'Vehicle' });
   const ws = getWorkspace(ctx.s, input.workspaceId);
-  if (ws.kind !== 'PROJECT') throw rule('NOT_A_PROJECT_WORKSPACE', 'integration merges run in a project workspace');
+  if (!isMergeWorkspace(ctx.s, ws.id)) throw rule('NOT_A_MERGE_WORKSPACE', 'merges run in a project workspace, or an integration workspace with team sources');
   if (input.featureIds.length === 0) throw rule('NO_SOURCES', 'choose Verified Features to merge');
   const allowed = new Set(verifiedSources(ctx.s, ws.id).map((f) => f.id));
   const features = input.featureIds.map((id) => {
@@ -131,6 +149,39 @@ export function previewMerge(ctx: Ctx, input: { workspaceId: string; featureIds:
     createdAt: ctx.now,
   };
   return id;
+}
+
+export type GroupChange = 'ADDED' | 'CHANGED' | 'REMOVED' | 'INHERITED' | 'EMPTY';
+
+export interface PlanGroup {
+  groupId: string;
+  /** ADDED: new to the set; INHERITED: unchanged from the target; EMPTY: no configuration at all. */
+  change: GroupChange;
+  diff: ConfigDiff;
+  /** Items carried over unchanged from the target. */
+  inherited: number;
+}
+
+const itemCount = (c: GroupConfig) => Object.keys(c.files).length + Object.keys(c.policies).length + Object.keys(c.references).length;
+
+/** Every group of the workspace and of the final set, with how the merge changes it. */
+export function planGroups(s: State, plan: MergePlan): PlanGroup[] {
+  const release = plan.targetReleaseId ? s.releases[plan.targetReleaseId] : undefined;
+  const ids = new Set([...(s.workspaces[plan.workspaceId]?.groupIds ?? []), ...Object.keys(release?.groups ?? {}), ...Object.keys(plan.merged)]);
+  return [...ids].sort().map((groupId) => {
+    const commitId = release?.groups[groupId];
+    const before = commitId ? commitSnapshot(s, commitId) : emptyConfig();
+    const after = plan.merged[groupId] ?? before;
+    const diff = diffConfig(before, after);
+    const changedItems = (['files', 'policies', 'references'] as const).reduce((n, k) => n + diff[k].removed.length + diff[k].changed.length, 0);
+    const inherited = itemCount(before) - changedItems;
+    let change: GroupChange;
+    if (diff.empty) change = itemCount(before) > 0 ? 'INHERITED' : 'EMPTY';
+    else if (itemCount(before) === 0) change = 'ADDED';
+    else if (itemCount(after) === 0) change = 'REMOVED';
+    else change = 'CHANGED';
+    return { groupId, change, diff, inherited };
+  });
 }
 
 export function getPlan(s: State, id: string): MergePlan {
@@ -253,11 +304,15 @@ export function freezeCandidate(ctx: Ctx, planId: string, input: { label: string
   }
   for (const src of plan.sources) {
     const f = ctx.s.features[src.featureId]!;
-    if (f.stage !== 'VERIFIED' || f.headCommitId !== src.commitId) throw rule('SOURCE_CHANGED', `${f.name} changed since the preview; preview the merge again`);
+    if (!isCollectible(ctx.s, f) || f.headCommitId !== src.commitId) throw rule('SOURCE_CHANGED', `${f.name} changed since the preview; preview the merge again`);
   }
   const open = Object.values(ctx.s.candidates).find((c) => c.workspaceId === plan.workspaceId && ['CANDIDATE', 'TESTING', 'VERIFIED'].includes(c.status));
   if (open) throw rule('CANDIDATE_OPEN', `candidate ${open.label} is still open; release or cancel it first`);
-  const testWs = Object.values(ctx.s.workspaces).find((w) => w.kind === 'INTEGRATION' && w.status === 'ACTIVE' && w.sourceWorkspaceIds.includes(plan.workspaceId));
+  // Candidates are tested in an integration workspace: this one, or the one taking the project as source.
+  const testWs =
+    ctx.s.workspaces[plan.workspaceId]!.kind === 'INTEGRATION'
+      ? ctx.s.workspaces[plan.workspaceId]
+      : Object.values(ctx.s.workspaces).find((w) => w.kind === 'INTEGRATION' && w.status === 'ACTIVE' && w.sourceWorkspaceIds.includes(plan.workspaceId));
   if (!testWs) throw rule('NO_INTEGRATION_WORKSPACE', 'no integration workspace takes this project workspace as its source');
   const label = input.label.trim();
   if (!label) throw rule('LABEL_REQUIRED', 'name the candidate');
@@ -304,7 +359,7 @@ export function cancelCandidate(ctx: Ctx, candidateId: string, input: { reason: 
   for (const src of c.sources) {
     const f = ctx.s.features[src.featureId]!;
     if (f.stage === 'INTEGRATED' && f.headCommitId === src.commitId) {
-      f.stage = 'VERIFIED';
+      f.stage = sameConfig(f.draft as GroupConfig, commitSnapshot(ctx.s, src.commitId)) ? 'VERIFIED' : 'DRAFT';
       f.updatedAt = ctx.now;
     }
   }

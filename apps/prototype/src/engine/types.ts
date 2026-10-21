@@ -8,7 +8,7 @@ import type { FileType, Privacy } from '../domain/file-types.ts';
 import type { ReviewControls } from '../domain/intake.ts';
 import type { Domain, Env, GroupPurpose, Scope, WorkspaceKind } from '../domain/vocabulary.ts';
 
-export const STATE_SCHEMA = 5;
+export const STATE_SCHEMA = 6;
 
 export interface Account {
   username: string;
@@ -283,6 +283,12 @@ export interface AgentState {
   failNext: boolean;
 }
 
+export interface ControllerState {
+  name: string;
+  version: string;
+  status: 'PASS' | 'FAIL';
+}
+
 export interface Resource {
   id: string;
   type: 'PHYSICAL' | 'SIMULATION';
@@ -298,6 +304,17 @@ export interface Resource {
   /** Actual whole-vehicle software. NULL means not yet known; never inferred. */
   integrationVersion: string | null;
   integrationSource: string | null;
+  /**
+   * CONSISTENT: every domain controller runs the whole-vehicle version. PARTIAL_FAILURE: some
+   * controller updates failed, so no whole-vehicle version is claimed and production is blocked.
+   */
+  softwareStatus: 'UNKNOWN' | 'CONSISTENT' | 'PARTIAL_FAILURE';
+  /** Last trusted per-controller report (physical vehicles). */
+  controllers: ControllerState[];
+  /** Simulation instances run or stop; physical vehicles are null. */
+  instance: 'RUNNING' | 'STOPPED' | null;
+  /** Held by the workspace for a task until released. */
+  reservation: { by: string; purpose: string; at: string } | null;
   imageId: string | null;
   /** The workspace that created a simulation instance. */
   homeWorkspaceId: string | null;
@@ -339,14 +356,35 @@ export interface VehicleGroup {
   status: 'ACTIVE' | 'ARCHIVED';
   targetConfigId: string | null;
   bindingRevision: number;
+  /** Dispatches to this group need an approved team test request (团队测试审批). */
+  requiresApproval: boolean;
   createdBy: string;
   createdAt: string;
+}
+
+/** A request to test a fixed commit on team vehicle groups, decided by the workspace admin. */
+export interface TestRequest {
+  id: string;
+  workspaceId: string;
+  featureId: string;
+  commitId: string;
+  vehicleGroupIds: string[];
+  /** The vehicles the approval covers; a different list needs a new request. */
+  members: string[];
+  goal: string;
+  status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'EXECUTED' | 'WITHDRAWN';
+  requestedBy: string;
+  requestedAt: string;
+  decidedBy: string | null;
+  decidedAt: string | null;
+  decisionNote: string | null;
+  deploymentId: string | null;
 }
 
 export interface VehicleGroupEvent {
   id: string;
   vehicleGroupId: string;
-  kind: 'CREATED' | 'MEMBER_ADDED' | 'MEMBER_REMOVED' | 'BOUND' | 'ARCHIVED';
+  kind: 'CREATED' | 'MEMBER_ADDED' | 'MEMBER_REMOVED' | 'BOUND' | 'ARCHIVED' | 'APPROVAL_REQUIRED' | 'APPROVAL_NOT_REQUIRED';
   resourceId: string | null;
   reason: string | null;
   actor: string;
@@ -524,6 +562,8 @@ export interface EventFile {
   sizeBytes: number;
   edgeStatus: 'PENDING' | 'UPLOADED';
   cloudStatus: 'PENDING' | 'DONE' | 'PARSER_FAILED';
+  /** Upload chunks with their checksums; a resent chunk is idempotent, a wrong checksum refused. */
+  chunks: { index: number; sha256: string; received: boolean }[];
   /** Where the processed artifact lives; the same event and file always give the same artifact. */
   artifactUri: string | null;
 }
@@ -562,6 +602,9 @@ export interface CollectionEvent {
   /** Simulator switch: cloud parsing of this event fails (until reprocessed). */
   failParse: boolean;
   processingAttempts: number;
+  /** Business callbacks: delivered once per event however often they are sent. */
+  callbacks: { deliveryId: string; at: string }[];
+  callbackSends: number;
   quality: Quality;
   trainingUse: TrainingUse;
 }
@@ -624,6 +667,7 @@ export interface State {
   processingConfirmations: ProcessingConfirmation[];
   candidates: Record<string, Candidate>;
   events: Record<string, CollectionEvent>;
+  testRequests: Record<string, TestRequest>;
   audit: AuditEvent[];
 }
 
@@ -667,6 +711,7 @@ export function emptyState(): State {
     processingConfirmations: [],
     candidates: {},
     events: {},
+    testRequests: {},
     audit: [],
   };
 }

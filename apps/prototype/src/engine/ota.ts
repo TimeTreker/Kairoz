@@ -7,7 +7,7 @@ import type { Draft } from 'immer';
 import { notFound, rule } from '../domain/errors.ts';
 import { newId } from '../domain/ids.ts';
 import type { Ctx } from './engine.ts';
-import { membersOf, openOtaOf, pendingDeploymentOf, recordGroupBinding } from './fleet.ts';
+import { directTargetProblems, membersOf, openOtaOf, pendingDeploymentOf, recordGroupBinding } from './fleet.ts';
 
 export { openOtaOf };
 import { getRelease, releaseFor } from './release.ts';
@@ -40,7 +40,7 @@ function allowOta(ctx: Ctx, d: Pick<Deployment, 'id' | 'workspaceId'>): void {
   ctx.allow('ota.manage', { type: 'deployment', id: d.id, workspaceId: d.workspaceId, scope: 'Vehicle' });
 }
 
-function target(ctx: Ctx, resourceId: string, vehicleGroupId: string, status: DeploymentTarget['status']): DeploymentTarget {
+function target(ctx: Ctx, resourceId: string, vehicleGroupId: string | null, status: DeploymentTarget['status']): DeploymentTarget {
   return {
     resourceId,
     vehicleGroupId,
@@ -54,21 +54,29 @@ function target(ctx: Ctx, resourceId: string, vehicleGroupId: string, status: De
 }
 
 /**
- * Starts a rollout of a release to production vehicle groups. `firstWave` lists the vehicles sent
- * at once (gray release); the others wait until the rollout is expanded.
+ * Starts a rollout of a release to production vehicle groups, or to production vehicles of the
+ * workspace that route through no group. `firstWave` lists the vehicles sent at once (gray
+ * release); the others wait until the rollout is expanded.
  */
-export function createOta(ctx: Ctx, input: { releaseId: string; vehicleGroupIds: string[]; firstWave: string[] | 'ALL' }): string {
+export function createOta(
+  ctx: Ctx,
+  input: { releaseId: string; workspaceId?: string; vehicleGroupIds?: string[]; resourceIds?: string[]; firstWave: string[] | 'ALL' },
+): string {
   const release = getRelease(ctx.s, input.releaseId);
-  if (input.vehicleGroupIds.length === 0) throw rule('NO_VEHICLE_GROUPS', 'choose at least one vehicle group');
-  const groups = input.vehicleGroupIds.map((id) => {
+  const direct = input.resourceIds ?? [];
+  if ((input.vehicleGroupIds ?? []).length === 0 && direct.length === 0) throw rule('NO_VEHICLE_GROUPS', 'choose vehicle groups or ungrouped vehicles');
+  const groups = (input.vehicleGroupIds ?? []).map((id) => {
     const g = ctx.s.vehicleGroups[id];
     if (!g) throw notFound('vehicle group', id);
     ctx.allow('ota.manage', { type: 'vehicleGroup', id: g.id, workspaceId: g.workspaceId, scope: 'Vehicle' });
     return g;
   });
-  const workspaceId = groups[0]!.workspaceId;
-  const problems: string[] = [];
-  const members: { resourceId: string; vehicleGroupId: string }[] = [];
+  const workspaceId = groups[0]?.workspaceId ?? input.workspaceId;
+  if (!workspaceId) throw rule('WORKSPACE_REQUIRED', 'name the workspace of the vehicles');
+  ctx.allow('ota.manage', { type: 'workspace', id: workspaceId, workspaceId, scope: 'Vehicle' });
+  if (ctx.s.workspaces[workspaceId]?.vehicleModelId !== release.vehicleModelId) throw rule('MODEL_MISMATCH', 'the workspace is for another vehicle model');
+  const problems: string[] = directTargetProblems(ctx.s, workspaceId, direct);
+  const members: { resourceId: string; vehicleGroupId: string | null }[] = [];
   for (const g of groups) {
     if (g.status !== 'ACTIVE') problems.push(`${g.name}: archived`);
     if (g.purpose !== 'PRODUCTION') problems.push(`${g.name}: formal releases roll out to production vehicle groups`);
@@ -78,10 +86,20 @@ export function createOta(ctx: Ctx, input: { releaseId: string; vehicleGroupIds:
     if (list.length === 0) problems.push(`${g.name}: no vehicles`);
     for (const rid of list) {
       const r = ctx.s.resources[rid]!;
-      // Vehicles already running the release need nothing.
-      if (r.appliedConfigId === release.resolvedConfigId) continue;
-      problems.push(...otaProblems(ctx.s, r, release));
+      const issues = otaProblems(ctx.s, r, release);
+      // Vehicles already running the release, and still fitting it, need nothing.
+      if (r.appliedConfigId === release.resolvedConfigId && issues.length === 0) continue;
+      problems.push(...issues);
       members.push({ resourceId: rid, vehicleGroupId: g.id });
+    }
+  }
+  if (problems.length === 0) {
+    for (const rid of direct) {
+      const r = ctx.s.resources[rid]!;
+      const issues = otaProblems(ctx.s, r, release);
+      if (r.appliedConfigId === release.resolvedConfigId && issues.length === 0) continue;
+      problems.push(...issues);
+      members.push({ resourceId: rid, vehicleGroupId: null });
     }
   }
   if (!problems.length && members.length === 0) throw rule('NOTHING_TO_ROLL_OUT', `every vehicle already runs DCL ${release.dclVersion}`);
@@ -266,6 +284,40 @@ export function rollbackOta(ctx: Ctx, deploymentId: string, reason: string): str
     ids.push(id);
   }
   return ids;
+}
+
+export interface ConfigAnswer {
+  configId: string | null;
+  /**
+   * HELD: a paused, cancelled or rolled-back rollout stops chasing newer configurations; the
+   * vehicle keeps what it confirmed. TASK: a running rollout's fixed target. LATEST_RELEASE: the
+   * newest matching formal release. GROUP_TARGET: a development or testing group's pinned
+   * configuration. APPLIED / INITIAL: nothing newer is assigned. BLOCKED: no configuration may run.
+   */
+  reason: 'HELD' | 'TASK' | 'LATEST_RELEASE' | 'GROUP_TARGET' | 'APPLIED' | 'INITIAL' | 'BLOCKED';
+  detail: string | null;
+}
+
+/** What the platform answers when a vehicle asks which configuration to run. */
+export function answerConfigRequest(s: State, resourceId: string): ConfigAnswer {
+  const r = s.resources[resourceId];
+  if (!r) return { configId: null, reason: 'BLOCKED', detail: 'unknown vehicle' };
+  if (r.status !== 'AVAILABLE') return { configId: null, reason: 'BLOCKED', detail: `the vehicle is ${r.status.toLowerCase()}` };
+  const rollout = otaRollouts(s).find((d) => d.targets.some((t) => t.resourceId === r.id));
+  const target = rollout?.targets.find((t) => t.resourceId === r.id);
+  if (rollout && target) {
+    if (['PAUSED', 'CANCELLED', 'ROLLED_BACK'].includes(rollout.status) || rollout.rollbackOf) {
+      return { configId: r.appliedConfigId, reason: 'HELD', detail: `rollout ${rollout.id} is ${rollout.rollbackOf ? 'a rollback' : rollout.status.toLowerCase()}; start a new rollout to resume` };
+    }
+    if (rollout.status === 'PENDING' && target.status === 'PENDING') return { configId: rollout.resolvedConfigId, reason: 'TASK', detail: rollout.id };
+  }
+  if (r.env === 'production') {
+    const resolved = releaseFor(s, r);
+    return resolved.release ? { configId: resolved.release.resolvedConfigId, reason: 'LATEST_RELEASE', detail: `DCL ${resolved.release.dclVersion}` } : { configId: null, reason: 'BLOCKED', detail: resolved.problem };
+  }
+  const group = s.groupMembers[r.id] ? s.vehicleGroups[s.groupMembers[r.id]!] : undefined;
+  if (group?.targetConfigId) return { configId: group.targetConfigId, reason: 'GROUP_TARGET', detail: group.name };
+  return r.appliedConfigId ? { configId: r.appliedConfigId, reason: 'APPLIED', detail: null } : { configId: null, reason: 'INITIAL', detail: null };
 }
 
 export function otaRollouts(s: State, workspaceId?: string): Deployment[] {

@@ -14,7 +14,7 @@ import { diffConfig, emptyConfig } from '../domain/config.ts';
 import { WILDCARD } from '../domain/vocabulary.ts';
 import { displayName } from '../engine/config.ts';
 import { vehicleGroupsOf } from '../engine/fleet.ts';
-import { cancelCandidate, confirmProcessing, freezeCandidate, isConfirmed, latestRelease, previewMerge, processingSummary, verifiedSources } from '../engine/integration.ts';
+import { cancelCandidate, confirmProcessing, freezeCandidate, isConfirmed, isMergeWorkspace, planGroups, latestRelease, previewMerge, processingSummary, verifiedSources } from '../engine/integration.ts';
 import { commitSnapshot } from '../engine/snapshots.ts';
 import type { Candidate, MergeConflict, MergePlan, State } from '../engine/types.ts';
 import { cancelDeployment, candidateTestStatus, candidateVerifyBlockers, deploymentsOf, dispatchCandidate, recordCandidateTest, verifyCandidate } from '../engine/validation.ts';
@@ -24,6 +24,8 @@ import {
   CANDIDATE_STATUS_LABELS,
   CONFLICT_OWNER_LABELS,
   FILE_TYPE_LABELS,
+  GROUP_CHANGE_COLORS,
+  GROUP_CHANGE_LABELS,
   MERGE_SECTION_LABELS,
   PLAN_STATUS_COLORS,
   PLAN_STATUS_LABELS,
@@ -34,7 +36,7 @@ import {
 function projectOf(s: State, workspaceId: string | undefined): string | undefined {
   const ws = workspaceId ? s.workspaces[workspaceId] : undefined;
   if (!ws) return undefined;
-  if (ws.kind === 'PROJECT') return ws.id;
+  if (isMergeWorkspace(s, ws.id)) return ws.id;
   if (ws.kind === 'INTEGRATION') return ws.sourceWorkspaceIds.find((id) => s.workspaces[id]?.kind === 'PROJECT');
   return undefined;
 }
@@ -299,16 +301,28 @@ function PlanCard({ plan, onCandidate }: { plan: MergePlan; onCandidate: (id: st
       {groups.length > 0 && plan.status !== 'CONFLICT' && (
         <>
           <Typography.Title level={5}>{L('相对目标版本的变化', 'Changes against the target')}</Typography.Title>
-          <Space orientation="vertical" style={{ width: '100%', marginBottom: 16 }}>
-            {groups.map((g) => {
-              const commitId = release?.groups[g];
-              return (
-                <Card key={g} size="small" title={<Mono>{state.groups[g]?.code}</Mono>}>
-                  <DiffView diff={diffConfig(commitId ? commitSnapshot(state, commitId) : emptyConfig(), plan.merged[g]!)} nameOf={(k) => plan.merged[g]!.files[k]?.name ?? dataName(state, k)} />
-                </Card>
-              );
-            })}
-          </Space>
+          <Table
+            rowKey="groupId"
+            size="small"
+            pagination={false}
+            style={{ marginBottom: 16 }}
+            dataSource={planGroups(state, plan)}
+            expandable={{
+              rowExpandable: (g) => !g.diff.empty,
+              expandedRowRender: (g) => <DiffView diff={g.diff} nameOf={(k) => plan.merged[g.groupId]?.files[k]?.name ?? dataName(state, k)} />,
+            }}
+            columns={[
+              { title: L('业务分组', 'Group'), render: (_, g) => <Mono>{state.groups[g.groupId]?.code ?? g.groupId}</Mono> },
+              { title: L('变化', 'Change'), render: (_, g) => <LabelTag map={GROUP_CHANGE_LABELS} value={g.change} color={GROUP_CHANGE_COLORS[g.change]} /> },
+              {
+                title: L('条目', 'Items'),
+                render: (_, g) => {
+                  const n = (k: 'added' | 'changed' | 'removed') => g.diff.files[k].length + g.diff.policies[k].length + g.diff.references[k].length;
+                  return <Mono>{`+${n('added')}  ~${n('changed')}  −${n('removed')}  =${g.inherited}`}</Mono>;
+                },
+              },
+            ]}
+          />
           <Typography.Title level={5}>{L('最终处理集合', 'Final processing set')}</Typography.Title>
           <Table
             rowKey={(l) => `${l.groupId}/${l.dataKey}`}

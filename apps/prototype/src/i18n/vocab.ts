@@ -246,7 +246,7 @@ export const MERGE_SECTION_LABELS: Record<string, Bilingual> = {
 };
 
 Object.assign(ERROR_LABELS, {
-  NOT_A_PROJECT_WORKSPACE: b('合并预览只能在项目工作区进行', 'Merge previews run in a project workspace'),
+  NOT_A_MERGE_WORKSPACE: b('合并预览在项目工作区，或以团队工作区为来源的集成工作区进行', 'Merges run in a project workspace, or an integration workspace with team sources'),
   NO_SOURCES: b('请选择要合并的 Verified Feature', 'Choose Verified Features to merge'),
   SOURCE_NOT_ALLOWED: b('该 Feature 不是本工作区来源中的 Verified Feature', 'Not a Verified Feature from this workspace’s sources'),
   PLAN_NOT_READY: b('只有无冲突、无问题的预览可以确认或冻结', 'Only a conflict-free, unblocked preview can be confirmed or frozen'),
@@ -331,3 +331,12 @@ export const TRAINING_BLOCKER_LABELS: Record<string, Bilingual> = {
   'training use not confirmed': b('训练用途待确认', 'training use not confirmed'),
   'training use denied': b('不允许训练', 'training use denied'),
 };
+
+export const GROUP_CHANGE_LABELS: Record<string, Bilingual> = {
+  ADDED: b('新增 Added', 'Added'),
+  CHANGED: b('变更 Changed', 'Changed'),
+  REMOVED: b('移除 Removed', 'Removed'),
+  INHERITED: b('继承 Inherited', 'Inherited'),
+  EMPTY: b('无配置（继承）', 'Empty (inherited)'),
+};
+export const GROUP_CHANGE_COLORS: Record<string, string> = { ADDED: 'green', CHANGED: 'blue', REMOVED: 'red', INHERITED: 'default', EMPTY: 'default' };

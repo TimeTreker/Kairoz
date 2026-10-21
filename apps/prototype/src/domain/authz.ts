@@ -38,7 +38,7 @@ export const ACTIONS = {
   'reference.administer': { roles: ['PLATFORM_OPS'], env: 'all' },
   // Processing catalog and intake (DCL 工程)
   'processing.manage': { roles: ['DCL_ENGINEER'], env: 'all' },
-  'image.register': { roles: ['DCL_ENGINEER', 'PLATFORM_OPS'], env: 'all' },
+  'image.register': { roles: ['DCL_ENGINEER', 'VEHICLE_RESOURCE', 'PLATFORM_OPS'], env: 'all' },
   'dataItem.reviewOverlap': { roles: ['DCL_ENGINEER'], env: 'development' },
   'feature.review': { roles: ['DCL_ENGINEER'], env: 'development' },
   'feature.return': { roles: ['DCL_ENGINEER'], env: 'development' },
@@ -52,6 +52,8 @@ export const ACTIONS = {
   'reference.decide': { roles: ['BUSINESS_DEV'], env: 'development' },
   // Validation (业务测试 / 集成测试)
   'feature.dispatch': { roles: ['BUSINESS_DEV', 'BUSINESS_TEST'], env: 'target' },
+  'feature.requestTest': { roles: ['BUSINESS_DEV', 'BUSINESS_TEST'], env: 'target' },
+  'testRequest.decide': { roles: ['WORKSPACE_ADMIN'], env: 'target' },
   'feature.recordTest': { roles: ['BUSINESS_TEST'], env: 'target', excludeDispatchOnly: true },
   'feature.verify': { roles: ['BUSINESS_TEST'], env: 'development', excludeDispatchOnly: true },
   'candidate.dispatch': { roles: ['INTEGRATION_TEST', 'CONFIG_INTEGRATOR'], env: 'testing' },
@@ -60,8 +62,8 @@ export const ACTIONS = {
   // Vehicles (车辆资源 / 工作区管理员)
   'softwareVersion.record': { roles: ['VEHICLE_RESOURCE'], env: 'all' },
   'resource.manage': { roles: ['VEHICLE_RESOURCE'], env: 'target' },
-  'simulation.manage': { roles: ['WORKSPACE_ADMIN'], env: 'target' },
-  'workspace.resources': { roles: ['WORKSPACE_ADMIN'], env: 'target' },
+  'simulation.manage': { roles: ['WORKSPACE_ADMIN', 'VEHICLE_RESOURCE'], env: 'target' },
+  'workspace.resources': { roles: ['WORKSPACE_ADMIN', 'VEHICLE_RESOURCE'], env: 'target' },
   'vehicleGroup.manage': { roles: ['WORKSPACE_ADMIN', 'CONFIG_RELEASE'], env: 'target' },
   // Integration (配置集成) and release (配置发布)
   'merge.manage': { roles: ['CONFIG_INTEGRATOR'], env: 'testing' },

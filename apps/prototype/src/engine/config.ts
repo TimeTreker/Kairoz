@@ -39,6 +39,11 @@ export const EDITABLE_STAGES: readonly FeatureStage[] = ['DRAFT', 'SUBMITTED', '
 /** Feedback kinds that ask the authors for changes: an unchanged resubmit is refused. */
 const CHANGE_REQUESTS: readonly FeedbackKind[] = ['RETURNED', 'BINDING_CHANGED', 'REFERENCE_REVOKED'];
 
+/** Whether DCL or a data owner asked for changes to the Feature's head commit. */
+export function headChangesRequested(s: State, feature: Pick<Feature, 'id' | 'headCommitId'>): boolean {
+  return s.feedback.some((f) => f.featureId === feature.id && f.commitId === feature.headCommitId && CHANGE_REQUESTS.includes(f.kind));
+}
+
 export function displayName(s: State, commitId: string): string {
   const c = s.commits[commitId]!;
   const g = s.groups[c.groupId]!;

@@ -7,6 +7,7 @@ import { newId } from '../domain/ids.ts';
 import { latestRelease } from './config.ts';
 import type { Ctx } from './engine.ts';
 import { isConfirmed } from './integration.ts';
+import { commitSnapshot, resolveFiles } from './snapshots.ts';
 import type { Candidate, Release, Resource, State } from './types.ts';
 import { candidateTestStatus, candidateVerifyBlockers, getCandidate, resolveConfig } from './validation.ts';
 
@@ -74,11 +75,15 @@ export function promoteCandidate(ctx: Ctx, candidateId: string, input: { dclVers
   if (versions.length === 0) throw rule('NO_VEHICLE_VERSIONS', 'list the whole-vehicle software versions this release applies to');
   const unknown = versions.filter((v) => !ctx.s.softwareVersions[`${c.vehicleModelId}::${v}`]);
   if (unknown.length) throw rule('UNKNOWN_SOFTWARE_VERSION', 'these software versions are not recorded', { issues: unknown });
-  // Applicability is evidence too: each listed version must have passed integration testing.
-  const tested = new Set(testedVersions(ctx.s, c));
-  const untested = versions.filter((v) => !tested.has(v));
-  if (untested.length) {
-    throw rule('VERSION_NOT_TESTED', 'some listed software versions have no passing integration test', { issues: untested.map((v) => `${c.vehicleModelId} ${v}`) });
+  // Applicability is evidence too: on a formal baseline each listed version must have passed
+  // integration testing. The first integration is tested before any software is released, on
+  // vehicles without a formal version, and lists the versions from trusted software records.
+  if (c.targetReleaseId !== null) {
+    const tested = new Set(testedVersions(ctx.s, c));
+    const untested = versions.filter((v) => !tested.has(v));
+    if (untested.length) {
+      throw rule('VERSION_NOT_TESTED', 'some listed software versions have no passing integration test', { issues: untested.map((v) => `${c.vehicleModelId} ${v}`) });
+    }
   }
 
   const id = newId('rl');
@@ -97,11 +102,64 @@ export function promoteCandidate(ctx: Ctx, candidateId: string, input: { dclVers
     publishedAt: ctx.now,
   };
   ctx.s.candidates[c.id]!.status = 'RELEASED';
+  // The participating Features are closed; later changes start new Features on this release.
+  for (const src of c.sources) {
+    const f = ctx.s.features[src.featureId];
+    if (f && f.stage === 'INTEGRATED') {
+      f.stage = 'ARCHIVED';
+      f.updatedAt = ctx.now;
+    }
+  }
   // Previews built on the old target can no longer be frozen.
   for (const p of Object.values(ctx.s.mergePlans)) {
     if (p.vehicleModelId === c.vehicleModelId && ['READY', 'CONFLICT', 'BLOCKED'].includes(p.status)) p.status = 'SUPERSEDED';
   }
   return id;
+}
+
+/** The complete configuration set of a release, for review and hand-over (配置集合). */
+export function releaseConfiguration(s: State, releaseId: string) {
+  const r = getRelease(s, releaseId);
+  const pipeline = (id: string) => {
+    const p = s.pipelines[id];
+    return p ? `${p.code}@${p.version}` : id;
+  };
+  return {
+    kind: 'kairoz.release-configuration',
+    prototype: true,
+    productionInstallable: false,
+    vehicleModelId: r.vehicleModelId,
+    dclVersion: r.dclVersion,
+    vehicleIntegrationVersions: r.vehicleIntegrationVersions,
+    sequence: r.sequence,
+    candidate: r.candidateId ? (s.candidates[r.candidateId]?.label ?? null) : null,
+    digest: s.resolvedConfigs[r.resolvedConfigId]?.digest ?? null,
+    publishedBy: r.publishedBy,
+    publishedAt: r.publishedAt,
+    groups: Object.entries(r.groups).map(([groupId, commitId]) => {
+      const config = commitSnapshot(s, commitId);
+      const files = resolveFiles(s, config);
+      return {
+        group: s.groups[groupId]?.code ?? groupId,
+        commitId,
+        commitDigest: s.commits[commitId]?.digest ?? null,
+        files: Object.entries(files).map(([dataKey, f]) => ({
+          dataKey,
+          name: f.name,
+          owned: dataKey in config.files,
+          source: f.source,
+          fileType: f.fileType,
+          format: f.format,
+          schema: f.schema,
+          edge: pipeline(f.edgePipelineId),
+          cloud: pipeline(f.cloudPipelineId),
+          retentionDays: f.retentionDays,
+          privacy: f.privacy,
+        })),
+        policies: Object.entries(config.policies).map(([policyId, p]) => ({ policyId, ...p })),
+      };
+    }),
+  };
 }
 
 export interface Resolution {
@@ -112,6 +170,10 @@ export interface Resolution {
 
 /** The formal release a vehicle should run: the newest one listing its actual software version. */
 export function releaseFor(s: State, r: Resource): Resolution {
+  if (r.softwareStatus === 'PARTIAL_FAILURE') {
+    const failed = r.controllers.filter((c) => c.status === 'FAIL').map((c) => c.name);
+    return { release: null, problem: `a partial software update left controllers inconsistent (${failed.join(', ') || 'mixed versions'}); finish or roll back the software OTA first` };
+  }
   if (!r.integrationVersion) return { release: null, problem: 'the whole-vehicle software version is unknown' };
   const release = releasesOf(s, r.vehicleModelId).find((x) => x.vehicleIntegrationVersions.includes(r.integrationVersion!));
   if (!release) return { release: null, problem: `no release applies to ${r.vehicleModelId} ${r.integrationVersion}` };

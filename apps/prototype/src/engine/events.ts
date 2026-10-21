@@ -5,6 +5,7 @@
 import { authorize } from '../domain/authz.ts';
 import type { AuthzTarget } from '../domain/authz.ts';
 import { notFound, rule } from '../domain/errors.ts';
+import { sha256Hex } from '../domain/canonical.ts';
 import { newId } from '../domain/ids.ts';
 import type { Actor, Ctx } from './engine.ts';
 import type { CollectionEvent, EventFile, Quality, State, TrainingUse } from './types.ts';
@@ -78,8 +79,13 @@ export function captureEvent(
       edgeStatus: 'PENDING',
       cloudStatus: 'PENDING',
       artifactUri: null,
+      chunks: [],
     };
   });
+  for (const f of files) {
+    const count = Math.max(1, Math.ceil(f.sizeBytes / CHUNK_BYTES));
+    f.chunks = Array.from({ length: count }, (_, index) => ({ index, sha256: chunkDigest(id, f.dataKey, index), received: false }));
+  }
   const release = config.kind === 'RELEASE' ? ctx.s.releases[config.sourceId] : undefined;
   ctx.s.events[id] = {
     id,
@@ -110,6 +116,8 @@ export function captureEvent(
     failure: null,
     failParse: input.failParse ?? false,
     processingAttempts: 0,
+    callbacks: [],
+    callbackSends: 0,
     quality: input.quality ?? 'UNKNOWN',
     trainingUse: input.trainingUse ?? 'UNCONFIRMED',
   };
@@ -121,8 +129,8 @@ export function advanceEvent(ctx: Ctx, eventId: string): CollectionEvent['status
   const e = ctx.s.events[eventId];
   if (!e) throw notFound('event', eventId);
   if (e.status === 'UPLOADING') {
-    for (const f of e.files) f.edgeStatus = 'UPLOADED';
-    e.status = 'PROCESSING';
+    // The edge sends every outstanding chunk.
+    for (const f of e.files) for (const c of f.chunks) receiveChunk(ctx, e.id, f.dataKey, c.index, c.sha256);
   } else if (e.status === 'PROCESSING') {
     e.processingAttempts += 1;
     if (e.failParse) {
@@ -136,9 +144,45 @@ export function advanceEvent(ctx: Ctx, eventId: string): CollectionEvent['status
       }
       e.status = 'DONE';
       e.failure = null;
+      deliverCallback(ctx, e.id);
     }
   }
   return e.status;
+}
+
+const CHUNK_BYTES = 8_000_000;
+
+function chunkDigest(eventId: string, dataKey: string, index: number): string {
+  return `sha256:${sha256Hex(`${eventId}/${dataKey}/${index}`)}`;
+}
+
+/**
+ * One upload chunk arrives (system context: the vehicle's uploader). A resent chunk changes
+ * nothing; a chunk whose checksum does not match is refused and must be sent again.
+ */
+export function receiveChunk(ctx: Ctx, eventId: string, dataKey: string, index: number, checksum: string): 'ACCEPTED' | 'REPLAYED' {
+  const e = ctx.s.events[eventId];
+  if (!e) throw notFound('event', eventId);
+  const f = e.files.find((x) => x.dataKey === dataKey);
+  const chunk = f?.chunks.find((c) => c.index === index);
+  if (!f || !chunk) throw notFound('upload chunk', `${eventId}/${dataKey}/${index}`);
+  if (checksum !== chunk.sha256) throw rule('CHECKSUM_MISMATCH', `chunk ${index} of ${f.name} does not match its checksum; it was not stored`);
+  if (chunk.received) return 'REPLAYED';
+  chunk.received = true;
+  if (f.chunks.every((c) => c.received)) f.edgeStatus = 'UPLOADED';
+  if (e.status === 'UPLOADING' && e.files.every((x) => x.edgeStatus === 'UPLOADED')) e.status = 'PROCESSING';
+  return 'ACCEPTED';
+}
+
+/** Notifies the business consumer that the event's artifacts are ready; repeats are deduplicated. */
+export function deliverCallback(ctx: Ctx, eventId: string): 'DELIVERED' | 'DUPLICATE' {
+  const e = ctx.s.events[eventId];
+  if (!e) throw notFound('event', eventId);
+  if (e.status !== 'DONE') throw rule('CALLBACK_TOO_EARLY', 'the event is not processed yet');
+  e.callbackSends += 1;
+  if (e.callbacks.length > 0) return 'DUPLICATE';
+  e.callbacks.push({ deliveryId: `cb-${e.id}`, at: ctx.now });
+  return 'DELIVERED';
 }
 
 /** Runs an event's processing to its end, e.g. for demo samples. */

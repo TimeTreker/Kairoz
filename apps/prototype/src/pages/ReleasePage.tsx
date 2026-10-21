@@ -19,8 +19,8 @@ import { DEPLOYMENT_STATUS_LABELS, TARGET_STATUS_COLORS, TARGET_STATUS_LABELS } 
 function projectOf(s: State, workspaceId: string | undefined): string | undefined {
   const ws = workspaceId ? s.workspaces[workspaceId] : undefined;
   if (!ws) return undefined;
-  if (ws.kind === 'PROJECT') return ws.id;
-  return Object.values(s.workspaces).find((w) => w.kind === 'PROJECT' && w.status === 'ACTIVE' && w.vehicleModelId === ws.vehicleModelId)?.id;
+  if (ws.kind !== 'TEAM') return ws.id;
+  return Object.values(s.workspaces).find((w) => w.kind !== 'TEAM' && w.status === 'ACTIVE' && w.vehicleModelId === ws.vehicleModelId && Object.values(s.vehicleGroups).some((g) => g.workspaceId === w.id && g.purpose === 'PRODUCTION'))?.id;
 }
 
 const releaseLabel = (s: State, configId: string | null) => (configId ? (s.resolvedConfigs[configId]?.label ?? configId) : '—');

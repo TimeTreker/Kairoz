@@ -114,7 +114,7 @@ export function demoState(): State {
       kind: 'PROJECT',
       orgUnitId: 'x89',
       vehicleModelId: 'X89',
-      groupIds: [],
+      groupIds: DEMO_TEAMS.map((t) => t.group),
       scopes: ['Vehicle', 'Chassis', 'ADC', 'CDC'],
       sourceWorkspaceIds: teamWorkspaces,
     }),
@@ -300,6 +300,26 @@ export function demoState(): State {
   as('steering_tester', (c) => recordFeatureTest(c, returnRate, { commitId: returnCommit, resourceId: 'VEH-003', result: 'PASS', summary: '实车低附路面回正测试通过' }));
   as('steering_tester', (c) => verifyFeature(c, returnRate));
 
+  // Brake already monitors hard braking on its development vehicles, so after-sales and training
+  // queries have brake data to find.
+  const monitor = as<string>('business', (c) => createFeature(c, { workspaceId: 'team-brake', groupId: 'brake', name: 'brake_monitor', description: '急刹车监测与处理失败诊断' }));
+  const monitorKey = as<string>('business', (c) =>
+    addFile(c, monitor, { source: { unit: 'ADC', directory: '/var/log/brake', pattern: 'monitor.log' }, name: '制动监测日志', purpose: '急刹车与故障诊断' }),
+  );
+  as('business', (c) =>
+    putPolicy(c, monitor, 'chassis.brake.monitor', { name: '急刹车', trigger: 'brake_pressure > 80 AND vehicle_deceleration > 6', captures: [monitorKey], preSeconds: 10, postSeconds: 10 }),
+  );
+  as('business', (c) =>
+    putPolicy(c, monitor, 'chassis.brake.failure_diag', { name: '处理失败诊断', trigger: 'brake_fault_code > 0', captures: [monitorKey], preSeconds: 5, postSeconds: 5 }),
+  );
+  const monitorCommit = as<{ commitId: string }>('business', (c) => submitFeature(c, monitor, { message: '急刹车监测' })).commitId;
+  const monitorDispatch = as<string>('brake_tester', (c) => dispatchFeature(c, monitor, { commitId: monitorCommit, vehicleGroupIds: [brakeGroup] }));
+  for (const vehicle of ['SIM-021', 'VEH-001']) engine.run(null, (c) => sendReceipt(c, monitorDispatch, vehicle, 'APPLIED'));
+  for (const vehicle of ['SIM-021', 'VEH-001']) {
+    as('brake_tester', (c) => recordFeatureTest(c, monitor, { commitId: monitorCommit, resourceId: vehicle, result: 'PASS', summary: '急刹车与故障码场景触发正确' }));
+  }
+  as('brake_tester', (c) => verifyFeature(c, monitor));
+
   // Sample collection events (MOCK_SAMPLE, fixed date 2026-10-18): successes, a parser failure,
   // unknown quality and unconfirmed use, on vehicles that really run these configurations.
   for (const [vehicle, policyId, at, failParse, quality, trainingUse] of [
@@ -311,6 +331,11 @@ export function demoState(): State {
     ['VEH-003', 'chassis.steering.return_rate', '2026-10-18T06:00:00.000Z', false, 'A', 'ALLOWED'],
     ['VEH-003', 'chassis.steering.angle_jump', '2026-10-18T06:20:00.000Z', true, 'UNKNOWN', 'UNCONFIRMED'],
     ['SIM-022', 'chassis.steering.return_rate', '2026-10-18T08:00:00.000Z', false, 'A', 'DENIED'],
+    ['VEH-001', 'chassis.brake.monitor', '2026-10-18T01:30:00.000Z', false, 'A', 'ALLOWED'],
+    ['VEH-001', 'chassis.brake.monitor', '2026-10-18T04:10:00.000Z', false, 'B', 'ALLOWED'],
+    ['VEH-001', 'chassis.brake.monitor', '2026-10-18T06:45:00.000Z', false, 'UNKNOWN', 'UNCONFIRMED'],
+    ['VEH-001', 'chassis.brake.failure_diag', '2026-10-18T07:05:00.000Z', true, 'UNKNOWN', 'UNCONFIRMED'],
+    ['SIM-021', 'chassis.brake.monitor', '2026-10-18T09:20:00.000Z', false, 'A', 'ALLOWED'],
   ] as const) {
     engine.run(null, (c) => {
       const id = captureEvent(c, { resourceId: vehicle, policyId, occurredAt: at, failParse, origin: 'MOCK_SAMPLE', quality, trainingUse });
