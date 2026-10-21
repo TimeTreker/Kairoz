@@ -82,6 +82,9 @@ describe('collection events', () => {
     assert.equal(manifest.items[0]!.dclVersion, '1.0.0');
     assert.match(manifest.items[0]!.files[0]!.artifactUri, /^dcl:\/\/artifacts\//);
     assert.ok(!JSON.stringify(manifest).includes('LSDEM0X89'), 'no VIN in the manifest');
+    assert.equal(manifest.mock, true, 'demo samples are marked as mock');
+    assert.ok(manifest.items.every((i) => i.origin === 'MOCK_SAMPLE'));
+    assert.equal(ev.trainingQuery(s, actor('release'), 'x89-project', { vehicleModelId: 'X99', availability: 'ALL' }).length, 0);
   });
 
   test('the simulator processes new events; DCL reprocesses parser failures with the pinned versions', () => {

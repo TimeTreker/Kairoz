@@ -7,6 +7,7 @@ import { engine, useEngineState } from '../app/store.ts';
 import { Mono, StageTag, when } from '../components/common.tsx';
 import { canReadFeature, displayName, draftReviewRequired, EDITABLE_STAGES, featureChanges, submitFeature } from '../engine/config.ts';
 import { returnFeature } from '../engine/intake.ts';
+import { isCollectible } from '../engine/integration.ts';
 import { useI18n } from '../i18n/i18n.tsx';
 import { CANDIDATE_STATUS_LABELS, FEEDBACK_LABELS, STAGE_LABELS } from '../i18n/vocab.ts';
 import { FilesTab } from './feature/FilesTab.tsx';
@@ -32,9 +33,11 @@ export function FeatureDetailPage({ featureId }: { featureId: string }) {
   }
   const group = state.groups[feature.groupId]!;
   const target = { workspaceId: feature.workspaceId, groupId: group.id, scope: group.domain };
-  const canSubmit = EDITABLE_STAGES.includes(feature.stage) && can('feature.submit', target);
-  const canReturn = (feature.stage === 'SUBMITTED' || feature.stage === 'DCL_READY') && can('feature.return', target);
   const unsubmitted = !featureChanges(state, feature).sinceHead.empty;
+  // Submitting an unchanged draft only reuses the head commit, so offer it when there is something to submit.
+  const canSubmit = EDITABLE_STAGES.includes(feature.stage) && (feature.stage === 'DRAFT' || unsubmitted) && can('feature.submit', target);
+  const canReturn = (feature.stage === 'SUBMITTED' || feature.stage === 'DCL_READY') && can('feature.return', target);
+  const verifiedHeadCollectible = feature.stage === 'DRAFT' && unsubmitted && isCollectible(state, feature);
   const latestFeedback = state.feedback.filter((f) => f.featureId === feature.id && f.commitId === feature.headCommitId).at(-1);
   const integratedIn = Object.values(state.candidates).filter((c) => c.sources.some((x) => x.featureId === feature.id));
   const review = draftReviewRequired(state, feature);
@@ -95,7 +98,26 @@ export function FeatureDetailPage({ featureId }: { featureId: string }) {
           {feature.stage === 'DRAFT' && latestFeedback && (
             <Alert type="warning" showIcon title={B(FEEDBACK_LABELS[latestFeedback.kind])} description={latestFeedback.reason} />
           )}
-          {feature.stage === 'DRAFT' && unsubmitted && <Alert type="info" showIcon title={L('草稿有未提交的修改。', 'The draft has unsubmitted changes.')} />}
+          {feature.stage === 'DRAFT' && unsubmitted && !verifiedHeadCollectible && <Alert type="info" showIcon title={L('草稿有未提交的修改。', 'The draft has unsubmitted changes.')} />}
+          {verifiedHeadCollectible && (
+            <Alert
+              type="info"
+              showIcon
+              title={L('草稿有未提交的修改；已验证的最新提交仍可被集成收集。', 'The draft has unsubmitted changes; the verified head commit can still be integrated.')}
+              description={L(
+                `集成收集的是 ${displayName(state, feature.headCommitId!)}。提交草稿会生成新提交，需重新测试与验证，旧结果不继承。`,
+                `Integration collects ${displayName(state, feature.headCommitId!)}. Submitting the draft creates a new commit that must be tested and verified again; old results do not carry over.`,
+              )}
+            />
+          )}
+          {feature.stage === 'ARCHIVED' && unsubmitted && (
+            <Alert
+              type="warning"
+              showIcon
+              title={L('草稿中未提交的修改没有进入发布，已随归档冻结。', 'Unsubmitted draft changes did not go into the release and are frozen with the archive.')}
+              description={L('后续修改请基于最新正式版本新建 Feature。', 'Make further changes in a new Feature based on the latest release.')}
+            />
+          )}
           {feature.stage === 'SUBMITTED' && <Alert type="warning" showIcon title={L('等待 DCL 工程审核敏感文件。', 'Waiting for DCL engineering to review sensitive files.')} />}
         </Space>
       </Card>

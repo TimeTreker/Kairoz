@@ -12,7 +12,7 @@ import { otaRollouts } from '../engine/ota.ts';
 import { releaseFor, releasesOf } from '../engine/release.ts';
 import { managedResources, pendingDeploymentOf, vehicleGroupsOf, workspaceVehicles } from '../engine/fleet.ts';
 import { referenceRequestsFor } from '../engine/references.ts';
-import { candidateTestStatus, featureTestStatus } from '../engine/validation.ts';
+import { candidateTestStatus, featureTestStatus, testRequestsOf } from '../engine/validation.ts';
 import type { Feature } from '../engine/types.ts';
 import { useI18n } from '../i18n/i18n.tsx';
 import { CANDIDATE_STATUS_COLORS, CANDIDATE_STATUS_LABELS, FEEDBACK_LABELS } from '../i18n/vocab.ts';
@@ -110,6 +110,13 @@ export function WorkbenchPage() {
           <Col span={8}><Statistic title={L('未分组', 'Ungrouped')} value={vehicles.filter((r) => !state.groupMembers[r.id]).length} /></Col>
           <Col span={8}><Statistic title={L('车辆组', 'Vehicle groups')} value={vehicleGroupsOf(state, workspace.id).filter((g) => g.status === 'ACTIVE').length} /></Col>
         </Row>
+        {testRequestsOf(state, workspace.id).some((r) => r.status === 'PENDING') && (
+          <Button type="link" style={{ paddingLeft: 0, marginTop: 8 }} onClick={() => navigate('fleet')}>
+            <Badge count={testRequestsOf(state, workspace.id).filter((r) => r.status === 'PENDING').length} size="small" offset={[10, 0]}>
+              {L('待审批的团队测试申请', 'Team test requests to decide')}
+            </Badge>
+          </Button>
+        )}
       </Card>,
     );
   }

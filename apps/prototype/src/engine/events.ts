@@ -280,6 +280,8 @@ export interface TrainingRecord {
   quality: Quality;
   trainingUse: TrainingUse;
   fileCount: number;
+  /** Where the data came from; every prototype event is a mock and says so. */
+  origin: CollectionEvent['origin'];
   blockers: string[];
 }
 
@@ -297,11 +299,13 @@ function trainingRecord(e: CollectionEvent): TrainingRecord {
     quality: e.quality,
     trainingUse: e.trainingUse,
     fileCount: e.files.length,
+    origin: e.origin,
     blockers: trainingBlockers(e),
   };
 }
 
 export interface TrainingFilter {
+  vehicleModelId?: string;
   policy?: string;
   scenario?: string;
   from?: string;
@@ -316,6 +320,7 @@ export function trainingQuery(s: State, actor: Actor, workspaceId: string, f: Tr
     .map(trainingRecord)
     .filter(
       (t) =>
+        (!f.vehicleModelId || t.vehicleModelId === f.vehicleModelId) &&
         (!f.policy || has(t.policyId, f.policy)) &&
         (!f.scenario || has(t.scenario, f.scenario)) &&
         (!f.from || t.occurredAt >= f.from) &&
@@ -330,8 +335,11 @@ export interface DataManifest {
   version: 1;
   generatedAt: string;
   generatedBy: string;
+  /** True when any item is simulated or demo data: never to be registered as real collection. */
+  mock: boolean;
   items: {
     eventId: string;
+    origin: CollectionEvent['origin'];
     vehicleModelId: string;
     policyId: string;
     policyVersion: number;
@@ -364,8 +372,10 @@ export function exportManifest(ctx: Ctx, eventIds: string[]): DataManifest {
     version: 1,
     generatedAt: ctx.now,
     generatedBy: ctx.user().username,
+    mock: events.some((e) => e.origin.startsWith('MOCK')),
     items: events.map((e) => ({
       eventId: e.id,
+      origin: e.origin,
       vehicleModelId: e.vehicleModelId,
       policyId: e.policyId,
       policyVersion: ctx.s.policyVersions[e.policyVersionId]?.version ?? 0,

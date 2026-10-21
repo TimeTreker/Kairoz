@@ -48,7 +48,6 @@ const can = (w: World, user: string, action: Parameters<typeof authorize>[1], ta
 
 export const scenes: Record<string, SceneSpec> = {
   A01: {
-    adaptation: '浏览器原型没有服务器、数据库或部署；状态保存在浏览器本地。部署与重启在浏览器层以“重置为干净安装 + 刷新页面”核对持久化。',
     run: (w) => {
       // What the engine can show: a clean installation round-trips through its serialized form.
       const restored = new World(JSON.parse(JSON.stringify(w.s)) as State);
@@ -87,7 +86,6 @@ export const scenes: Record<string, SceneSpec> = {
     },
   },
   A04: {
-    adaptation: '跨组只读引用在 Kairoz 中按数据项申请与批准；此时还没有数据项，“读取不等于修改”由 T-N07 验证。',
     run: (w) => {
       for (const [id, code, name, domain, unit] of [
         ['brake', 'chassis.brake', '制动组', 'Chassis', 'brake-team'],
@@ -212,7 +210,6 @@ export const scenes: Record<string, SceneSpec> = {
     },
   },
   A10: {
-    adaptation: '演示 VIN 使用合法的 17 位格式（不含 I/O/Q）。',
     run: (w) => {
       w.as('resource', (c) => fleet.registerPhysical(c, { id: 'VEH-901', vin: 'LSDEMX89000000901', vehicleModelId: 'X89', env: 'development', pool: 'Chassis', displayName: '制动研发车 901' }));
       w.eq(w.s.resources['VEH-901']!.integrationVersion, null, 'unknown software stays unknown');
@@ -346,7 +343,6 @@ export const scenes: Record<string, SceneSpec> = {
     },
   },
   C04: {
-    adaptation: '脱敏与上传边界没有真实算子；测试人员在模拟回执生效后登记基于合成样本的结论。仿真在 B06 停止，前置条件“授权仿真可用”由工作区管理员重新启动。',
     run: (w) => {
       const f = w.ref.camera!;
       w.as('workspace_manager', (c) => fleet.startSimulation(c, 'SIM-901'));
@@ -379,7 +375,6 @@ export const scenes: Record<string, SceneSpec> = {
     },
   },
   D02: {
-    adaptation: '电池、动力的 Verified 提交没有对应的幕；由前置夹具补齐（平台运维为 workspace_manager 增加电池/动力工作区授权，团队登记仿真与实车并完成业务验证），其中电池两个 Feature 定义同一策略、内容不同，用于检验冲突。',
     run: (w) => {
       // Precondition fixture: battery and power Verified commits.
       w.as('admin', (c) => replaceGrants(c, 'workspace_manager', [grant('WORKSPACE_ADMIN', ['team-brake', 'team-battery', 'team-power'], {})]));
@@ -603,7 +598,6 @@ export const scenes: Record<string, SceneSpec> = {
   },
   F05: {
     needs: ['F03'],
-    adaptation: '原型不建模仿真配额；“回收配额”以停止实例与解除预约体现。',
     run: (w) => {
       const fix = w.ref.firstBrakeFix!;
       const d = w.as('brake_tester', (c) => v.dispatchFeature(c, fix, { commitId: w.s.features[fix]!.headCommitId!, vehicleGroupIds: [w.ref.devGroup!] }));
@@ -627,7 +621,6 @@ export const scenes: Record<string, SceneSpec> = {
     },
   },
   F07: {
-    adaptation: '原型以“导出 / 导入完整状态 JSON”代替数据库与存储备份恢复；监控接手不适用。',
     run: (w) => {
       const restored = new World(JSON.parse(JSON.stringify(w.s)) as State);
       for (const key of ['releases', 'receipts', 'events', 'audit', 'deployments'] as const) {

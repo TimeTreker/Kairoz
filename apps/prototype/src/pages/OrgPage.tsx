@@ -45,6 +45,22 @@ export function OrgPage() {
   const units = Object.values(state.orgUnits);
   const unitOptions = units.map((u) => ({ value: u.id, label: `${unitPath(state, u.id).map((p) => p.name).join(' / ')} (${u.kind})` }));
   const close = () => (setModal(null), form.resetFields());
+  const modalTitle =
+    modal === 'unit'
+      ? L('新建组织节点', 'New org unit')
+      : modal === 'project'
+        ? L('成立项目', 'Establish a project')
+        : modal === 'model'
+          ? L('登记车型', 'Register a vehicle model')
+          : modal === 'group'
+            ? L('新建业务分组', 'New business group')
+            : modal === 'workspace'
+              ? L('新建工作区', 'New workspace')
+              : modal && 'edit' in modal
+                ? `${L('编辑组织节点', 'Edit org unit')} · ${state.orgUnits[modal.edit]?.name ?? modal.edit}`
+                : modal && 'ws' in modal
+                  ? `${L('编辑工作区', 'Edit workspace')} · ${state.workspaces[modal.ws]?.name ?? modal.ws}`
+                  : '';
   const kind = Form.useWatch('kind', form);
 
   const save = () =>
@@ -158,7 +174,7 @@ export function OrgPage() {
           },
         ]}
       />
-      <Modal open={modal !== null} title={L('保存', 'Save')} onCancel={close} onOk={save} destroyOnHidden>
+      <Modal open={modal !== null} title={modalTitle} onCancel={close} onOk={save} destroyOnHidden>
         <Form form={form} name="org" layout="vertical" preserve={false} initialValues={{ kind: 'TEAM', purpose: 'DEV', domain: 'Chassis' }}>
           {(modal === 'unit' || modal === 'project' || modal === 'model' || modal === 'group' || modal === 'workspace') && (
             <Form.Item name="id" label="ID" rules={[{ required: true }]}>

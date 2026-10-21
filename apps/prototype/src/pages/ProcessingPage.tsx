@@ -4,7 +4,8 @@ import { useState } from 'react';
 import { useCan, useRun } from '../app/hooks.ts';
 import { useEngineState } from '../app/store.ts';
 import { Hint, Mono, PageHeader, when } from '../components/common.tsx';
-import { FILE_TYPES, PRIVACY_LEVELS } from '../domain/file-types.ts';
+import { FILE_TYPES, PRIVACY_LEVELS, typeAlwaysRequiresReview } from '../domain/file-types.ts';
+import type { FileType } from '../domain/file-types.ts';
 import { createPipeline, createTemplate, currentTemplate } from '../engine/processing.ts';
 import { useI18n } from '../i18n/i18n.tsx';
 import { FILE_TYPE_LABELS } from '../i18n/vocab.ts';
@@ -19,6 +20,8 @@ export function ProcessingPage() {
   const [templateOpen, setTemplateOpen] = useState(false);
   const [pf] = Form.useForm();
   const [tf] = Form.useForm();
+  const templateType = Form.useWatch('fileType', tf) as FileType | undefined;
+  const reviewForced = !!templateType && typeAlwaysRequiresReview(templateType);
   const pipelines = Object.values(state.pipelines).sort((a, b) => a.code.localeCompare(b.code) || a.version - b.version);
   const templates = FILE_TYPES.map((t) => ({ fileType: t, template: currentTemplate(state, t) }));
 
@@ -148,9 +151,17 @@ export function ProcessingPage() {
               <InputNumber min={1} />
             </Form.Item>
           </Space>
-          <Form.Item name="requiresReview" valuePropName="checked">
-            <Checkbox>{L('要求敏感审核', 'Require sensitive review')}</Checkbox>
-          </Form.Item>
+          {reviewForced ? (
+            <Form.Item extra={L('敏感与未知类型始终需要审核，不能关闭。', 'Sensitive and unknown types always require review; it cannot be turned off.')}>
+              <Checkbox checked disabled>
+                {L('要求敏感审核', 'Require sensitive review')}
+              </Checkbox>
+            </Form.Item>
+          ) : (
+            <Form.Item name="requiresReview" valuePropName="checked">
+              <Checkbox>{L('要求敏感审核', 'Require sensitive review')}</Checkbox>
+            </Form.Item>
+          )}
         </Form>
       </Modal>
     </div>

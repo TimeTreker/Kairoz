@@ -7,7 +7,7 @@ import { useErrorText } from '../app/hooks.ts';
 import { engine, useEngineState } from '../app/store.ts';
 import { EnvTag, LabelTag, Mono, PageHeader, when } from '../components/common.tsx';
 import type { Ctx } from '../engine/engine.ts';
-import { advanceEvent, assessEvent, capturablePolicies, captureEvent, setFailParse } from '../engine/events.ts';
+import { advanceEvent, assessEvent, capturablePolicies, captureEvent, deliverCallback, receiveChunk, setFailParse } from '../engine/events.ts';
 import type { Quality, TrainingUse } from '../engine/types.ts';
 import { pendingForVehicles, sendReceipt, setAgent, tick } from '../engine/simulator.ts';
 import { useI18n } from '../i18n/i18n.tsx';
@@ -84,11 +84,12 @@ export function SimulatorPage() {
                 { title: L('配置', 'Configuration'), render: (_, p) => <Mono>{state.resolvedConfigs[p.deployment.resolvedConfigId]?.label}</Mono> },
                 { title: L('下发', 'Dispatch'), render: (_, p) => <Mono>{p.deployment.id}</Mono> },
                 { title: L('尝试', 'Attempt'), render: (_, p) => p.target.attempt },
-                { title: L('下发时间', 'Since'), render: (_, p) => when(p.deployment.createdAt) },
+                { title: L('本次尝试开始', 'Attempt since'), render: (_, p) => when(p.target.updatedAt) },
                 {
                   title: '',
                   render: (_, p) => {
-                    const online = state.resources[p.target.resourceId]!.agent.online;
+                    const vehicle = state.resources[p.target.resourceId]!;
+                    const online = vehicle.agent.online && vehicle.instance !== 'STOPPED';
                     return (
                       <Space>
                         <Button size="small" type="primary" disabled={!online} onClick={() => system((c) => sendReceipt(c, p.deployment.id, p.target.resourceId, 'APPLIED'), L('车辆已回执：应用成功', 'Receipt sent: applied'))}>
@@ -97,7 +98,8 @@ export function SimulatorPage() {
                         <Button size="small" danger disabled={!online} onClick={() => system((c) => sendReceipt(c, p.deployment.id, p.target.resourceId, 'FAILED', 'simulated apply failure'), L('车辆已回执：失败', 'Receipt sent: failed'))}>
                           {L('回执：失败', 'Receipt: failed')}
                         </Button>
-                        {!online && <Tag>{L('离线', 'offline')}</Tag>}
+                        {!vehicle.agent.online && <Tag>{L('离线', 'offline')}</Tag>}
+                        {vehicle.instance === 'STOPPED' && <Tag>{L('实例已停止', 'instance stopped')}</Tag>}
                       </Space>
                     );
                   },
@@ -170,12 +172,34 @@ export function SimulatorPage() {
               },
               {
                 title: '',
-                render: (_, e) =>
-                  (e.status === 'UPLOADING' || e.status === 'PROCESSING') && (
-                    <Button size="small" onClick={() => system((c) => advanceEvent(c, e.id))}>
-                      {L('推进一步', 'Advance')}
-                    </Button>
-                  ),
+                render: (_, e) => {
+                  const f = e.files[0];
+                  const chunk = f?.chunks[0];
+                  return (
+                    <Space size={0} wrap>
+                      {(e.status === 'UPLOADING' || e.status === 'PROCESSING') && (
+                        <Button size="small" onClick={() => system((c) => advanceEvent(c, e.id))}>
+                          {L('推进一步', 'Advance')}
+                        </Button>
+                      )}
+                      {f && chunk && (
+                        <Button type="link" size="small" onClick={() => system((c) => receiveChunk(c, e.id, f.dataKey, 0, chunk.sha256), L('分片已重传（幂等）', 'Chunk resent (idempotent)'))}>
+                          {L('重传分片', 'Resend chunk')}
+                        </Button>
+                      )}
+                      {f && chunk && (
+                        <Button type="link" size="small" danger onClick={() => system((c) => receiveChunk(c, e.id, f.dataKey, 0, 'sha256:tampered'))}>
+                          {L('篡改校验', 'Tamper checksum')}
+                        </Button>
+                      )}
+                      {e.status === 'DONE' && (
+                        <Button type="link" size="small" onClick={() => system((c) => deliverCallback(c, e.id), L('回调已发送（重复会去重）', 'Callback sent (duplicates are ignored)'))}>
+                          {L('重复回调', 'Repeat callback')}
+                        </Button>
+                      )}
+                    </Space>
+                  );
+                },
               },
               {
                 title: L('质量检查（外部）', 'Quality check (external)'),

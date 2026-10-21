@@ -58,7 +58,6 @@ export const cases: Record<string, SceneSpec> = {
     },
   },
   'T-N03': {
-    adaptation: '浏览器原型中操作逐个在事务中执行，没有并发写入；以先后两次登记同 VIN / 同 ID 验证只保留一项、失败无部分写入。',
     run: (w) => {
       w.fails('VIN_TAKEN', () => w.as('resource', (c) => fleet.registerPhysical(c, { id: 'VEH-777', vin: 'LSDEM0X8900000001', vehicleModelId: 'X89', env: 'development', pool: 'Chassis' })));
       w.fails('ID_TAKEN', () => w.as('resource', (c) => fleet.registerPhysical(c, { id: 'VEH-001', vin: 'LSDEMX89000000777', vehicleModelId: 'X89', env: 'development', pool: 'Chassis' })));
@@ -72,7 +71,6 @@ export const cases: Record<string, SceneSpec> = {
     },
   },
   'T-N05': {
-    adaptation: '原型没有网络请求与 requestId；以重复提交同一文件创建来验证：被拒绝且返回已有的 data_key，只有一个身份与一份双侧绑定。',
     run: (w) => {
       const f = w.as('business', (c) => config.createFeature(c, { workspaceId: 'team-brake', groupId: 'brake', name: 'replay_check' }));
       const src = { unit: 'ADC', directory: '/var/log/brake', pattern: 'replay.log' };
@@ -153,7 +151,6 @@ export const cases: Record<string, SceneSpec> = {
     },
   },
   'T-N12': {
-    adaptation: 'Kairoz 的 DCL 版本只来自正式发布，不随软件 Build 产生；“仅改 Build 不出新版本”自然成立。',
     run: (w) => {
       const brake = feature(w, 'guided_brake');
       const r = w.as('business', (c) => config.submitFeature(c, brake.id, {}));

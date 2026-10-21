@@ -100,7 +100,7 @@ export function FeedbackTimeline({ feature }: { feature: Feature }) {
     <Timeline
       items={items.map((f) => ({
         color: f.kind === 'BINDING_CHANGED' ? 'blue' : 'red',
-        children: (
+        content: (
           <div>
             <Tag>{B(FEEDBACK_LABELS[f.kind])}</Tag>
             <Typography.Text>{f.reason}</Typography.Text>

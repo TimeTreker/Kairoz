@@ -100,8 +100,6 @@ export interface SceneSpec {
   needs?: string[];
   /** Run on a copy of the world as it was after this scene (side branches). */
   forkAfter?: string;
-  /** How Kairoz plays the scene where it differs from the original platform. */
-  adaptation?: string;
   run: SceneRun;
 }
 

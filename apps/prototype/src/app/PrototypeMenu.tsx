@@ -39,6 +39,7 @@ export function PrototypeMenu({ compact = false }: { compact?: boolean }) {
           items: [
             { key: 'sim', label: L('车辆模拟器', 'Vehicle simulator'), onClick: () => navigate('simulator') },
             { key: 'guide', label: L('场景手册', 'Scenario guide'), onClick: () => navigate('guide') },
+            { key: 'acceptance', label: L('流程验收（逐幕）', 'Acceptance replay'), onClick: () => navigate('acceptance') },
             { type: 'divider' },
             { key: 'demo', label: L('重置为演示数据', 'Reset to demo data'), onClick: () => confirmReset('demo') },
             { key: 'clean', label: L('重置为干净安装', 'Reset to clean installation'), onClick: () => confirmReset('clean') },

@@ -105,11 +105,13 @@ export function IntakeTab({ feature }: { feature: Feature }) {
               render: (_, i) =>
                 canReview && (
                   <Space size={0}>
-                    <Button type="link" size="small" onClick={() => (form.resetFields(), setDeciding({ dataKey: i.dataKey, decision: 'APPROVED' }))}>
-                      {L('批准', 'Approve')}
-                    </Button>
+                    {i.status !== 'APPROVED' && (
+                      <Button type="link" size="small" onClick={() => (form.resetFields(), setDeciding({ dataKey: i.dataKey, decision: 'APPROVED' }))}>
+                        {L('批准', 'Approve')}
+                      </Button>
+                    )}
                     <Button type="link" size="small" danger onClick={() => (form.resetFields(), setDeciding({ dataKey: i.dataKey, decision: 'REJECTED' }))}>
-                      {L('拒绝', 'Reject')}
+                      {i.status === 'APPROVED' ? L('撤回批准', 'Withdraw approval') : L('拒绝', 'Reject')}
                     </Button>
                   </Space>
                 ),

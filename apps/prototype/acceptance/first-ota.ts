@@ -41,7 +41,6 @@ const firstWorkspaceSetup = (w: World) => {
 
 export const scenes: Record<string, SceneSpec> = {
   E01: {
-    adaptation: '原型没有服务端：以“干净安装”代替空平台部署；runId 记在验收结果里。',
     run: (w) => {
       w.eq(Object.keys(w.s.accounts), ['admin'], 'an empty platform with only admin');
       w.notApplicable('启动服务、健康检查与运行目录属于服务端部署，浏览器原型不适用');
@@ -58,7 +57,6 @@ export const scenes: Record<string, SceneSpec> = {
     },
   },
   E03: {
-    adaptation: 'Kairoz 要求修改共享处理目录的 DCL 授权覆盖全部工作区与分组（`*`）；本安装中“相关组及两个工作区”即全部，故授予 `*`。',
     run: (w) => {
       const g = (role: string, workspaces: string[], groups: string[], scopes: string[], envs: string[]) => ({ role, workspaces, groups, scopes, envs, dispatchOnly: false });
       for (const [username, displayName, grants] of [
@@ -87,7 +85,6 @@ export const scenes: Record<string, SceneSpec> = {
     },
   },
   E05: {
-    adaptation: '剧本中的模拟 VIN “LSDEMOX89000000901” 是 18 位且含字母 O，不是合法 VIN；平台拒绝后改用合法的 17 位模拟 VIN。车辆组设为“需审批”，对应 E06/E07 的团队测试申请流程。',
     run: (w) => {
       w.as('dcl', (c) => fleet.registerImage(c, { id: 'x89-dev-first', vehicleModelId: 'X89', integrationVersion: null, build: 'dev-first', digest: 'sha256:mock-dev-first', simulator: 'SimOne 3' }));
       w.as('resource', (c) => fleet.createSimulation(c, { id: 'SIM-901', workspaceId: 'team-brake', imageId: 'x89-dev-first', env: 'development', pool: 'Chassis' }));
@@ -195,7 +192,6 @@ export const scenes: Record<string, SceneSpec> = {
   },
   E13: {
     needs: ['E12'],
-    adaptation: '签名配置包（ZIP、Ed25519 服务端签名）需要服务端；剧本规定离线页不伪造服务端签名，原型提供“导出配置集合”JSON。',
     run: (w) => {
       const doc = rel.releaseConfiguration(w.s, w.ref.release!);
       w.eq([doc.dclVersion, doc.vehicleModelId, doc.vehicleIntegrationVersions, doc.prototype, doc.productionInstallable], ['1.0.0', 'X89', ['1.0'], true, false], 'version, model, software and prototype markings');
@@ -251,7 +247,6 @@ export const scenes: Record<string, SceneSpec> = {
   },
   E17: {
     needs: ['E16'],
-    adaptation: '业务节点、Parser 与业务需求人的数据确认未接入；以模拟器的合成事件验证配置快照、分片上传、产物与回调，真实环节记为未执行。',
     run: (w) => {
       const id = w.sys((c) => ev.captureEvent(c, { resourceId: 'VEH-903', policyId: 'chassis.brake.brake_debug' }));
       const e0 = w.s.events[id]!;
@@ -266,7 +261,6 @@ export const scenes: Record<string, SceneSpec> = {
   },
   E18: {
     needs: ['E16'],
-    adaptation: 'SQLite 备份与恢复对应原型的“导出 / 导入完整状态 JSON”。',
     run: (w) => {
       const r = w.s.releases[w.ref.release!]!;
       w.eq([r.dclVersion, r.vehicleIntegrationVersions], ['1.0.0', ['1.0']], 'DCL 1.0.0 for software 1.0');
@@ -283,7 +277,6 @@ export const scenes: Record<string, SceneSpec> = {
   },
   X01: {
     forkAfter: 'E06',
-    adaptation: '首次 OTA 只发布了 text_log 模板；支线开始前由 DCL 发布相机图像的敏感处理模板。',
     run: (w) => {
       const edge = w.as('dcl', (c) => createPipeline(c, { code: 'camera-edge', side: 'EDGE', name: 'camera-edge', formats: ['image'], steps: ['Locate', 'Crop', 'Encrypt', 'Upload'] }));
       const cloud = w.as('dcl', (c) => createPipeline(c, { code: 'camera-cloud', side: 'CLOUD', name: 'camera-cloud', formats: ['image'], steps: ['Receive', 'Checksum', 'Decrypt', 'Desensitize', 'RawStore'] }));

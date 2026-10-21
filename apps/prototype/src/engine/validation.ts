@@ -441,6 +441,20 @@ export function candidateVerifyBlockers(s: State, c: Candidate): string[] {
   return blockersFor(s, candidateTestStatus(s, c));
 }
 
+/** Why one vehicle cannot take a candidate's integration test now; empty if it can. */
+export function candidateVehicleProblems(s: State, c: Candidate, rid: string): string[] {
+  const r = s.resources[rid]!;
+  const problems: string[] = [];
+  if (r.env !== 'testing') problems.push(`${rid}: not a testing vehicle`);
+  if (r.status !== 'AVAILABLE') problems.push(`${rid}: ${r.status.toLowerCase()}`);
+  if (r.vehicleModelId !== c.vehicleModelId) problems.push(`${rid}: another vehicle model`);
+  // A candidate on a formal baseline is tested on vehicles whose software is known.
+  if (c.targetReleaseId !== null && !r.integrationVersion) problems.push(`${rid}: software version unknown`);
+  const pending = pendingDeploymentOf(s, rid);
+  if (pending) problems.push(`${rid}: waiting for deployment ${pending}`);
+  return problems;
+}
+
 /**
  * Integration testing dispatches a frozen candidate to testing vehicle groups of the integration
  * workspace, or to its testing vehicles that route through no group.
@@ -456,14 +470,7 @@ export function dispatchCandidate(ctx: Ctx, candidateId: string, input: { vehicl
   const members: { resourceId: string; vehicleGroupId: string | null }[] = [];
   const checkVehicle = (rid: string, vehicleGroupId: string | null) => {
     if (members.some((m) => m.resourceId === rid)) return;
-    const r = ctx.s.resources[rid]!;
-    if (r.env !== 'testing') problems.push(`${rid}: not a testing vehicle`);
-    if (r.status !== 'AVAILABLE') problems.push(`${rid}: ${r.status.toLowerCase()}`);
-    if (r.vehicleModelId !== c.vehicleModelId) problems.push(`${rid}: another vehicle model`);
-    // A candidate on a formal baseline is tested on vehicles whose software is known.
-    if (c.targetReleaseId !== null && !r.integrationVersion) problems.push(`${rid}: software version unknown`);
-    const pending = pendingDeploymentOf(ctx.s, rid);
-    if (pending) problems.push(`${rid}: waiting for deployment ${pending}`);
+    problems.push(...candidateVehicleProblems(ctx.s, c, rid));
     members.push({ resourceId: rid, vehicleGroupId });
   };
   for (const id of vehicleGroupIds) {

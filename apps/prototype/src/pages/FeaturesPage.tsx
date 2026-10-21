@@ -5,7 +5,7 @@ import { useActor, useCan, useRun, useWorkspace } from '../app/hooks.ts';
 import { navigate } from '../app/router.ts';
 import { useEngineState } from '../app/store.ts';
 import { Hint, Mono, PageHeader, StageTag, when } from '../components/common.tsx';
-import { createFeature, displayName, visibleFeatures } from '../engine/config.ts';
+import { createFeature, displayName, latestRelease, visibleFeatures } from '../engine/config.ts';
 import { useI18n } from '../i18n/i18n.tsx';
 
 export function FeaturesPage() {
@@ -20,6 +20,7 @@ export function FeaturesPage() {
 
   if (!workspace) return <div className="kz-page">{L('没有可用工作区', 'No workspace available')}</div>;
   const features = visibleFeatures(state, actor, workspace.id);
+  const base = latestRelease(state, workspace.vehicleModelId);
   const creatable = workspace.groupIds
     .map((g) => state.groups[g]!)
     .filter((g) => g.purpose === 'DEV' && can('feature.create', { workspaceId: workspace.id, groupId: g.id, scope: g.domain }));
@@ -75,7 +76,11 @@ export function FeaturesPage() {
           })
         }
       >
-        <Hint>{L('新 Feature 从本车型的初始研发配置开始（尚无正式版本时为空）。', 'A new Feature starts from the vehicle model’s initial development configuration (empty until a release exists).')}</Hint>
+        <Hint>
+          {base
+            ? L(`新 Feature 基于 ${workspace.vehicleModelId} 最新正式版本 DCL ${base.dclVersion}，继承其中本分组的文件与策略。`, `A new Feature builds on ${workspace.vehicleModelId}’s latest release, DCL ${base.dclVersion}, and inherits the group’s files and policies from it.`)
+            : L('新 Feature 从本车型的初始研发配置开始（尚无正式版本，为空）。', 'A new Feature starts from the vehicle model’s initial development configuration (no release yet, so it is empty).')}
+        </Hint>
         <Form form={form} name="feature" layout="vertical" initialValues={{ groupId: creatable[0]?.id }}>
           <Form.Item name="groupId" label={L('业务分组', 'Business group')} rules={[{ required: true }]}>
             <Select options={creatable.map((g) => ({ value: g.id, label: `${g.name} (${g.code})` }))} />

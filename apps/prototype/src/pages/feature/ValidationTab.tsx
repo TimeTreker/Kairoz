@@ -1,28 +1,48 @@
-import { Alert, Button, Card, Space, Typography } from 'antd';
+import { Alert, Button, Card, Space, Table, Tag, Tooltip, Typography } from 'antd';
 import { useState } from 'react';
-import { useCan, useRun } from '../../app/hooks.ts';
+import { useActor, useCan, useRun } from '../../app/hooks.ts';
 import { useEngineState } from '../../app/store.ts';
-import { Hint, Mono } from '../../components/common.tsx';
+import { Hint, Mono, when } from '../../components/common.tsx';
 import { DeploymentsTable, DispatchModal, RecordTestModal, TargetsTable } from '../../components/testing.tsx';
 import { displayName } from '../../engine/config.ts';
 import { vehicleGroupsOf } from '../../engine/fleet.ts';
 import type { Feature } from '../../engine/types.ts';
-import { cancelDeployment, deploymentsOf, dispatchFeature, featureTestStatus, recordFeatureTest, verifyBlockers, verifyFeature } from '../../engine/validation.ts';
+import {
+  cancelDeployment,
+  deploymentsOf,
+  dispatchFeature,
+  executeTestRequest,
+  featureTestStatus,
+  recordFeatureTest,
+  requestTeamTest,
+  verifyBlockers,
+  verifyFeature,
+  withdrawTestRequest,
+} from '../../engine/validation.ts';
+import { REQUEST_STATUS_COLORS, REQUEST_STATUS_LABELS } from '../../i18n/vocab.ts';
 import { useI18n } from '../../i18n/i18n.tsx';
 
 export function ValidationTab({ feature }: { feature: Feature }) {
   const state = useEngineState();
-  const { L } = useI18n();
+  const { L, B } = useI18n();
   const can = useCan();
   const run = useRun();
+  const actor = useActor()!;
   const [dispatching, setDispatching] = useState(false);
+  const [requesting, setRequesting] = useState(false);
   const [testing, setTesting] = useState<string | null>(null);
   const group = state.groups[feature.groupId]!;
   const target = (env: 'development' | 'testing') => ({ workspaceId: feature.workspaceId, groupId: group.id, scope: group.domain, env });
 
   const dispatchable = ['DCL_READY', 'TESTING', 'VERIFIED'].includes(feature.stage);
   const vehicleGroups = vehicleGroupsOf(state, feature.workspaceId).filter((g) => g.status === 'ACTIVE' && g.groupId === feature.groupId && g.purpose !== 'PRODUCTION');
-  const canDispatch = dispatchable && vehicleGroups.some((g) => can('feature.dispatch', target(g.env as 'development')));
+  const directGroups = vehicleGroups.filter((g) => !g.requiresApproval);
+  const approvalGroups = vehicleGroups.filter((g) => g.requiresApproval);
+  const canDispatch = dispatchable && directGroups.some((g) => can('feature.dispatch', target(g.env as 'development')));
+  const canRequest = dispatchable && approvalGroups.some((g) => can('feature.requestTest', target(g.env as 'development')));
+  const requests = Object.values(state.testRequests)
+    .filter((r) => r.featureId === feature.id)
+    .sort((a, b) => b.id.localeCompare(a.id));
   const status = featureTestStatus(state, feature);
   const blockers = verifyBlockers(state, feature);
   const canVerify = feature.stage === 'TESTING' && can('feature.verify', { workspaceId: feature.workspaceId, groupId: group.id });
@@ -33,6 +53,11 @@ export function ValidationTab({ feature }: { feature: Feature }) {
         title={L('验证目标（当前提交）', 'Test targets (head commit)')}
         extra={
           <Space>
+            {canRequest && (
+              <Button type="primary" onClick={() => setRequesting(true)}>
+                {L('申请团队测试', 'Request team test')}
+              </Button>
+            )}
             {canDispatch && (
               <Button type="primary" onClick={() => setDispatching(true)}>
                 {L('按车辆组下发', 'Dispatch to vehicle groups')}
@@ -72,6 +97,48 @@ export function ValidationTab({ feature }: { feature: Feature }) {
         />
       </Card>
 
+      {requests.length > 0 && (
+        <Card title={L('团队测试申请', 'Team test requests')}>
+          <Table
+            rowKey="id"
+            size="small"
+            pagination={false}
+            dataSource={requests}
+            columns={[
+              { title: L('提交', 'Commit'), render: (_, r) => <Mono>{displayName(state, r.commitId)}</Mono> },
+              { title: L('车辆组 / 车辆', 'Groups / vehicles'), render: (_, r) => `${r.vehicleGroupIds.map((g) => state.vehicleGroups[g]?.name).join(', ')} · ${r.members.join(', ')}` },
+              { title: L('目标', 'Goal'), dataIndex: 'goal' },
+              { title: L('申请人', 'By'), render: (_, r) => `${state.accounts[r.requestedBy]?.displayName} · ${when(r.requestedAt)}` },
+              {
+                title: L('状态', 'Status'),
+                render: (_, r) => (
+                  <Tooltip title={r.decidedBy ? `${state.accounts[r.decidedBy]?.displayName}: ${r.decisionNote}` : undefined}>
+                    <Tag color={REQUEST_STATUS_COLORS[r.status]}>{B(REQUEST_STATUS_LABELS[r.status])}</Tag>
+                  </Tooltip>
+                ),
+              },
+              {
+                title: '',
+                render: (_, r) => (
+                  <Space size={0}>
+                    {r.status === 'APPROVED' && can('feature.dispatch', target(state.vehicleGroups[r.vehicleGroupIds[0]!]?.env as 'development')) && (
+                      <Button type="link" size="small" onClick={() => run((c) => executeTestRequest(c, r.id), L('已按批准下发，等待车辆回执', 'Dispatched as approved; waiting for receipts'))}>
+                        {L('执行', 'Execute')}
+                      </Button>
+                    )}
+                    {['PENDING', 'APPROVED'].includes(r.status) && r.requestedBy === actor.username && (
+                      <Button type="link" size="small" danger onClick={() => run((c) => withdrawTestRequest(c, r.id), L('已撤回', 'Withdrawn'))}>
+                        {L('撤回', 'Withdraw')}
+                      </Button>
+                    )}
+                  </Space>
+                ),
+              },
+            ]}
+          />
+        </Card>
+      )}
+
       <Card title={L('下发记录', 'Dispatches')}>
         <DeploymentsTable
           deployments={deploymentsOf(state, feature.id)}
@@ -81,8 +148,18 @@ export function ValidationTab({ feature }: { feature: Feature }) {
       </Card>
 
       <DispatchModal
+        open={requesting}
+        request
+        groups={approvalGroups}
+        emptyText=""
+        onClose={() => setRequesting(false)}
+        onDispatch={(ids, goal) =>
+          run((c) => requestTeamTest(c, feature.id, { commitId: feature.headCommitId!, vehicleGroupIds: ids, goal }), L('已提交申请，等待工作区管理员审批', 'Request submitted; waiting for the workspace admin')) !== undefined
+        }
+      />
+      <DispatchModal
         open={dispatching}
-        groups={vehicleGroups}
+        groups={directGroups}
         emptyText={L('本工作区没有服务该分组的车辆组；请联系工作区管理员。', 'No vehicle group serves this group here; ask the workspace admin.')}
         onClose={() => setDispatching(false)}
         onDispatch={(ids) =>

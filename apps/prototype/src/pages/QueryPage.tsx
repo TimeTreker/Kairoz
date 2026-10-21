@@ -205,6 +205,14 @@ function EventDetail({ event: e }: { event: CollectionEvent }) {
                   </Descriptions.Item>
                 ))}
                 <Descriptions.Item label={L('处理次数', 'Processing runs')}>{e.processingAttempts}</Descriptions.Item>
+                <Descriptions.Item label={L('上传分片', 'Upload chunks')}>
+                  {e.files.map((f) => `${f.name} ${f.chunks.filter((c) => c.received).length}/${f.chunks.length}`).join(' · ')}
+                </Descriptions.Item>
+                <Descriptions.Item label={L('业务回调', 'Business callback')}>
+                  {e.callbacks.length
+                    ? L(`已送达 1 次（共发送 ${e.callbackSends} 次，重复已去重）`, `delivered once (${e.callbackSends} sent, duplicates ignored)`)
+                    : L('未送达', 'not delivered')}
+                </Descriptions.Item>
               </Descriptions>
             ),
           },
@@ -240,11 +248,14 @@ function TrainingTab({ workspaceId }: { workspaceId: string }) {
     <Card>
       <Hint>
         {L(
-          '可选用条件：处理完成、捕获文件完整、质量 A/B、允许训练用途。未知不等于通过。结果与导出清单不含车辆编号、VIN、车牌、UVID 或整车版本；清单是采集平台的交付物，不在这里管理训练数据集。',
-          'Selectable: processed, all captured files complete, quality A/B, training use allowed. Unknown never counts as passed. Results and manifests carry no vehicle id, VIN, plate, UVID or vehicle software; the manifest is the platform’s deliverable, not a dataset managed here.',
+          '可选用条件：处理完成、捕获文件完整、质量 A/B、允许训练用途。未知不等于通过。结果与导出清单不含车辆编号、VIN、车牌、UVID 或整车版本；清单是采集平台的交付物，不在这里管理训练数据集。清单逐条标注来源（演示样例 / 模拟运行），模拟数据不能登记为真实采集。',
+          'Selectable: processed, all captured files complete, quality A/B, training use allowed. Unknown never counts as passed. Results and manifests carry no vehicle id, VIN, plate, UVID or vehicle software; the manifest is the platform’s deliverable, not a dataset managed here. Each manifest item states its origin (demo sample / simulated run); simulated data is never registered as real collection.',
         )}
       </Hint>
       <Form layout="inline" name="training" initialValues={filter} onValuesChange={(_, all) => setFilter(all as TrainingFilter)} style={{ rowGap: 8, marginBottom: 16 }}>
+        <Form.Item name="vehicleModelId" label={L('车型', 'Model')}>
+          <Select allowClear style={{ width: 110 }} placeholder={L('全部', 'All')} options={Object.keys(state.vehicleModels).map((m) => ({ value: m, label: m }))} />
+        </Form.Item>
         <Form.Item name="policy" label={L('策略', 'Policy')}>
           <Input allowClear placeholder="chassis.steering…" style={{ width: 190 }} />
         </Form.Item>
@@ -293,6 +304,7 @@ function TrainingTab({ workspaceId }: { workspaceId: string }) {
           { title: L('用途', 'Use'), render: (_, t) => <LabelTag map={TRAINING_USE_LABELS} value={t.trainingUse} color={t.trainingUse === 'ALLOWED' ? 'green' : undefined} /> },
           { title: L('文件', 'Files'), dataIndex: 'fileCount' },
           { title: L('处理', 'Processing'), render: (_, t) => <LabelTag map={EVENT_STATUS_LABELS} value={t.status} color={EVENT_STATUS_COLORS[t.status]} /> },
+          { title: L('来源', 'Origin'), render: (_, t) => <LabelTag map={EVENT_ORIGIN_LABELS} value={t.origin} /> },
           {
             title: L('不可选用原因', 'Why not selectable'),
             render: (_, t) =>

@@ -22,19 +22,23 @@ export const scenes: Record<string, SceneSpec> = {
       w.check(w.s.policyVersions[failed.policyVersionId]?.policyId === failed.policyId, 'the policy version comes from the event snapshot');
       w.check(failed.files.every((f) => !('usedByCommits' in f)), 'files carry no “used by commits” field');
       w.eq(ev.aftersalesQuery(w.s, me, 'team-brake', { vehicle: 'VEH-002' }).length, 0, 'an unauthorized vehicle shows nothing');
+      // VEH-002 has no events in the demo, so also try a vehicle whose events belong to the steering team.
+      w.check(Object.values(w.s.events).some((e) => e.resourceId === 'VEH-003'), 'VEH-003 has steering events');
+      w.eq(ev.aftersalesQuery(w.s, me, 'team-brake', { vehicle: 'VEH-003' }).length, 0, 'another group’s vehicle shows nothing');
       w.ref.failedEvent = failed.id;
     },
   },
   U02: {
     run: (w) => {
       const me = w.actor('business');
-      const records = ev.trainingQuery(w.s, me, 'team-brake', { policy: 'brake.monitor', scenario: '急刹车', quality: 'A' });
+      const records = ev.trainingQuery(w.s, me, 'team-brake', { vehicleModelId: 'X89', policy: 'brake.monitor', scenario: '急刹车', quality: 'A' });
       w.check(records.length > 0, 'selectable data for the scenario');
       for (const key of ['resourceId', 'vin', 'uvid', 'licensePlate', 'integrationVersion']) w.check(!(key in records[0]!), `no ${key} in training results`);
       const manifest = w.as('business', (c) => ev.exportManifest(c, records.map((r) => r.eventId)));
       const text = JSON.stringify(manifest);
       w.check(manifest.items.every((i) => i.policyId.includes('brake.monitor') && i.files.length > 0), 'events, policy, scenario and files in the manifest');
       w.check(!/VEH-|LSDEM/.test(text), 'no vehicle identity in the manifest');
+      w.check(manifest.mock && manifest.items.every((i) => i.origin === 'MOCK_SAMPLE'), 'the manifest marks the data as mock');
       const all = ev.trainingQuery(w.s, me, 'team-brake', { availability: 'ALL' });
       const blocked = all.filter((r) => r.blockers.length > 0);
       w.check(blocked.some((r) => r.status === 'FAILED') && blocked.some((r) => r.quality === 'UNKNOWN' || r.trainingUse === 'UNCONFIRMED'), 'failed, unknown-quality and unconfirmed records show their reasons');

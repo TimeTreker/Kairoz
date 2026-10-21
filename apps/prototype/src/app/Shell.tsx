@@ -20,6 +20,7 @@ import type { Role } from '../domain/vocabulary.ts';
 import { unitPath } from '../engine/org.ts';
 import { useI18n } from '../i18n/i18n.tsx';
 import { ROLE_LABELS, WORKSPACE_KIND_LABELS } from '../i18n/vocab.ts';
+import { AcceptancePage } from '../pages/AcceptancePage.tsx';
 import { AccountsPage } from '../pages/AccountsPage.tsx';
 import { AuditPage } from '../pages/AuditPage.tsx';
 import { DataCatalogPage } from '../pages/DataCatalogPage.tsx';
@@ -110,6 +111,7 @@ export function Shell() {
       accounts: <AccountsPage />,
       audit: <AuditPage />,
       guide: <GuidePage />,
+      acceptance: <AcceptancePage />,
     }[page] ?? <WorkbenchPage />;
 
   return (
@@ -162,7 +164,7 @@ export function Shell() {
           </Dropdown>
         </Layout.Header>
         <Layout.Content>
-          {workspace && !['org', 'accounts', 'audit', 'guide', 'simulator'].includes(page) && (
+          {workspace && !['org', 'accounts', 'audit', 'guide', 'simulator', 'acceptance'].includes(page) && (
             <div style={{ padding: '12px 24px 0' }}>
               <Breadcrumb
                 items={[

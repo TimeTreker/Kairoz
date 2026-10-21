@@ -70,7 +70,7 @@ export function DeploymentsTable({ deployments, canCancel, onCancel }: { deploym
             dataSource={d.targets}
             columns={[
               { title: L('车辆', 'Vehicle'), render: (_, t) => <Mono>{t.resourceId}</Mono> },
-              { title: L('车辆组', 'Group'), render: (_, t) => state.vehicleGroups[t.vehicleGroupId ?? '']?.name },
+              { title: L('车辆组', 'Group'), render: (_, t) => (t.vehicleGroupId ? state.vehicleGroups[t.vehicleGroupId]?.name : <Tag>{L('直投', 'direct')}</Tag>) },
               { title: L('尝试', 'Attempt'), dataIndex: 'attempt' },
               { title: L('状态', 'Status'), render: (_, t) => <Tag color={TARGET_STATUS_COLORS[t.status]}>{B(TARGET_STATUS_LABELS[t.status])}</Tag> },
               { title: L('错误', 'Error'), render: (_, t) => t.error ?? '—' },
@@ -111,29 +111,52 @@ export function DeploymentsTable({ deployments, canCancel, onCancel }: { deploym
 export function DispatchModal({
   open,
   groups,
+  vehicles = [],
   emptyText,
+  request = false,
   onClose,
   onDispatch,
 }: {
   open: boolean;
   groups: VehicleGroup[];
+  /** Vehicles that route through no group and may be chosen one by one; `blocked` says why one cannot. */
+  vehicles?: { id: string; label: string; blocked?: string }[];
   emptyText: string;
+  /** Ask for an approved team test instead of dispatching. */
+  request?: boolean;
   onClose: () => void;
-  onDispatch: (vehicleGroupIds: string[]) => boolean;
+  onDispatch: (vehicleGroupIds: string[], goal: string, resourceIds: string[]) => boolean;
 }) {
   const state = useEngineState();
   const { L } = useI18n();
   const [chosen, setChosen] = useState<string[]>([]);
+  const [direct, setDirect] = useState<string[]>([]);
+  const [goal, setGoal] = useState('');
   useEffect(() => {
-    if (open) setChosen([]);
+    if (open) {
+      setChosen([]);
+      setDirect([]);
+      setGoal('');
+    }
   }, [open]);
   return (
-    <Modal open={open} title={L('按车辆组下发', 'Dispatch to vehicle groups')} okText={L('下发', 'Dispatch')} onCancel={onClose} onOk={() => onDispatch(chosen) && onClose()}>
+    <Modal
+      open={open}
+      title={request ? L('申请团队测试', 'Request a team test') : groups.length === 0 && vehicles.length > 0 ? L('下发到车辆', 'Dispatch to vehicles') : L('按车辆组下发', 'Dispatch to vehicle groups')}
+      okText={request ? L('提交申请', 'Submit request') : L('下发', 'Dispatch')}
+      onCancel={onClose}
+      onOk={() => onDispatch(chosen, goal, direct) && onClose()}
+    >
       <Hint>
-        {L(
-          '平台一次性校验全部成员的授权、环境、车型与占用；任一失败则整体拒绝。成功后冻结成员快照。',
-          'Every member’s authorization, environment, model and occupancy is checked at once; any failure rejects the whole dispatch. The member list is then frozen.',
-        )}
+        {request
+          ? L(
+              '这些车辆组的下发需要工作区管理员批准。申请绑定当前固定提交与车辆清单；批准后由你执行一次。',
+              'Dispatches to these groups need the workspace admin’s approval. The request binds the fixed commit and the vehicle list; once approved you execute it once.',
+            )
+          : L(
+              '平台一次性校验全部成员的授权、环境、车型与占用；任一失败则整体拒绝。成功后冻结成员快照。',
+              'Every member’s authorization, environment, model and occupancy is checked at once; any failure rejects the whole dispatch. The member list is then frozen.',
+            )}
       </Hint>
       <Checkbox.Group value={chosen} onChange={(v) => setChosen(v as string[])} style={{ width: '100%' }}>
         <Space orientation="vertical">
@@ -144,7 +167,29 @@ export function DispatchModal({
           ))}
         </Space>
       </Checkbox.Group>
-      {groups.length === 0 && <Typography.Text type="secondary">{emptyText}</Typography.Text>}
+      {vehicles.length > 0 && (
+        <>
+          <Typography.Paragraph strong style={{ marginTop: 12, marginBottom: 4 }}>
+            {L('未归组的车辆（可直接选择）', 'Ungrouped vehicles (chosen directly)')}
+          </Typography.Paragraph>
+          <Checkbox.Group value={direct} onChange={(v) => setDirect(v as string[])}>
+            <Space orientation="vertical">
+              {vehicles.map((r) => (
+                <Checkbox key={r.id} value={r.id} disabled={!!r.blocked}>
+                  {r.label}
+                  {r.blocked && (
+                    <Typography.Text type="warning" style={{ marginLeft: 8 }}>
+                      {r.blocked}
+                    </Typography.Text>
+                  )}
+                </Checkbox>
+              ))}
+            </Space>
+          </Checkbox.Group>
+        </>
+      )}
+      {groups.length === 0 && vehicles.length === 0 && <Typography.Text type="secondary">{emptyText}</Typography.Text>}
+      {request && <Input.TextArea style={{ marginTop: 12 }} rows={2} value={goal} onChange={(e) => setGoal(e.target.value)} placeholder={L('测试目标', 'What the test should show')} />}
     </Modal>
   );
 }

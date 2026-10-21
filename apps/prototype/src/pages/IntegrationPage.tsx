@@ -10,14 +10,12 @@ import { setSession, useEngineState } from '../app/store.ts';
 import { DiffView } from '../components/DiffView.tsx';
 import { Hint, LabelTag, Mono, PageHeader, ShortId, StageTag, when } from '../components/common.tsx';
 import { DeploymentsTable, DispatchModal, RecordTestModal, TargetsTable } from '../components/testing.tsx';
-import { diffConfig, emptyConfig } from '../domain/config.ts';
 import { WILDCARD } from '../domain/vocabulary.ts';
 import { displayName } from '../engine/config.ts';
-import { vehicleGroupsOf } from '../engine/fleet.ts';
-import { cancelCandidate, confirmProcessing, freezeCandidate, isConfirmed, isMergeWorkspace, planGroups, latestRelease, previewMerge, processingSummary, verifiedSources } from '../engine/integration.ts';
-import { commitSnapshot } from '../engine/snapshots.ts';
+import { ungroupedVehicles, vehicleGroupsOf } from '../engine/fleet.ts';
+import { cancelCandidate, confirmProcessing, freezeCandidate, isCollectible, isConfirmed, isMergeWorkspace, planGroups, latestRelease, previewMerge, processingSummary, verifiedSources } from '../engine/integration.ts';
 import type { Candidate, MergeConflict, MergePlan, State } from '../engine/types.ts';
-import { cancelDeployment, candidateTestStatus, candidateVerifyBlockers, deploymentsOf, dispatchCandidate, recordCandidateTest, verifyCandidate } from '../engine/validation.ts';
+import { cancelDeployment, candidateTestStatus, candidateVehicleProblems, candidateVerifyBlockers, deploymentsOf, dispatchCandidate, recordCandidateTest, verifyCandidate } from '../engine/validation.ts';
 import { useI18n } from '../i18n/i18n.tsx';
 import {
   CANDIDATE_STATUS_COLORS,
@@ -214,6 +212,13 @@ function PlanCard({ plan, onCandidate }: { plan: MergePlan; onCandidate: (id: st
   const step = plan.status === 'FROZEN' ? 3 : confirmed ? 2 : plan.status === 'READY' ? 1 : 0;
   const unreviewed = lines.filter((l) => l.requiresReview && l.review?.status !== 'APPROVED');
   const nextLabel = `${plan.vehicleModelId}-C${Object.values(state.candidates).filter((c) => c.workspaceId === plan.workspaceId).length + 1}`;
+  // A preview is pinned to its source commits; a newer head (or a lost verification) makes it stale.
+  const staleSources = ['READY', 'CONFLICT', 'BLOCKED'].includes(plan.status)
+    ? plan.sources.filter((x) => {
+        const f = state.features[x.featureId];
+        return !f || f.headCommitId !== x.commitId || !isCollectible(state, f);
+      })
+    : [];
 
   return (
     <Card
@@ -226,12 +231,12 @@ function PlanCard({ plan, onCandidate }: { plan: MergePlan; onCandidate: (id: st
       }
       extra={
         <Space>
-          {plan.status === 'READY' && !confirmed && canConfirm && (
+          {plan.status === 'READY' && staleSources.length === 0 && !confirmed && canConfirm && (
             <Button type="primary" onClick={() => (setNote(''), setConfirming(true))}>
               {L('确认处理集合', 'Confirm processing set')}
             </Button>
           )}
-          {plan.status === 'READY' && confirmed && canMerge && (
+          {plan.status === 'READY' && staleSources.length === 0 && confirmed && canMerge && (
             <Button type="primary" onClick={() => (setLabel(nextLabel), setFreezing(true))}>
               {L('冻结为集成候选', 'Freeze as candidate')}
             </Button>
@@ -269,6 +274,20 @@ function PlanCard({ plan, onCandidate }: { plan: MergePlan; onCandidate: (id: st
         </Descriptions.Item>
       </Descriptions>
 
+      {staleSources.length > 0 && (
+        <Alert
+          type="warning"
+          showIcon
+          style={{ marginBottom: 12 }}
+          title={L('来源已变化，此预览已过期；请重新预览合并。', 'Sources changed since this preview; preview the merge again.')}
+          description={staleSources
+            .map((x) => {
+              const f = state.features[x.featureId];
+              return `${f?.name ?? x.featureId}: ${displayName(state, x.commitId)} → ${f?.headCommitId ? displayName(state, f.headCommitId) : '—'}`;
+            })
+            .join('；')}
+        />
+      )}
       {plan.conflicts.length > 0 && <ConflictsTable conflicts={plan.conflicts} />}
       {plan.issues.length > 0 && (
         <Alert
@@ -473,6 +492,17 @@ function CandidateDetail({ candidate: c }: { candidate: Candidate }) {
   const open = ['CANDIDATE', 'TESTING', 'VERIFIED'].includes(c.status);
   const target = { workspaceId: c.testWorkspaceId, scope: 'Vehicle' as const };
   const vehicleGroups = vehicleGroupsOf(state, c.testWorkspaceId).filter((g) => g.status === 'ACTIVE' && g.purpose === 'TEST' && g.env === 'testing');
+  const ungrouped = ungroupedVehicles(state, c.testWorkspaceId)
+    .filter((r) => r.env === 'testing')
+    .map((r) => {
+      const problems = candidateVehicleProblems(state, c, r.id);
+      const blocked = problems.some((p) => p.endsWith('software version unknown'))
+        ? L('非首版候选需要已确认整车版本的车辆', 'a candidate on a release needs vehicles with known software')
+        : problems.length
+          ? problems.map((p) => p.replace(`${r.id}: `, '')).join('；')
+          : undefined;
+      return { id: r.id, label: `${r.id} · ${r.type === 'SIMULATION' ? L('仿真', 'simulation') : L('实车', 'physical')} · ${r.integrationVersion ?? L('整车版本未知', 'software unknown')}`, blocked };
+    });
   const canDispatch = open && can('candidate.dispatch', target);
   const canVerify = c.status === 'TESTING' && can('candidate.verify', target);
   const canCancel = open && can('merge.manage', { workspaceId: c.workspaceId, scope: 'Vehicle' });
@@ -596,9 +626,10 @@ function CandidateDetail({ candidate: c }: { candidate: Candidate }) {
       <DispatchModal
         open={dispatching}
         groups={vehicleGroups}
-        emptyText={L('集成测试工作区没有测试车辆组；请联系该工作区管理员。', 'The integration workspace has no testing vehicle group; ask its admin.')}
+        vehicles={ungrouped}
+        emptyText={L('集成测试工作区没有测试车辆；请联系车辆资源或工作区管理员。', 'The integration workspace has no testing vehicles; ask vehicle resources or its admin.')}
         onClose={() => setDispatching(false)}
-        onDispatch={(ids) => run((cx) => dispatchCandidate(cx, c.id, { vehicleGroupIds: ids }), L('已下发，等待车辆回执', 'Dispatched; waiting for vehicle receipts')) !== undefined}
+        onDispatch={(ids, _goal, direct) => run((cx) => dispatchCandidate(cx, c.id, { vehicleGroupIds: ids, resourceIds: direct }), L('已下发，等待车辆回执', 'Dispatched; waiting for vehicle receipts')) !== undefined}
       />
       <RecordTestModal resourceId={testing} onClose={() => setTesting(null)} onRecord={(v) => run((cx) => recordCandidateTest(cx, c.id, { resourceId: testing!, ...v }), L('已登记', 'Recorded')) !== undefined} />
       <Modal

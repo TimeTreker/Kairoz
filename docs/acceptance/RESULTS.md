@@ -1,6 +1,6 @@
 # 验收结果（引擎层逐幕回放）
 
-运行时间：2026-10-21T04:46:13.541Z。由 `npm run acceptance` 生成；每次重新执行，不沿用历史结果。
+运行时间：2026-10-21T06:13:22.956Z。由 `npm run acceptance` 生成；每次重新执行，不沿用历史结果。
 
 状态：PASS 通过；FAIL 失败；GAP 设计要求尚未实现；BLOCKED 前置幕未通过；NOT_APPLICABLE 浏览器原型不适用（如服务端部署）。
 
@@ -66,10 +66,10 @@
 | E08 先仿真，再实车模型验证业务提交 | brake_tester / 业务测试 | PASS |  |
 | E09 收集变更、冲突检查与合并 | integrator / 配置集成 | PASS |  |
 | E10 确认处理集合并冻结首个候选 | dcl → integrator | PASS |  |
-| E11 准备并验证独立集成资源 | resource → integration_tester | PASS |  |
+| E11 准备并验证独立集成资源 | resource → integration_tester | PASS | 适配：剧本 VIN “LSDEMOX89000000902” 同 E05 不合规，改用合法的 17 位模拟 VIN；车辆登记后还需由车辆资源“添加车辆”加入 x89-integration。 |
 | E12 登记真实来源的软件版本并正式发布DCL | resource → release | PASS |  |
 | E13 导出首个配置发布材料 | release / 配置发布 | PASS | 适配：签名配置包（ZIP、Ed25519 服务端签名）需要服务端；剧本规定离线页不伪造服务端签名，原型提供“导出配置集合”JSON。 |
-| E14 准备量产目标与首版恢复方案 | resource / 车辆资源 | PASS |  |
+| E14 准备量产目标与首版恢复方案 | resource / 车辆资源 | PASS | 适配：剧本 VIN “LSDEMOX8900000090x” 同 E05 不合规，改用合法模拟 VIN；域控版本上报（reportControllerVersions）在车辆台账“域控”中登记。 |
 | E15 创建灰度并接收签名Mock回执 | release / 配置发布 | PASS |  |
 | E16 扩量、失败暂停、新attempt重试 | release / 配置发布 | PASS |  |
 | E17 验证数据闭环而不只验证配置安装 | dcl → 业务需求人 | PASS | 适配：业务节点、Parser 与业务需求人的数据确认未接入；以模拟器的合成事件验证配置快照、分片上传、产物与回调，真实环节记为未执行。 |
@@ -82,7 +82,7 @@
 
 | 幕 | 执行人 | 状态 | 说明 |
 |---|---|---|---|
-| U01 售后按车和事件定位采集数据 | business / 陈明 · 业务研发；制动团队工作区；研发环境 | PASS |  |
+| U01 售后按车和事件定位采集数据 | business / 陈明 · 业务研发；制动团队工作区；研发环境 | PASS | 适配：演示数据中 VEH-002 没有任何事件，只查它不能证明隔离；另查转向团队的 VEH-003（有事件）应同样无记录。 |
 | U02 训练按策略和场景选用数据 | business / 陈明 · 业务研发；制动团队工作区；研发环境 | PASS |  |
 
 ## 反向用例 T-N01–T-N24

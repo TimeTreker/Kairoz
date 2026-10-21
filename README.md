@@ -31,6 +31,7 @@ npm run build
 - **选择账号**：不校验密码；每个账号的权限完全由它的授权决定。九类角色与演示人员见登录页。
 - **原型工具**（右上角）：车辆模拟器、场景手册、重置为演示数据或干净安装、导出 / 导入完整状态 JSON。
 - **场景手册**：按步骤列出每条协作流程应由哪个账号执行、预期结果是什么，并可一键切换到该账号。平台本身不会替你执行步骤。
+- **流程验收（逐幕）**：按设计文档的剧本（从零启动、首次 OTA、数据使用）与反向用例逐幕操作，记录每幕的结果与证据，可导出 JSON / CSV。
 
 ## 当前进度
 
@@ -58,6 +59,14 @@ npm run typecheck
 ```
 
 规则引擎（`apps/prototype/src/engine`、`src/domain`）有独立的单元测试，不依赖浏览器。
+
+## 验收
+
+```bash
+npm run acceptance
+```
+
+在引擎层逐幕重放设计文档的三份剧本与 24 个反向用例，每次重新执行，结果写入 [docs/acceptance/RESULTS.md](docs/acceptance/RESULTS.md)。浏览器中逐幕操作的记录见 [docs/acceptance/BROWSER-RUN.md](docs/acceptance/BROWSER-RUN.md)。
 
 ## 目录
 

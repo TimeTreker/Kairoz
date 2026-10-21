@@ -340,3 +340,39 @@ export const GROUP_CHANGE_LABELS: Record<string, Bilingual> = {
   EMPTY: b('无配置（继承）', 'Empty (inherited)'),
 };
 export const GROUP_CHANGE_COLORS: Record<string, string> = { ADDED: 'green', CHANGED: 'blue', REMOVED: 'red', INHERITED: 'default', EMPTY: 'default' };
+
+export const REQUEST_STATUS_LABELS: Record<string, Bilingual> = {
+  PENDING: b('待审批', 'Pending'),
+  APPROVED: b('已批准', 'Approved'),
+  REJECTED: b('已驳回', 'Rejected'),
+  EXECUTED: b('已执行', 'Executed'),
+  WITHDRAWN: b('已撤回', 'Withdrawn'),
+};
+export const REQUEST_STATUS_COLORS: Record<string, string> = { PENDING: 'gold', APPROVED: 'green', REJECTED: 'red', EXECUTED: 'blue', WITHDRAWN: 'default' };
+
+Object.assign(ERROR_LABELS, {
+  APPROVAL_REQUIRED: b('该车辆组的下发需要已批准的团队测试申请', 'This vehicle group takes approved team test requests'),
+  SELF_APPROVAL: b('不能审批自己的申请', 'Nobody decides their own request'),
+  MEMBERS_CHANGED: b('车辆清单已变化，请重新申请', 'The vehicle list changed; ask for a new request'),
+  REQUEST_USED: b('批准只能使用一次', 'An approval is used once'),
+  REQUEST_NOT_APPROVED: b('申请尚未批准', 'The request is not approved'),
+  REQUEST_DECIDED: b('申请已处理', 'The request is already decided'),
+  GOAL_REQUIRED: b('请填写测试目标', 'Say what the test should show'),
+  SIMULATION_RUNNING: b('仿真实例运行中，请先停止', 'The simulation is running; stop it first'),
+  SIMULATION_STOPPED: b('仿真实例已停止，无法应用配置', 'The simulation is stopped and cannot apply configurations'),
+  VEHICLE_RESERVED: b('车辆已被预约，请先解除预约', 'The vehicle is reserved; release it first'),
+  CONTROLLERS_REQUIRED: b('请逐个填写域控的版本与结果', 'Report every controller with its version and result'),
+  CHECKSUM_MISMATCH: b('分片校验不一致，未保存', 'The chunk checksum does not match; it was not stored'),
+  CALLBACK_TOO_EARLY: b('事件尚未处理完成', 'The event is not processed yet'),
+  INVALID_DIGEST: b('摘要须为 sha256:<64 位十六进制> 或标注的 sha256:mock-…', 'The digest must be sha256:<64 hex> or a labelled sha256:mock-…'),
+});
+
+export const CONFIG_ANSWER_LABELS: Record<string, Bilingual> = {
+  HELD: b('保持已确认（同步暂停）', 'Held (sync paused)'),
+  TASK: b('当前任务目标', 'Rollout target'),
+  LATEST_RELEASE: b('最新匹配正式版本', 'Newest matching release'),
+  GROUP_TARGET: b('车辆组固定目标', 'Group target'),
+  APPLIED: b('已生效配置', 'Applied configuration'),
+  INITIAL: b('初始研发配置', 'Initial configuration'),
+  BLOCKED: b('阻止', 'Blocked'),
+};

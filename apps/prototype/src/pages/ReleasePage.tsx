@@ -8,12 +8,12 @@ import { navigate } from '../app/router.ts';
 import { useEngineState } from '../app/store.ts';
 import { EnvTag, Hint, LabelTag, Mono, PageHeader, ShortId, when } from '../components/common.tsx';
 import { displayName } from '../engine/config.ts';
-import { membersOf, vehicleGroupsOf } from '../engine/fleet.ts';
-import { cancelOta, createOta, expandOta, otaProblems, otaRollouts, pauseOta, resumeOta, rollbackOta, rollbackProblems } from '../engine/ota.ts';
-import { compareVersions, nextDclVersion, promoteCandidate, releaseFor, releasesOf, testedVersions } from '../engine/release.ts';
-import type { Candidate, Deployment, State } from '../engine/types.ts';
+import { membersOf, ungroupedVehicles, vehicleGroupsOf } from '../engine/fleet.ts';
+import { answerConfigRequest, cancelOta, createOta, expandOta, otaProblems, otaRollouts, pauseOta, resumeOta, rollbackOta, rollbackProblems } from '../engine/ota.ts';
+import { compareVersions, nextDclVersion, promoteCandidate, releaseConfiguration, releaseFor, releasesOf, testedVersions } from '../engine/release.ts';
+import type { Candidate, Deployment, State, VehicleGroup } from '../engine/types.ts';
 import { useI18n } from '../i18n/i18n.tsx';
-import { DEPLOYMENT_STATUS_LABELS, TARGET_STATUS_COLORS, TARGET_STATUS_LABELS } from '../i18n/vocab.ts';
+import { CONFIG_ANSWER_LABELS, DEPLOYMENT_STATUS_LABELS, TARGET_STATUS_COLORS, TARGET_STATUS_LABELS } from '../i18n/vocab.ts';
 
 /** The project workspace holding production vehicle groups for the current workspace. */
 function projectOf(s: State, workspaceId: string | undefined): string | undefined {
@@ -24,6 +24,17 @@ function projectOf(s: State, workspaceId: string | undefined): string | undefine
 }
 
 const releaseLabel = (s: State, configId: string | null) => (configId ? (s.resolvedConfigs[configId]?.label ?? configId) : '—');
+
+const ANSWER_COLORS: Record<string, string> = { HELD: 'purple', TASK: 'processing', LATEST_RELEASE: 'green', GROUP_TARGET: 'blue', APPLIED: 'default', INITIAL: 'default', BLOCKED: 'red' };
+
+function downloadJson(fileName: string, data: unknown): void {
+  const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }));
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = fileName;
+  a.click();
+  URL.revokeObjectURL(url);
+}
 
 export function ReleasePage({ tab = 'releases' }: { tab?: string }) {
   const state = useEngineState();
@@ -121,6 +132,14 @@ function ReleasesTab({ modelId }: { modelId: string }) {
             { title: L('配置摘要', 'Digest'), render: (_, r) => <ShortId value={state.resolvedConfigs[r.resolvedConfigId]?.digest} /> },
             { title: L('说明', 'Notes'), render: (_, r) => r.notes || '—' },
             { title: L('发布', 'Published'), render: (_, r) => `${state.accounts[r.publishedBy]?.displayName} · ${when(r.publishedAt)}` },
+            {
+              title: '',
+              render: (_, r) => (
+                <Button size="small" onClick={() => downloadJson(`DCL_${r.vehicleModelId}_${r.dclVersion}_config.json`, releaseConfiguration(state, r.id))}>
+                  {L('导出配置集合', 'Export configuration')}
+                </Button>
+              ),
+            },
           ]}
         />
       </Card>
@@ -161,7 +180,16 @@ function PromoteModal({ candidate, onClose }: { candidate: Candidate; onClose: (
             <Space orientation="vertical">
               {versions.map((v) => (
                 <Checkbox key={v} value={v}>
-                  {`${candidate.vehicleModelId} ${v}`} {tested.has(v) ? <Tag color="green">{L('已通过集成测试', 'integration tested')}</Tag> : <Tag>{L('无集成测试', 'not tested')}</Tag>}
+                  {`${candidate.vehicleModelId} ${v}`}{' '}
+                  {tested.has(v) ? (
+                    <Tag color="green">{L('已通过集成测试', 'integration tested')}</Tag>
+                  ) : candidate.targetReleaseId === null ? (
+                    <Tooltip title={L('首版候选在未定版本的测试车辆上验证，按设计不要求逐软件版本测试。', 'The initial candidate is tested on vehicles without a fixed software version, so per-version tests are not required by design.')}>
+                      <Tag color="blue">{L('首版免逐版本测试', 'initial: no per-version test')}</Tag>
+                    </Tooltip>
+                  ) : (
+                    <Tag>{L('无集成测试', 'not tested')}</Tag>
+                  )}
                 </Checkbox>
               ))}
             </Space>
@@ -181,14 +209,19 @@ function PromoteModal({ candidate, onClose }: { candidate: Candidate; onClose: (
 
 function OtaTab({ projectId }: { projectId: string }) {
   const state = useEngineState();
-  const { L } = useI18n();
+  const { L, B } = useI18n();
   const can = useCan();
   const [creating, setCreating] = useState(false);
   const project = state.workspaces[projectId]!;
   const groups = vehicleGroupsOf(state, projectId).filter((g) => g.status === 'ACTIVE' && g.purpose === 'PRODUCTION');
   const canManage = can('ota.manage', { workspaceId: projectId, scope: 'Vehicle' });
   const rollouts = otaRollouts(state, projectId);
-  const vehicles = groups.flatMap((g) => membersOf(state, g.id).map((id) => ({ vehicle: state.resources[id]!, group: g })));
+  const vehicles = [
+    ...groups.flatMap((g) => membersOf(state, g.id).map((id) => ({ vehicle: state.resources[id]!, group: g as VehicleGroup | null }))),
+    ...ungroupedVehicles(state, projectId)
+      .filter((r) => r.env === 'production')
+      .map((vehicle) => ({ vehicle, group: null })),
+  ];
 
   return (
     <Space orientation="vertical" size={16} style={{ width: '100%' }}>
@@ -196,7 +229,7 @@ function OtaTab({ projectId }: { projectId: string }) {
         title={`${L('量产车辆', 'Production vehicles')} · ${project.name}`}
         extra={
           canManage && (
-            <Button type="primary" disabled={groups.length === 0 || releasesOf(state, project.vehicleModelId).length === 0} onClick={() => setCreating(true)}>
+            <Button type="primary" disabled={vehicles.length === 0 || releasesOf(state, project.vehicleModelId).length === 0} onClick={() => setCreating(true)}>
               {L('新建配置 OTA', 'New rollout')}
             </Button>
           )
@@ -213,11 +246,22 @@ function OtaTab({ projectId }: { projectId: string }) {
           size="small"
           pagination={false}
           dataSource={vehicles}
-          locale={{ emptyText: L('没有量产车辆组；在“车辆与车辆组”中建立。', 'No production vehicle groups; create one under Vehicles & groups.') }}
+          scroll={{ x: 'max-content' }}
+          locale={{ emptyText: L('本工作区没有量产车辆；在“车辆与车辆组”中加入。', 'No production vehicles in this workspace; add them under Vehicles & groups.') }}
           columns={[
             { title: L('车辆', 'Vehicle'), render: (_, x) => <Mono>{x.vehicle.id}</Mono> },
-            { title: L('车辆组', 'Group'), render: (_, x) => x.group.name },
-            { title: L('实际整车版本', 'Actual software'), render: (_, x) => x.vehicle.integrationVersion ?? <Tag color="orange">{L('未知', 'unknown')}</Tag> },
+            { title: L('车辆组', 'Group'), render: (_, x) => x.group?.name ?? <Typography.Text type="secondary">{L('未分组', 'ungrouped')}</Typography.Text> },
+            {
+              title: L('实际整车版本', 'Actual software'),
+              render: (_, x) =>
+                x.vehicle.softwareStatus === 'PARTIAL_FAILURE' ? (
+                  <Tooltip title={x.vehicle.controllers.map((c) => `${c.name} ${c.version} ${c.status}`).join(' · ')}>
+                    <Tag color="red">{L('部分域控失败', 'partial failure')}</Tag>
+                  </Tooltip>
+                ) : (
+                  (x.vehicle.integrationVersion ?? <Tag color="orange">{L('未知', 'unknown')}</Tag>)
+                ),
+            },
             {
               title: L('应运行', 'Should run'),
               render: (_, x) => {
@@ -225,16 +269,28 @@ function OtaTab({ projectId }: { projectId: string }) {
                 return r.release ? <Mono>{`DCL ${r.release.dclVersion}`}</Mono> : <Tooltip title={r.problem}><Tag color="red">{L('无匹配，阻止下发', 'no match, blocked')}</Tag></Tooltip>;
               },
             },
-            { title: L('车辆组目标', 'Group target'), render: (_, x) => <Mono>{releaseLabel(state, x.group.targetConfigId)}</Mono> },
             { title: L('已生效', 'Applied'), render: (_, x) => <Mono>{releaseLabel(state, x.vehicle.appliedConfigId)}</Mono> },
+            {
+              title: L('车辆请求配置时返回', 'Answer to a config request'),
+              render: (_, x) => {
+                const a = answerConfigRequest(state, x.vehicle.id);
+                return (
+                  <Tooltip title={a.detail}>
+                    <Space size={4}>
+                      <Tag color={ANSWER_COLORS[a.reason]}>{B(CONFIG_ANSWER_LABELS[a.reason])}</Tag>
+                      <Mono>{releaseLabel(state, a.configId)}</Mono>
+                    </Space>
+                  </Tooltip>
+                );
+              },
+            },
             {
               title: L('状态', 'State'),
               render: (_, x) => {
                 const r = releaseFor(state, x.vehicle);
                 if (!r.release) return <Tag color="red">{L('阻止', 'blocked')}</Tag>;
                 if (x.vehicle.appliedConfigId === r.release.resolvedConfigId) return <Tag color="green">{L('已是最新', 'up to date')}</Tag>;
-                // A rollback (or a rollout to an older release) holds the group until a new rollout.
-                if (x.group.targetConfigId && x.group.targetConfigId !== r.release.resolvedConfigId) return <Tag color="purple">{L('保持（不追新）', 'held')}</Tag>;
+                if (answerConfigRequest(state, x.vehicle.id).reason === 'HELD') return <Tag color="purple">{L('保持（不追新）', 'held')}</Tag>;
                 return <Tag color="gold">{L('待更新', 'update due')}</Tag>;
               },
             },
@@ -263,8 +319,10 @@ function CreateOtaModal({ projectId, onClose }: { projectId: string; onClose: ()
   const groups = vehicleGroupsOf(state, projectId).filter((g) => g.status === 'ACTIVE' && g.purpose === 'PRODUCTION');
   const [releaseId, setReleaseId] = useState(releases[0]?.id);
   const [groupIds, setGroupIds] = useState<string[]>(groups.map((g) => g.id));
+  const ungrouped = ungroupedVehicles(state, projectId).filter((r) => r.env === 'production');
+  const [direct, setDirect] = useState<string[]>(groups.length ? [] : ungrouped.map((r) => r.id));
   const release = releaseId ? state.releases[releaseId] : undefined;
-  const vehicles = groupIds.flatMap((g) => membersOf(state, g)).map((id) => state.resources[id]!);
+  const vehicles = [...groupIds.flatMap((g) => membersOf(state, g)), ...direct].map((id) => state.resources[id]!);
   const candidates = release ? vehicles.filter((r) => r.appliedConfigId !== release.resolvedConfigId) : [];
   const [wave, setWave] = useState<string[] | null>(null);
   const firstWave = wave ?? candidates.slice(0, 1).map((r) => r.id);
@@ -277,7 +335,7 @@ function CreateOtaModal({ projectId, onClose }: { projectId: string; onClose: ()
       okText={L('开始下发', 'Start rollout')}
       onCancel={onClose}
       onOk={() => {
-        if (run((c) => createOta(c, { releaseId: releaseId!, vehicleGroupIds: groupIds, firstWave }), L('已开始灰度，等待车辆回执', 'Rollout started; waiting for receipts')) !== undefined) onClose();
+        if (run((c) => createOta(c, { releaseId: releaseId!, workspaceId: projectId, vehicleGroupIds: groupIds, resourceIds: direct, firstWave }), L('已开始灰度，等待车辆回执', 'Rollout started; waiting for receipts')) !== undefined) onClose();
       }}
     >
       <Hint>
@@ -297,6 +355,20 @@ function CreateOtaModal({ projectId, onClose }: { projectId: string; onClose: ()
             ))}
           </Space>
         </Checkbox.Group>
+        {ungrouped.length > 0 && (
+          <>
+            <Typography.Text strong>{L('未归组的量产车（直接选择）', 'Ungrouped production vehicles (chosen directly)')}</Typography.Text>
+            <Checkbox.Group value={direct} onChange={(v) => (setDirect(v as string[]), setWave(null))}>
+              <Space wrap>
+                {ungrouped.map((r) => (
+                  <Checkbox key={r.id} value={r.id}>
+                    <Mono>{r.id}</Mono>
+                  </Checkbox>
+                ))}
+              </Space>
+            </Checkbox.Group>
+          </>
+        )}
         <Typography.Text strong>{L('第一批（灰度）', 'First wave (gray)')}</Typography.Text>
         {release &&
           vehicles.map((r) => {
@@ -391,7 +463,7 @@ function RolloutCard({ deployment: d, canManage }: { deployment: Deployment; can
               </Button>
             )}
             {d.status !== 'CANCELLED' && d.status !== 'ROLLED_BACK' && (
-              <Tooltip title={rollbackIssues.join('；')}>
+              <Tooltip title={rollbackIssues.length ? `${L('不能回滚：', 'Cannot roll back: ')}${rollbackIssues.join('；')}` : undefined}>
                 <Button size="small" danger disabled={rollbackIssues.length > 0} onClick={() => (setReason(''), setPrompt({ kind: 'rollback' }))}>
                   {L('回滚', 'Roll back')}
                 </Button>
@@ -415,6 +487,26 @@ function RolloutCard({ deployment: d, canManage }: { deployment: Deployment; can
           <Descriptions.Item label={L('原因', 'Reason')}>{d.pauseReason ?? L('车辆应用失败，已自动暂停', 'Paused automatically after a vehicle failed')}</Descriptions.Item>
         )}
       </Descriptions>
+      {d.status === 'PAUSED' && rollbackIssues.length > 0 && (
+        <Alert
+          type="info"
+          showIcon
+          style={{ marginBottom: 12 }}
+          title={
+            rollbackIssues.every((i) => i.endsWith('no earlier formal configuration to return to'))
+              ? L('没有上一份正式配置，不能回滚', 'No earlier formal configuration to roll back to')
+              : L('暂时不能回滚', 'Rollback is not possible right now')
+          }
+          description={
+            rollbackIssues.every((i) => i.endsWith('no earlier formal configuration to return to'))
+              ? L(
+                  '保持暂停并排查；修复后用“恢复（重试失败车辆）”受控重试，或取消本次 OTA 后发布修复版本。平台不会虚构回滚版本。',
+                  'Keep it paused and investigate; after a fix, retry the failed vehicles with “Resume”, or cancel and release a fixed version. The platform never invents a rollback version.',
+                )
+              : rollbackIssues.join('；')
+          }
+        />
+      )}
       <Table
         rowKey="resourceId"
         size="small"

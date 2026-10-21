@@ -4,6 +4,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { SCENE_NOTES } from '../src/acceptance/notes.ts';
 import { NEGATIVE_CASES, SCRIPTS } from '../src/acceptance/scripts.ts';
 import type { State } from '../src/engine/types.ts';
 import * as dataUsage from './data-usage.ts';
@@ -53,7 +54,7 @@ for (const { id, mod } of suites) {
   const rows: Row[] = [];
   for (const scene of script.scenes) {
     const spec = mod.scenes[scene.id];
-    const base = { id: scene.id, title: scene.title, actor: scene.actor, adaptation: spec?.adaptation ?? null };
+    const base = { id: scene.id, title: scene.title, actor: scene.actor, adaptation: SCENE_NOTES[`${id}/${scene.id}`] ?? null };
     let result: Pick<Row, 'status' | 'detail' | 'notes'>;
     const missing = (spec?.needs ?? []).filter((n) => status.get(n) !== 'PASS');
     const forkFrom = spec?.forkAfter ? after.get(spec.forkAfter) : undefined;
@@ -71,7 +72,7 @@ for (const { id, mod } of suites) {
 
 const negativeRows: Row[] = NEGATIVE_CASES.map((c) => {
   const spec = negative.cases[c.id];
-  const base = { id: c.id, title: `${c.action} → ${c.expected}`, actor: c.role, adaptation: spec?.adaptation ?? null };
+  const base = { id: c.id, title: `${c.action} → ${c.expected}`, actor: c.role, adaptation: SCENE_NOTES[`negative/${c.id}`] ?? null };
   if (!spec) return { ...base, status: 'NOT_WRITTEN' as Status, detail: '没有对应的验收实现', notes: [] };
   return { ...base, ...play(new World(negative.start()), spec) };
 });
