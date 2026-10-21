@@ -11,7 +11,7 @@ import { authorizeFeature, displayName } from './config.ts';
 import type { Ctx } from './engine.ts';
 import { getResource, membersOf, pendingDeploymentOf, recordGroupBinding } from './fleet.ts';
 import { getGroup } from './org.ts';
-import type { Deployment, DeploymentTarget, Feature, ResolvedConfig, State, TestRun } from './types.ts';
+import type { Candidate, Deployment, DeploymentTarget, Feature, ResolvedConfig, State, TestRun } from './types.ts';
 
 /** Finds or creates the resolved configuration for a base plus group commits. */
 export function resolveConfig(
@@ -154,9 +154,13 @@ function settle(d: Draft<Deployment>, now: string): void {
 export function cancelDeployment(ctx: Ctx, deploymentId: string, reason: string): void {
   const d = ctx.s.deployments[deploymentId];
   if (!d) throw notFound('deployment', deploymentId);
-  if (d.kind !== 'FEATURE') throw rule('NOT_A_FEATURE_DEPLOYMENT', 'use the rollout controls for this deployment');
-  const group = getGroup(ctx.s, d.groupId!);
-  ctx.allow('feature.dispatch', { type: 'deployment', id: d.id, workspaceId: d.workspaceId, groupId: group.id, scope: group.domain, env: d.env });
+  if (d.kind === 'OTA') throw rule('USE_ROLLOUT_CONTROLS', 'use the rollout controls for this deployment');
+  if (d.kind === 'FEATURE') {
+    const group = getGroup(ctx.s, d.groupId!);
+    ctx.allow('feature.dispatch', { type: 'deployment', id: d.id, workspaceId: d.workspaceId, groupId: group.id, scope: group.domain, env: d.env });
+  } else {
+    ctx.allow('candidate.dispatch', { type: 'deployment', id: d.id, workspaceId: d.workspaceId, scope: 'Vehicle' });
+  }
   if (!reason.trim()) throw rule('REASON_REQUIRED', 'give a reason');
   if (d.status !== 'PENDING') throw rule('NOT_PENDING', 'the deployment is not pending');
   for (const t of d.targets) {
@@ -215,23 +219,29 @@ export interface TargetStatus {
   latest: TestRun | null;
 }
 
-/** Vehicles the Feature's head commit must be verified on, with their latest results. */
-export function featureTestStatus(s: State, feature: Feature): TargetStatus[] {
-  if (!feature.headCommitId) return [];
+function testStatusFor(s: State, subjectId: string, versionId: string): TargetStatus[] {
   return s.testTargets
-    .filter((t) => t.subjectKind === 'FEATURE' && t.subjectId === feature.id && t.versionId === feature.headCommitId)
+    .filter((t) => t.subjectId === subjectId && t.versionId === versionId)
     .map((t) => {
       const d = s.deployments[t.deploymentId]!;
       const r = s.resources[t.resourceId]!;
       const applied = r.appliedConfigId === d.resolvedConfigId;
-      const runs = s.testRuns.filter((x) => x.subjectId === feature.id && x.versionId === feature.headCommitId && x.resourceId === t.resourceId);
+      const runs = s.testRuns.filter((x) => x.subjectId === subjectId && x.versionId === versionId && x.resourceId === t.resourceId);
       return { resourceId: t.resourceId, deploymentId: t.deploymentId, applied, latest: runs.sort((a, b) => b.seq - a.seq)[0] ?? null };
     });
 }
 
+/** Vehicles the Feature's head commit must be verified on, with their latest results. */
+export function featureTestStatus(s: State, feature: Feature): TargetStatus[] {
+  return feature.headCommitId ? testStatusFor(s, feature.id, feature.headCommitId) : [];
+}
+
 /** Why the head commit cannot be verified yet; empty when it can. */
 export function verifyBlockers(s: State, feature: Feature): string[] {
-  const status = featureTestStatus(s, feature);
+  return blockersFor(s, featureTestStatus(s, feature));
+}
+
+function blockersFor(s: State, status: TargetStatus[]): string[] {
   const blockers: string[] = [];
   if (status.length === 0) blockers.push('no vehicles were dispatched for this commit');
   for (const t of status) if (t.latest?.result !== 'PASS') blockers.push(`${t.resourceId} has no passing test`);
@@ -239,6 +249,12 @@ export function verifyBlockers(s: State, feature: Feature): string[] {
   if (!types.has('SIMULATION')) blockers.push('a simulation test must pass');
   if (!types.has('PHYSICAL')) blockers.push('a physical vehicle test must pass');
   return blockers;
+}
+
+function assertSimulationFirst(s: State, subjectId: string, versionId: string, resourceType: string, result: string): void {
+  if (resourceType !== 'PHYSICAL' || result !== 'PASS') return;
+  const simPass = s.testRuns.some((x) => x.subjectId === subjectId && x.versionId === versionId && x.resourceType === 'SIMULATION' && x.result === 'PASS');
+  if (!simPass) throw rule('SIMULATION_FIRST', 'a simulation test must pass before a physical one');
 }
 
 /** Business testing records a result for the head commit on a vehicle that actually applied it. */
@@ -258,11 +274,7 @@ export function recordFeatureTest(
   if (!target) throw rule('NOT_A_TEST_TARGET', `vehicle ${r.id} was not dispatched this commit`);
   if (!target.applied) throw rule('NOT_APPLIED', `vehicle ${r.id} has not confirmed applying this configuration`);
   if (!input.summary.trim()) throw rule('SUMMARY_REQUIRED', 'describe what was tested');
-  if (r.type === 'PHYSICAL' && input.result === 'PASS') {
-    // Simulation first, then the physical vehicle.
-    const simPass = ctx.s.testRuns.some((x) => x.subjectId === featureId && x.versionId === input.commitId && x.resourceType === 'SIMULATION' && x.result === 'PASS');
-    if (!simPass) throw rule('SIMULATION_FIRST', 'a simulation test of this commit must pass before a physical one');
-  }
+  assertSimulationFirst(ctx.s, featureId, input.commitId, r.type, input.result);
   const id = newId('tr');
   ctx.s.testRuns.push({
     id,
@@ -298,4 +310,137 @@ export function deploymentsOf(s: State, subjectId: string): Deployment[] {
   return Object.values(s.deployments)
     .filter((d) => d.subjectId === subjectId)
     .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+}
+
+// ---------------------------------------------------------------------------
+// Integration candidates
+// ---------------------------------------------------------------------------
+
+export function getCandidate(s: State, id: string): Candidate {
+  const c = s.candidates[id];
+  if (!c) throw notFound('candidate', id);
+  return c;
+}
+
+export function candidateTestStatus(s: State, c: Candidate): TargetStatus[] {
+  return testStatusFor(s, c.id, c.id);
+}
+
+export function candidateVerifyBlockers(s: State, c: Candidate): string[] {
+  return blockersFor(s, candidateTestStatus(s, c));
+}
+
+/** Integration testing dispatches a frozen candidate to testing vehicle groups of the integration workspace. */
+export function dispatchCandidate(ctx: Ctx, candidateId: string, input: { vehicleGroupIds: string[] }): string {
+  const c = getCandidate(ctx.s, candidateId);
+  ctx.allow('candidate.dispatch', { type: 'candidate', id: c.id, workspaceId: c.testWorkspaceId, scope: 'Vehicle' });
+  if (!['CANDIDATE', 'TESTING', 'VERIFIED'].includes(c.status)) throw rule('CANDIDATE_CLOSED', 'the candidate is closed');
+  if (input.vehicleGroupIds.length === 0) throw rule('NO_VEHICLE_GROUPS', 'choose at least one vehicle group');
+  const problems: string[] = [];
+  const members: { resourceId: string; vehicleGroupId: string }[] = [];
+  for (const id of input.vehicleGroupIds) {
+    const g = ctx.s.vehicleGroups[id];
+    if (!g) {
+      problems.push(`${id}: vehicle group does not exist`);
+      continue;
+    }
+    if (g.status !== 'ACTIVE') problems.push(`${g.name}: archived`);
+    if (g.workspaceId !== c.testWorkspaceId) problems.push(`${g.name}: not in the integration workspace`);
+    // Candidates only go to the testing pool.
+    if (g.purpose !== 'TEST' || g.env !== 'testing') problems.push(`${g.name}: candidates only go to testing vehicle groups`);
+    const list = membersOf(ctx.s, id);
+    if (list.length === 0) problems.push(`${g.name}: no vehicles`);
+    for (const rid of list) {
+      if (members.some((m) => m.resourceId === rid)) continue;
+      const r = ctx.s.resources[rid]!;
+      if (r.env !== 'testing') problems.push(`${rid}: not a testing vehicle`);
+      if (r.status !== 'AVAILABLE') problems.push(`${rid}: ${r.status.toLowerCase()}`);
+      if (r.vehicleModelId !== c.vehicleModelId) problems.push(`${rid}: another vehicle model`);
+      const pending = pendingDeploymentOf(ctx.s, rid);
+      if (pending) problems.push(`${rid}: waiting for deployment ${pending}`);
+      members.push({ resourceId: rid, vehicleGroupId: id });
+    }
+  }
+  if (problems.length) throw rule('DISPATCH_BLOCKED', 'the dispatch would not reach every vehicle safely', { issues: problems });
+  const id = newId('dp');
+  for (const vgId of input.vehicleGroupIds) recordGroupBinding(ctx, vgId, c.resolvedConfigId);
+  for (const m of members) {
+    if (!ctx.s.testTargets.some((t) => t.subjectId === c.id && t.resourceId === m.resourceId)) {
+      ctx.s.testTargets.push({ subjectKind: 'CANDIDATE', subjectId: c.id, versionId: c.id, resourceId: m.resourceId, deploymentId: id });
+    }
+  }
+  ctx.s.deployments[id] = {
+    id,
+    kind: 'CANDIDATE',
+    workspaceId: c.testWorkspaceId,
+    groupId: null,
+    subjectId: c.id,
+    commitId: null,
+    resolvedConfigId: c.resolvedConfigId,
+    env: 'testing',
+    status: 'PENDING',
+    vehicleGroupIds: [...input.vehicleGroupIds],
+    targets: members.map((m) => ({
+      resourceId: m.resourceId,
+      vehicleGroupId: m.vehicleGroupId,
+      attempt: 0,
+      status: 'PENDING' as const,
+      previousConfigId: ctx.s.resources[m.resourceId]!.appliedConfigId,
+      error: null,
+      updatedAt: ctx.now,
+      history: [],
+    })),
+    dispatchedBy: ctx.user().username,
+    createdAt: ctx.now,
+    updatedAt: ctx.now,
+  };
+  ctx.s.candidates[c.id]!.status = 'TESTING';
+  return id;
+}
+
+export function recordCandidateTest(
+  ctx: Ctx,
+  candidateId: string,
+  input: { resourceId: string; result: 'PASS' | 'FAIL'; summary: string; evidenceUri?: string },
+): string {
+  const c = getCandidate(ctx.s, candidateId);
+  const r = getResource(ctx.s, input.resourceId);
+  ctx.allow('candidate.recordTest', { type: 'candidate', id: c.id, workspaceId: c.testWorkspaceId, scope: 'Vehicle', env: r.env });
+  if (c.status !== 'TESTING') throw rule('NOT_TESTING', 'the candidate is not in testing');
+  const target = candidateTestStatus(ctx.s, c).find((t) => t.resourceId === r.id);
+  if (!target) throw rule('NOT_A_TEST_TARGET', `vehicle ${r.id} was not dispatched this candidate`);
+  if (!target.applied) throw rule('NOT_APPLIED', `vehicle ${r.id} has not confirmed applying this candidate`);
+  if (!input.summary.trim()) throw rule('SUMMARY_REQUIRED', 'describe what was tested');
+  assertSimulationFirst(ctx.s, c.id, c.id, r.type, input.result);
+  const id = newId('tr');
+  ctx.s.testRuns.push({
+    id,
+    seq: ctx.seq(),
+    subjectKind: 'CANDIDATE',
+    subjectId: c.id,
+    versionId: c.id,
+    resourceId: r.id,
+    resourceType: r.type,
+    env: r.env,
+    resolvedConfigId: c.resolvedConfigId,
+    result: input.result,
+    summary: input.summary.trim(),
+    evidenceUri: input.evidenceUri?.trim() || null,
+    tester: ctx.user().username,
+    createdAt: ctx.now,
+  });
+  return id;
+}
+
+/** Independent integration testing confirms the candidate: every target passed. */
+export function verifyCandidate(ctx: Ctx, candidateId: string): void {
+  const c = getCandidate(ctx.s, candidateId);
+  ctx.allow('candidate.verify', { type: 'candidate', id: c.id, workspaceId: c.testWorkspaceId, scope: 'Vehicle' });
+  if (c.status !== 'TESTING') throw rule('NOT_TESTING', 'the candidate is not in testing');
+  const blockers = candidateVerifyBlockers(ctx.s, c);
+  if (blockers.length) throw rule('VERIFY_BLOCKED', 'the candidate cannot be verified yet', { issues: blockers });
+  const draft = ctx.s.candidates[c.id]!;
+  draft.status = 'VERIFIED';
+  draft.verifiedBy = ctx.user().username;
+  draft.verifiedAt = ctx.now;
 }

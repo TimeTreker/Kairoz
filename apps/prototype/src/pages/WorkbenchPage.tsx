@@ -3,16 +3,17 @@ import type { ReactNode } from 'react';
 import { useActor, useWorkspace } from '../app/hooks.ts';
 import { navigate } from '../app/router.ts';
 import { useEngineState } from '../app/store.ts';
-import { Mono, RoleTag, StageTag } from '../components/common.tsx';
+import { LabelTag, Mono, RoleTag, StageTag } from '../components/common.tsx';
 import { authorize } from '../domain/authz.ts';
 import { visibleFeatures } from '../engine/config.ts';
 import { intakeQueue } from '../engine/intake.ts';
+import { isConfirmed, verifiedSources } from '../engine/integration.ts';
 import { managedResources, pendingDeploymentOf, vehicleGroupsOf, workspaceVehicles } from '../engine/fleet.ts';
 import { referenceRequestsFor } from '../engine/references.ts';
-import { featureTestStatus } from '../engine/validation.ts';
+import { candidateTestStatus, featureTestStatus } from '../engine/validation.ts';
 import type { Feature } from '../engine/types.ts';
 import { useI18n } from '../i18n/i18n.tsx';
-import { FEEDBACK_LABELS } from '../i18n/vocab.ts';
+import { CANDIDATE_STATUS_COLORS, CANDIDATE_STATUS_LABELS, FEEDBACK_LABELS } from '../i18n/vocab.ts';
 
 function Row2({ onClick, children }: { onClick: () => void; children: ReactNode }) {
   return (
@@ -110,6 +111,48 @@ export function WorkbenchPage() {
       </Card>,
     );
   }
+  if (roles.includes('CONFIG_INTEGRATOR') && workspace?.kind === 'PROJECT') {
+    const plans = Object.values(state.mergePlans).filter((p) => p.workspaceId === workspace.id);
+    const latest = plans.at(-1);
+    const openCandidates = Object.values(state.candidates).filter((c) => c.workspaceId === workspace.id && ['CANDIDATE', 'TESTING', 'VERIFIED'].includes(c.status));
+    cards.push(
+      <Card key="ci" title={<RoleTag role="CONFIG_INTEGRATOR" />} extra={<Button size="small" onClick={() => navigate('integration')}>{L('配置集成', 'Integration')}</Button>}>
+        <Row gutter={16} style={{ marginBottom: 12 }}>
+          <Col span={8}><Statistic title={L('可集成的 Verified', 'Verified to integrate')} value={verifiedSources(state, workspace.id).length} /></Col>
+          <Col span={8}><Statistic title={L('待 DCL 确认', 'Awaiting DCL')} value={plans.filter((p) => p.status === 'READY' && !isConfirmed(state, p)).length} /></Col>
+          <Col span={8}><Statistic title={L('未结束的候选', 'Open candidates')} value={openCandidates.length} /></Col>
+        </Row>
+        {openCandidates.map((c) => (
+          <Row2 key={c.id} onClick={() => navigate(`integration/${c.id}`)}>
+            <Mono>{c.label}</Mono>
+            <LabelTag map={CANDIDATE_STATUS_LABELS} value={c.status} color={CANDIDATE_STATUS_COLORS[c.status]} />
+          </Row2>
+        ))}
+        {latest && latest.status === 'CONFLICT' && <Typography.Text type="danger">{L('最新合并预览有冲突', 'The latest merge preview has conflicts')}</Typography.Text>}
+      </Card>,
+    );
+  }
+  if (roles.includes('INTEGRATION_TEST') && workspace?.kind === 'INTEGRATION') {
+    const mine = Object.values(state.candidates).filter((c) => c.testWorkspaceId === workspace.id && ['CANDIDATE', 'TESTING'].includes(c.status));
+    cards.push(
+      <Card key="it" title={<RoleTag role="INTEGRATION_TEST" />} extra={<Button size="small" onClick={() => navigate('integration')}>{L('集成候选', 'Candidates')}</Button>}>
+        <Row gutter={16} style={{ marginBottom: 12 }}>
+          <Col span={12}><Statistic title={L('待下发', 'To dispatch')} value={mine.filter((c) => c.status === 'CANDIDATE').length} /></Col>
+          <Col span={12}><Statistic title={L('测试中', 'Testing')} value={mine.filter((c) => c.status === 'TESTING').length} /></Col>
+        </Row>
+        {mine.length === 0 && <Typography.Text type="secondary">{L('暂无待测候选', 'No candidates to test')}</Typography.Text>}
+        {mine.map((c) => (
+          <Row2 key={c.id} onClick={() => navigate(`integration/${c.id}`)}>
+            <Space>
+              <Mono>{c.label}</Mono>
+              {candidateTestStatus(state, c).some((t) => !t.applied) && <Typography.Text type="secondary">{L('等待车辆回执', 'awaiting receipts')}</Typography.Text>}
+            </Space>
+            <LabelTag map={CANDIDATE_STATUS_LABELS} value={c.status} color={CANDIDATE_STATUS_COLORS[c.status]} />
+          </Row2>
+        ))}
+      </Card>,
+    );
+  }
   if (actor.grants.some((g) => g.role === 'VEHICLE_RESOURCE')) {
     const managed = managedResources(state, actor);
     cards.push(
@@ -124,12 +167,19 @@ export function WorkbenchPage() {
   }
   if (actor.grants.some((g) => g.role === 'DCL_ENGINEER')) {
     const q = intakeQueue(state, actor);
+    const confirmations = Object.values(state.mergePlans).filter((p) => p.status === 'READY' && !isConfirmed(state, p));
     cards.push(
       <Card key="dcl" title={<RoleTag role="DCL_ENGINEER" />} extra={<Button size="small" onClick={() => navigate('intake')}>{L('打开接入队列', 'Open intake')}</Button>}>
         <Row gutter={16}>
-          <Col span={12}><Statistic title={L('待敏感审核的 Feature', 'Features awaiting review')} value={q.features.length} /></Col>
-          <Col span={12}><Statistic title={L('待判定的来源重叠', 'Overlaps to decide')} value={q.overlaps.length} /></Col>
+          <Col span={8}><Statistic title={L('待敏感审核的 Feature', 'Features awaiting review')} value={q.features.length} /></Col>
+          <Col span={8}><Statistic title={L('待判定的来源重叠', 'Overlaps to decide')} value={q.overlaps.length} /></Col>
+          <Col span={8}><Statistic title={L('待确认的集成处理集合', 'Integration sets to confirm')} value={confirmations.length} /></Col>
         </Row>
+        {confirmations.length > 0 && (
+          <Button type="link" style={{ paddingLeft: 0 }} onClick={() => navigate('integration')}>
+            {L('去配置集成确认处理集合', 'Confirm processing sets in Integration')}
+          </Button>
+        )}
       </Card>,
     );
   }

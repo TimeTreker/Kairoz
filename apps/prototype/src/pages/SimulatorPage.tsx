@@ -63,7 +63,7 @@ export function SimulatorPage() {
       />
       <Space orientation="vertical" size={16} style={{ width: '100%' }}>
         <Card title={`${L('等待车辆回执的配置', 'Configurations awaiting a vehicle receipt')} · ${pending.length}`}>
-          {pending.length === 0 && <Alert type="info" showIcon message={L('没有等待回执的配置。在 Feature 的“下发与测试”中下发后会出现在这里。', 'Nothing is waiting. Dispatch from a Feature’s “Dispatch & tests” tab.')} />}
+          {pending.length === 0 && <Alert type="info" showIcon title={L('没有等待回执的配置。在 Feature 的“下发与测试”中下发后会出现在这里。', 'Nothing is waiting. Dispatch from a Feature’s “Dispatch & tests” tab.')} />}
           {pending.length > 0 && (
             <Table
               rowKey={(p) => `${p.deployment.id}/${p.target.resourceId}`}

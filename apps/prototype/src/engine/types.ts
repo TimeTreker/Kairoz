@@ -8,7 +8,7 @@ import type { FileType, Privacy } from '../domain/file-types.ts';
 import type { ReviewControls } from '../domain/intake.ts';
 import type { Domain, Env, GroupPurpose, Scope, WorkspaceKind } from '../domain/vocabulary.ts';
 
-export const STATE_SCHEMA = 2;
+export const STATE_SCHEMA = 3;
 
 export interface Account {
   username: string;
@@ -165,7 +165,10 @@ export interface Commit {
   id: string;
   /** Global order of commits. */
   seq: number;
-  featureId: string;
+  /** The Feature it was submitted from; null for a merge commit created by integration. */
+  featureId: string | null;
+  /** For merge commits: the candidate they belong to. */
+  mergeLabel?: string;
   groupId: string;
   parentCommitId: string | null;
   sequence: number;
@@ -422,6 +425,74 @@ export interface TestRun {
   createdAt: string;
 }
 
+// ---------------------------------------------------------------------------
+// Integration
+// ---------------------------------------------------------------------------
+
+export interface MergeConflict {
+  groupId: string;
+  section: 'files' | 'policies' | 'references';
+  key: string;
+  /** The field in conflict; '*' when the whole item conflicts (added differently, removed vs changed). */
+  field: string;
+  base: unknown;
+  ours: unknown;
+  theirs: unknown;
+  featureIds: string[];
+  /** Who must fix it: the owning business group, or DCL for processing fields. */
+  owner: 'BUSINESS' | 'DCL';
+}
+
+/** A three-way merge preview of Verified Features onto a target set. */
+export interface MergePlan {
+  id: string;
+  workspaceId: string;
+  vehicleModelId: string;
+  targetReleaseId: string | null;
+  sources: { featureId: string; commitId: string }[];
+  status: 'READY' | 'CONFLICT' | 'BLOCKED' | 'FROZEN' | 'SUPERSEDED';
+  /** Merged configuration of every group a source changed. */
+  merged: Record<string, GroupConfig>;
+  conflicts: MergeConflict[];
+  issues: string[];
+  digest: string;
+  createdBy: string;
+  createdAt: string;
+}
+
+/** DCL confirms the exact final processing set of a merge preview (bound to its digest). */
+export interface ProcessingConfirmation {
+  id: string;
+  mergePlanId: string;
+  digest: string;
+  note: string;
+  confirmedBy: string;
+  createdAt: string;
+}
+
+export type CandidateStatus = 'CANDIDATE' | 'TESTING' | 'VERIFIED' | 'RELEASED' | 'CANCELLED';
+
+/** A frozen, complete configuration set (集成候选); its tests start from zero. */
+export interface Candidate {
+  id: string;
+  label: string;
+  workspaceId: string;
+  /** The integration workspace whose testing vehicles verify it. */
+  testWorkspaceId: string;
+  vehicleModelId: string;
+  mergePlanId: string;
+  targetReleaseId: string | null;
+  /** group id -> commit id: the complete set. */
+  groups: Record<string, string>;
+  sources: { featureId: string; commitId: string }[];
+  resolvedConfigId: string;
+  status: CandidateStatus;
+  createdBy: string;
+  createdAt: string;
+  verifiedBy: string | null;
+  verifiedAt: string | null;
+}
+
 export interface AuditEvent {
   id: string;
   seq: number;
@@ -476,6 +547,9 @@ export interface State {
   receipts: Receipt[];
   testTargets: TestTarget[];
   testRuns: TestRun[];
+  mergePlans: Record<string, MergePlan>;
+  processingConfirmations: ProcessingConfirmation[];
+  candidates: Record<string, Candidate>;
   audit: AuditEvent[];
 }
 
@@ -515,6 +589,9 @@ export function emptyState(): State {
     receipts: [],
     testTargets: [],
     testRuns: [],
+    mergePlans: {},
+    processingConfirmations: [],
+    candidates: {},
     audit: [],
   };
 }

@@ -10,6 +10,8 @@ import { createGroup, createOrgUnit, createProject, createVehicleModel, createWo
 import { createPipeline, createTemplate } from './processing.ts';
 import { requestReference } from './references.ts';
 import { addGroupMember, addWorkspaceVehicle, confirmIntegration, createSimulation, createVehicleGroup, recordSoftwareVersion, registerImage, registerPhysical } from './fleet.ts';
+import { sendReceipt } from './simulator.ts';
+import { dispatchFeature, recordFeatureTest, verifyFeature } from './validation.ts';
 import { sha256Hex } from '../domain/canonical.ts';
 import { emptyState } from './types.ts';
 import type { State } from './types.ts';
@@ -143,6 +145,7 @@ export function demoState(): State {
   account('dcl', '林书涵', [{ role: 'DCL_ENGINEER', workspaces: ['*'], groups: ['*'], envs: ALL_ENVS }]);
   account('workspace_manager', '周子墨', [{ role: 'WORKSPACE_ADMIN', workspaces: ['team-brake', 'team-steering'] }]);
   account('integrator', '赵一鸣', [{ role: 'CONFIG_INTEGRATOR', workspaces: ['x89-project', 'x89-integration'], scopes: ['Vehicle'] }]);
+  account('integration_admin', '郑书杰', [{ role: 'WORKSPACE_ADMIN', workspaces: ['x89-integration'], envs: ['testing'] }]);
   account('integration_tester', '钱思源', [{ role: 'INTEGRATION_TEST', workspaces: ['x89-integration'], scopes: ['Vehicle'], envs: ['testing'] }]);
   account('release', '孙立', [{ role: 'CONFIG_RELEASE', workspaces: ['x89-project', 'x89-integration'], scopes: ['Vehicle'], envs: ALL_ENVS }]);
   account('resource', '刘子衡', [{ role: 'VEHICLE_RESOURCE', workspaces: ['*'], scopes: ['Vehicle', 'Chassis', 'ADC', 'CDC'], envs: ALL_ENVS }]);
@@ -202,6 +205,7 @@ export function demoState(): State {
   for (const [id, vin, plate, env, pool, name, version] of [
     ['VEH-001', 'LSDEM0X8900000001', '沪A·D0001', 'development', 'Chassis', '制动研发车 1', '1.0'],
     ['VEH-002', 'LSDEM0X8900000002', '沪A·D0002', 'development', 'ADC', '泊车研发车 1', null],
+    ['VEH-003', 'LSDEM0X8900000003', '沪A·D0003', 'development', 'Chassis', '转向研发车 1', '1.0'],
     ['VEH-031', 'LSDEM0X8900000031', '沪A·T0031', 'testing', 'Vehicle', '整车集成测试车 1', '1.0'],
     ['VEH-201', 'LSDEM0X8900000201', '沪A·P0201', 'production', 'Vehicle', '量产车 201', '1.0'],
     ['VEH-202', 'LSDEM0X8900000202', '沪A·P0202', 'production', 'Vehicle', '量产车 202', '1.0'],
@@ -216,6 +220,45 @@ export function demoState(): State {
   );
   as('workspace_manager', (c) => addGroupMember(c, brakeGroup, 'SIM-021', '制动 Feature 仿真验证'));
   as('workspace_manager', (c) => addGroupMember(c, brakeGroup, 'VEH-001', '制动 Feature 实车验证'));
+
+  // Steering has already verified a Feature, so integration can be tried right away.
+  as('workspace_manager', (c) => createSimulation(c, { id: 'SIM-022', workspaceId: 'team-steering', imageId: 'x89-1.0-sim', env: 'development', pool: 'Chassis', displayName: '转向仿真 22' }));
+  as('workspace_manager', (c) => addWorkspaceVehicle(c, 'team-steering', 'VEH-003'));
+  const steeringGroup = as<string>('workspace_manager', (c) =>
+    createVehicleGroup(c, { workspaceId: 'team-steering', groupId: 'steering', name: '转向研发车组', purpose: 'DEV', env: 'development' }),
+  );
+  as('workspace_manager', (c) => addGroupMember(c, steeringGroup, 'SIM-022', '转向 Feature 仿真验证'));
+  as('workspace_manager', (c) => addGroupMember(c, steeringGroup, 'VEH-003', '转向 Feature 实车验证'));
+  const steering = as<string>('steering', (c) =>
+    createFeature(c, { workspaceId: 'team-steering', groupId: 'steering', name: 'steering_angle_jump', description: '方向盘转角突变数据采集' }),
+  );
+  const epsKey = as<string>('steering', (c) =>
+    addFile(c, steering, { source: { unit: 'Chassis', directory: '/var/log/eps', pattern: 'eps_trace.bin' }, name: 'EPS 转向轨迹', purpose: '分析方向盘转角突变' }),
+  );
+  as('steering', (c) =>
+    putPolicy(c, steering, 'chassis.steering.angle_jump', {
+      name: '转角突变',
+      trigger: 'steering_angle_rate > 300 AND vehicle_speed > 20',
+      captures: [epsKey],
+      preSeconds: 5,
+      postSeconds: 10,
+    }),
+  );
+  const steeringCommit = as<{ commitId: string }>('steering', (c) => submitFeature(c, steering, { message: '转角突变首版' })).commitId;
+  const steeringDispatch = as<string>('steering_tester', (c) => dispatchFeature(c, steering, { commitId: steeringCommit, vehicleGroupIds: [steeringGroup] }));
+  for (const vehicle of ['SIM-022', 'VEH-003']) engine.run(null, (c) => sendReceipt(c, steeringDispatch, vehicle, 'APPLIED'));
+  as('steering_tester', (c) => recordFeatureTest(c, steering, { commitId: steeringCommit, resourceId: 'SIM-022', result: 'PASS', summary: '仿真回放 20 段转角突变场景，均正确触发' }));
+  as('steering_tester', (c) => recordFeatureTest(c, steering, { commitId: steeringCommit, resourceId: 'VEH-003', result: 'PASS', summary: '实车封闭场地触发 5 次，数据完整' }));
+  as('steering_tester', (c) => verifyFeature(c, steering));
+
+  // The integration workspace has its own testing vehicles for candidates.
+  as('integration_admin', (c) => createSimulation(c, { id: 'SIM-101', workspaceId: 'x89-integration', imageId: 'x89-1.0-sim', env: 'testing', pool: 'Vehicle', displayName: '整车集成仿真 101' }));
+  as('integration_admin', (c) => addWorkspaceVehicle(c, 'x89-integration', 'VEH-031'));
+  const integrationGroup = as<string>('integration_admin', (c) =>
+    createVehicleGroup(c, { workspaceId: 'x89-integration', groupId: null, name: 'X89 集成测试车组', purpose: 'TEST', env: 'testing' }),
+  );
+  as('integration_admin', (c) => addGroupMember(c, integrationGroup, 'SIM-101', '集成候选仿真验证'));
+  as('integration_admin', (c) => addGroupMember(c, integrationGroup, 'VEH-031', '集成候选实车验证'));
 
   // Steering asks brake for read-only use of the brake debug data; brake has not decided yet.
   as('steering', (c) => requestReference(c, { dataKey: brakeKey, readerGroupId: 'steering', reason: '转向事件分析需要制动压力上下文' }));

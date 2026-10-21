@@ -101,8 +101,20 @@ export function PoliciesTab({ feature }: { feature: Feature }) {
         }
       >
         <Form form={form} name="policy" layout="vertical">
-          <Form.Item name="suffix" label={L('策略 ID', 'Policy id')} rules={[{ required: true, pattern: /^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)*$/ }]}>
-            <Input addonBefore={prefix} disabled={editing !== 'new'} placeholder="hard_braking" />
+          <Form.Item label={L('策略 ID', 'Policy id')} required>
+            <Space.Compact style={{ width: '100%' }}>
+              <Space.Addon>{prefix}</Space.Addon>
+              <Form.Item
+                name="suffix"
+                noStyle
+                rules={[
+                  { required: true, message: L('请填写策略 ID', 'Enter the policy id') },
+                  { pattern: /^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)*$/, message: L('小写字母、数字和下划线，以点分段', 'Lowercase letters, digits and underscores, in dot-separated parts') },
+                ]}
+              >
+                <Input disabled={editing !== 'new'} placeholder="hard_braking" />
+              </Form.Item>
+            </Space.Compact>
           </Form.Item>
           <Form.Item name="name" label={L('名称', 'Name')} rules={[{ required: true }]}>
             <Input />
@@ -120,7 +132,7 @@ export function PoliciesTab({ feature }: { feature: Feature }) {
               style={{ marginBottom: 12 }}
               type={parsed.ok ? 'success' : 'error'}
               showIcon
-              message={
+              title={
                 parsed.ok
                   ? `${L('信号', 'Signals')}: ${parsed.signals.join(', ')}`
                   : `${parsed.error.message} @ ${parsed.error.position}`

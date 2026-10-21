@@ -61,6 +61,20 @@ export const SCENARIOS: Scenario[] = [
     ],
   },
   {
+    key: 'integration',
+    titleZh: '主线二 · 配置集成与集成测试',
+    titleEn: 'Flow 2 · Configuration integration and integration testing',
+    steps: [
+      { account: 'integrator', workspace: 'x89-project', page: 'integration', zh: '在“合并与处理确认”选择 Verified 的 steering_angle_jump（可先完成主线一，把 guided_brake 也验证通过）并预览合并', en: 'Under Merge & processing select the Verified steering_angle_jump (finish flow 1 first to add guided_brake) and preview', expectZh: '每个 Feature 以自己的基线三方合并到目标版本；无冲突时显示变化与最终处理集合', expectEn: 'Each Feature merges three-way from its own base; without conflicts the changes and final processing set are shown' },
+      { account: 'dcl', workspace: 'x89-project', page: 'integration', zh: '确认最终处理集合', en: 'Confirm the final processing set', expectZh: '确认绑定在预览摘要上；敏感文件须以合并后的内容获得批准', expectEn: 'The confirmation binds to the preview digest; sensitive files need approval of the merged content' },
+      { account: 'integrator', workspace: 'x89-project', page: 'integration', zh: '冻结为集成候选 X89-C1', en: 'Freeze as candidate X89-C1', expectZh: '生成完整车辆配置；来源 Feature 变为“已集成”；候选测试从零开始', expectEn: 'A complete vehicle configuration is created; sources become Integrated; candidate tests start from zero' },
+      { account: 'integration_tester', workspace: 'x89-integration', page: 'integration', zh: '打开候选 → 下发到“X89 集成测试车组”', en: 'Open the candidate → dispatch to the X89 integration test group', expectZh: 'SIM-101 与 VEH-031 等待回执；只能下发到集成工作区的测试车辆组', expectEn: 'SIM-101 and VEH-031 await receipts; only the integration workspace’s testing groups are allowed' },
+      { account: 'integration_tester', page: 'simulator', zh: '在车辆模拟器中让两辆车回执成功', en: 'In the simulator, apply on both vehicles', expectZh: '车辆的已生效配置变为候选配置', expectEn: 'Both vehicles now run the candidate configuration' },
+      { account: 'integration_tester', workspace: 'x89-integration', page: 'integration', zh: '先为 SIM-101、再为 VEH-031 登记 PASS，然后确认集成验证通过', en: 'Record PASS for SIM-101, then VEH-031, then confirm Verified', expectZh: '候选“集成已验证”，可交给配置发布', expectEn: 'The candidate is Verified and ready for release' },
+      { account: 'integrator', workspace: 'x89-project', page: 'integration', zh: '（冲突演示）在制动组再建一个 Feature，定义同名策略 chassis.brake.hard_braking 但触发不同；验证后与 guided_brake 一起预览', en: '(Conflict demo) Create another brake Feature defining policy chassis.brake.hard_braking differently; verify it and preview it with guided_brake', expectZh: '预览显示整项冲突与解决方；冲突由业务方在来源 Feature 中解决', expectEn: 'The preview shows a whole-item conflict and its owner; the business side resolves it in a source Feature' },
+    ],
+  },
+  {
     key: 'reference',
     titleZh: '跨组只读引用',
     titleEn: 'Cross-group read-only reference',
@@ -105,7 +119,7 @@ export function GuidePage() {
                     <span>{L(st.zh, st.en)}</span>
                   </Space>
                 ),
-                description: (
+                content: (
                   <Space orientation="vertical" size={4}>
                     <Typography.Text type="secondary">{L(`预期：${st.expectZh}`, `Expect: ${st.expectEn}`)}</Typography.Text>
                     {state.accounts[st.account] && (

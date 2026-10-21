@@ -196,7 +196,7 @@ Object.assign(ERROR_LABELS, {
   NOT_A_TEST_TARGET: b('该车辆不在本提交的验证目标中', 'This vehicle is not a test target of the commit'),
   SIMULATION_FIRST: b('实车测试前须先有仿真测试通过', 'A simulation test must pass before a physical one'),
   VERIFY_BLOCKED: b('暂不能确认 Verified', 'Cannot verify yet'),
-  NOT_TESTING: b('Feature 不在测试中', 'The Feature is not in testing'),
+  NOT_TESTING: b('不在测试中', 'Not in testing'),
   SUMMARY_REQUIRED: b('请填写测试说明', 'Describe the test'),
   VEHICLE_BUSY: b('车辆正在等待另一次下发的回执', 'The vehicle is waiting for another dispatch'),
   VEHICLE_ALREADY_GROUPED: b('车辆已属于另一个车辆组，请先移出', 'The vehicle is in another vehicle group; remove it there first'),
@@ -211,4 +211,51 @@ Object.assign(ERROR_LABELS, {
   RECEIPT_CONFLICT: b('该尝试已有不同的回执', 'A different receipt exists for this attempt'),
   STALE_ATTEMPT: b('回执的尝试次数已过期', 'The receipt is for an old attempt'),
   TARGET_NOT_PENDING: b('该目标未在等待回执', 'The target is not awaiting a receipt'),
+});
+
+export const PLAN_STATUS_LABELS: Record<string, Bilingual> = {
+  READY: b('可冻结', 'Ready'),
+  CONFLICT: b('有冲突', 'Conflicts'),
+  BLOCKED: b('集合有问题', 'Blocked'),
+  FROZEN: b('已冻结为候选', 'Frozen'),
+  SUPERSEDED: b('已被新预览取代', 'Superseded'),
+};
+export const PLAN_STATUS_COLORS: Record<string, string> = { READY: 'green', CONFLICT: 'red', BLOCKED: 'orange', FROZEN: 'blue', SUPERSEDED: 'default' };
+
+export const CANDIDATE_STATUS_LABELS: Record<string, Bilingual> = {
+  CANDIDATE: b('待集成测试', 'Awaiting tests'),
+  TESTING: b('集成测试中', 'Testing'),
+  VERIFIED: b('集成已验证', 'Verified'),
+  RELEASED: b('已发布', 'Released'),
+  CANCELLED: b('已取消', 'Cancelled'),
+};
+export const CANDIDATE_STATUS_COLORS: Record<string, string> = { CANDIDATE: 'default', TESTING: 'processing', VERIFIED: 'green', RELEASED: 'purple', CANCELLED: 'default' };
+
+export const CONFLICT_OWNER_LABELS: Record<string, Bilingual> = {
+  BUSINESS: b('业务方解决', 'Business resolves'),
+  DCL: b('DCL 解决（处理字段）', 'DCL resolves (processing)'),
+};
+
+export const MERGE_SECTION_LABELS: Record<string, Bilingual> = {
+  files: b('文件', 'File'),
+  policies: b('策略', 'Policy'),
+  references: b('引用', 'Reference'),
+};
+
+Object.assign(ERROR_LABELS, {
+  NOT_A_PROJECT_WORKSPACE: b('合并预览只能在项目工作区进行', 'Merge previews run in a project workspace'),
+  NO_SOURCES: b('请选择要合并的 Verified Feature', 'Choose Verified Features to merge'),
+  SOURCE_NOT_ALLOWED: b('该 Feature 不是本工作区来源中的 Verified Feature', 'Not a Verified Feature from this workspace’s sources'),
+  PLAN_NOT_READY: b('只有无冲突、无问题的预览可以确认或冻结', 'Only a conflict-free, unblocked preview can be confirmed or frozen'),
+  UNAPPROVED_SENSITIVE_FILES: b('集合中有未获敏感审核批准的文件', 'Sensitive files in the set lack an approval'),
+  ALREADY_CONFIRMED: b('该预览已确认', 'This preview is already confirmed'),
+  PROCESSING_NOT_CONFIRMED: b('须先由 DCL 确认最终处理集合', 'DCL must confirm the final processing set first'),
+  TARGET_CHANGED: b('目标版本已变化，请重新预览', 'The target release changed; preview again'),
+  SOURCE_CHANGED: b('来源 Feature 在预览后有变化，请重新预览', 'A source Feature changed since the preview; preview again'),
+  CANDIDATE_OPEN: b('本工作区还有未结束的集成候选', 'An open candidate exists in this workspace'),
+  NO_INTEGRATION_WORKSPACE: b('没有以本项目为来源的集成测试工作区', 'No integration workspace takes this project as its source'),
+  LABEL_REQUIRED: b('请为候选命名', 'Name the candidate'),
+  CANDIDATE_CLOSED: b('候选已结束', 'The candidate is closed'),
+  REASON_REQUIRED: b('请填写原因', 'Give a reason'),
+  USE_ROLLOUT_CONTROLS: b('请使用发布控制操作该下发', 'Use the rollout controls for this deployment'),
 });

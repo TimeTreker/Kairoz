@@ -28,6 +28,7 @@ import { FeaturesPage } from '../pages/FeaturesPage.tsx';
 import { FleetPage } from '../pages/FleetPage.tsx';
 import { GuidePage } from '../pages/GuidePage.tsx';
 import { IntakePage } from '../pages/IntakePage.tsx';
+import { IntegrationPage } from '../pages/IntegrationPage.tsx';
 import { OrgPage } from '../pages/OrgPage.tsx';
 import { ProcessingPage } from '../pages/ProcessingPage.tsx';
 import { SimulatorPage } from '../pages/SimulatorPage.tsx';
@@ -68,7 +69,7 @@ const NAV: NavItem[] = [
 ];
 
 /** Pages not built yet in this phase show a placeholder instead of a broken link. */
-const READY = new Set(['workbench', 'features', 'data', 'intake', 'processing', 'fleet', 'org', 'accounts', 'audit', 'guide', 'simulator']);
+const READY = new Set(['workbench', 'features', 'data', 'intake', 'processing', 'fleet', 'integration', 'org', 'accounts', 'audit', 'guide', 'simulator']);
 
 function Placeholder({ title }: { title: string }) {
   const { L } = useI18n();
@@ -104,6 +105,7 @@ export function Shell() {
 
   let content: ReactNode;
   if (page === 'features' && route[1]) content = <FeatureDetailPage featureId={route[1]} />;
+  else if (page === 'integration') content = <IntegrationPage key={workspace?.id} candidateId={route[1]} />;
   else if (!READY.has(page)) content = <Placeholder title={L(NAV.find((n) => n.key === page)?.zh ?? page, NAV.find((n) => n.key === page)?.en ?? page)} />;
   else
     content = {

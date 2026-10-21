@@ -312,7 +312,7 @@ export function FilesTab({ feature }: { feature: Feature }) {
           })
         }
       >
-        <Alert type="info" showIcon style={{ marginBottom: 12 }} message={L('调整后 Feature 回到草稿，由业务方重新提交。', 'The Feature returns to Draft and the business resubmits.')} />
+        <Alert type="info" showIcon style={{ marginBottom: 12 }} title={L('调整后 Feature 回到草稿，由业务方重新提交。', 'The Feature returns to Draft and the business resubmits.')} />
         <Form form={bindForm} name="binding" layout="vertical">
           <Space>
             <Form.Item name="format" label="Format" rules={[{ required: true }]}>

@@ -41,9 +41,10 @@ const CHANGE_REQUESTS: readonly FeedbackKind[] = ['RETURNED', 'BINDING_CHANGED',
 
 export function displayName(s: State, commitId: string): string {
   const c = s.commits[commitId]!;
-  const f = s.features[c.featureId]!;
   const g = s.groups[c.groupId]!;
-  return `${c.baseReleaseId ?? 'initial'} / ${g.code} / ${f.name} / r${String(c.sequence).padStart(3, '0')}`;
+  const base = c.baseReleaseId ? (s.releases[c.baseReleaseId]?.dclVersion ?? c.baseReleaseId) : 'initial';
+  const name = c.featureId ? s.features[c.featureId]!.name : `merge:${c.mergeLabel ?? ''}`;
+  return `${base} / ${g.code} / ${name} / r${String(c.sequence).padStart(3, '0')}`;
 }
 
 /** The configuration a Feature starts from. Until a release exists it is the empty initial config. */
@@ -449,7 +450,7 @@ interface VersionRef {
   digest: string;
 }
 
-function fileSpecVersion(ctx: Ctx, dataKey: string, content: FileSpecContent): VersionRef {
+export function fileSpecVersion(ctx: Ctx, dataKey: string, content: FileSpecContent): VersionRef {
   const digest = digestOf(content);
   const existing = Object.values(ctx.s.fileSpecVersions).filter((v) => v.dataKey === dataKey);
   const found = existing.find((v) => v.digest === digest);
@@ -467,7 +468,7 @@ function fileSpecVersion(ctx: Ctx, dataKey: string, content: FileSpecContent): V
   return { id, digest };
 }
 
-function policyVersion(ctx: Ctx, policyId: string, content: PolicyContent): VersionRef {
+export function policyVersion(ctx: Ctx, policyId: string, content: PolicyContent): VersionRef {
   const digest = digestOf(content);
   const existing = Object.values(ctx.s.policyVersions).filter((v) => v.policyId === policyId);
   const found = existing.find((v) => v.digest === digest);
@@ -620,8 +621,7 @@ export function submitFeature(ctx: Ctx, featureId: string, input: { message?: st
 /** Changes of a commit relative to its parent (or the base for the first commit). */
 export function commitChanges(s: State, commitId: string): ConfigDiff {
   const c = s.commits[commitId]!;
-  const f = s.features[c.featureId]!;
-  const previous = c.parentCommitId ? commitSnapshot(s, c.parentCommitId) : baseConfig(s, { baseReleaseId: c.baseReleaseId, groupId: f.groupId });
+  const previous = c.parentCommitId ? commitSnapshot(s, c.parentCommitId) : baseConfig(s, { baseReleaseId: c.baseReleaseId, groupId: c.groupId });
   return diffConfig(previous, commitSnapshot(s, commitId));
 }
 

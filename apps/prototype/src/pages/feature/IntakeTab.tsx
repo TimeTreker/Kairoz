@@ -64,7 +64,7 @@ export function IntakeTab({ feature }: { feature: Feature }) {
           'Review applies to a specific committed file. Approval binds the file content, its processing binding and the policies capturing it; any change needs a new review. Identical content in the same group and workspace reuses the approval.',
         )}
       </Hint>
-      {items.length === 0 && <Alert type="success" showIcon message={L('该提交没有需要敏感审核的文件。', 'Nothing in this commit needs sensitive review.')} />}
+      {items.length === 0 && <Alert type="success" showIcon title={L('该提交没有需要敏感审核的文件。', 'Nothing in this commit needs sensitive review.')} />}
       {items.length > 0 && (
         <Table
           rowKey="dataKey"

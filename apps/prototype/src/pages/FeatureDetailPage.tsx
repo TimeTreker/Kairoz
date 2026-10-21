@@ -77,10 +77,10 @@ export function FeatureDetailPage({ featureId }: { featureId: string }) {
           </Descriptions>
           {feature.description && <Typography.Text type="secondary">{feature.description}</Typography.Text>}
           {feature.stage === 'DRAFT' && latestFeedback && (
-            <Alert type="warning" showIcon message={B(FEEDBACK_LABELS[latestFeedback.kind])} description={latestFeedback.reason} />
+            <Alert type="warning" showIcon title={B(FEEDBACK_LABELS[latestFeedback.kind])} description={latestFeedback.reason} />
           )}
-          {feature.stage === 'DRAFT' && unsubmitted && <Alert type="info" showIcon message={L('草稿有未提交的修改。', 'The draft has unsubmitted changes.')} />}
-          {feature.stage === 'SUBMITTED' && <Alert type="warning" showIcon message={L('等待 DCL 工程审核敏感文件。', 'Waiting for DCL engineering to review sensitive files.')} />}
+          {feature.stage === 'DRAFT' && unsubmitted && <Alert type="info" showIcon title={L('草稿有未提交的修改。', 'The draft has unsubmitted changes.')} />}
+          {feature.stage === 'SUBMITTED' && <Alert type="warning" showIcon title={L('等待 DCL 工程审核敏感文件。', 'Waiting for DCL engineering to review sensitive files.')} />}
         </Space>
       </Card>
       <Tabs
