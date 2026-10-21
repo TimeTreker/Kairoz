@@ -6,6 +6,7 @@ import { DomainError, ForbiddenError } from '../domain/errors.ts';
 import type { Actor, Ctx } from '../engine/engine.ts';
 import { workspaceAccess } from '../engine/identity.ts';
 import { useI18n } from '../i18n/i18n.tsx';
+import { issueLabel } from '../i18n/issues.ts';
 import { DENY_REASON_LABELS, ERROR_LABELS } from '../i18n/vocab.ts';
 import { engine, setSession, useEngineState, useSession } from './store.ts';
 
@@ -42,8 +43,9 @@ export function useErrorText() {
         if (e instanceof ForbiddenError) text += L('：', ': ') + B(DENY_REASON_LABELS[e.reason], e.reason);
         const details = e.details as { issues?: unknown[] } | undefined;
         if (details?.issues?.length) {
+          const one = (line: string) => B(issueLabel(line), line);
           const lines = details.issues.map((i) =>
-            typeof i === 'string' ? i : `${(i as { key?: string }).key ?? ''}: ${((i as { problems?: string[] }).problems ?? []).join('; ')}`,
+            typeof i === 'string' ? one(i) : `${(i as { key?: string }).key ?? ''}${L('：', ': ')}${((i as { problems?: string[] }).problems ?? []).map(one).join(L('；', '; '))}`,
           );
           text += ` — ${lines.join(' | ')}`;
         }

@@ -21,6 +21,7 @@ import {
 } from '../../engine/validation.ts';
 import { REQUEST_STATUS_COLORS, REQUEST_STATUS_LABELS } from '../../i18n/vocab.ts';
 import { useI18n } from '../../i18n/i18n.tsx';
+import { issueLabel } from '../../i18n/issues.ts';
 
 export function ValidationTab({ feature }: { feature: Feature }) {
   const state = useEngineState();
@@ -80,7 +81,7 @@ export function ValidationTab({ feature }: { feature: Feature }) {
         {feature.headCommitId && <Typography.Paragraph><Mono>{displayName(state, feature.headCommitId)}</Mono></Typography.Paragraph>}
         {!dispatchable && <Alert type="info" showIcon title={L('Feature 达到 DCL Ready 后才能下发。', 'Dispatch becomes available once the Feature is DCL Ready.')} />}
         {feature.stage === 'TESTING' && blockers.length > 0 && (
-          <Alert type="warning" showIcon style={{ marginBottom: 12 }} title={L('尚不能确认 Verified', 'Not verifiable yet')} description={blockers.join('；')} />
+          <Alert type="warning" showIcon style={{ marginBottom: 12 }} title={L('尚不能确认 Verified', 'Not verifiable yet')} description={blockers.map((x) => B(issueLabel(x), x)).join(L('；', '; '))} />
         )}
         {feature.stage === 'VERIFIED' && <Alert type="success" showIcon style={{ marginBottom: 12 }} title={L('当前提交已验证，可由配置集成收集。', 'The head commit is verified and can be collected by integration.')} />}
         <TargetsTable

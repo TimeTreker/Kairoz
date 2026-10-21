@@ -13,6 +13,7 @@ import { answerConfigRequest, cancelOta, createOta, expandOta, otaProblems, otaR
 import { compareVersions, nextDclVersion, promoteCandidate, releaseConfiguration, releaseFor, releasesOf, testedVersions } from '../engine/release.ts';
 import type { Candidate, Deployment, State, VehicleGroup } from '../engine/types.ts';
 import { useI18n } from '../i18n/i18n.tsx';
+import { issueLabel } from '../i18n/issues.ts';
 import { CONFIG_ANSWER_LABELS, DEPLOYMENT_STATUS_LABELS, TARGET_STATUS_COLORS, TARGET_STATUS_LABELS } from '../i18n/vocab.ts';
 
 /** The project workspace holding production vehicle groups for the current workspace. */
@@ -266,7 +267,7 @@ function OtaTab({ projectId }: { projectId: string }) {
               title: L('应运行', 'Should run'),
               render: (_, x) => {
                 const r = releaseFor(state, x.vehicle);
-                return r.release ? <Mono>{`DCL ${r.release.dclVersion}`}</Mono> : <Tooltip title={r.problem}><Tag color="red">{L('无匹配，阻止下发', 'no match, blocked')}</Tag></Tooltip>;
+                return r.release ? <Mono>{`DCL ${r.release.dclVersion}`}</Mono> : <Tooltip title={r.problem ? B(issueLabel(r.problem), r.problem) : undefined}><Tag color="red">{L('无匹配，阻止下发', 'no match, blocked')}</Tag></Tooltip>;
               },
             },
             { title: L('已生效', 'Applied'), render: (_, x) => <Mono>{releaseLabel(state, x.vehicle.appliedConfigId)}</Mono> },
@@ -275,7 +276,7 @@ function OtaTab({ projectId }: { projectId: string }) {
               render: (_, x) => {
                 const a = answerConfigRequest(state, x.vehicle.id);
                 return (
-                  <Tooltip title={a.detail}>
+                  <Tooltip title={a.detail ? B(issueLabel(a.detail), a.detail) : undefined}>
                     <Space size={4}>
                       <Tag color={ANSWER_COLORS[a.reason]}>{B(CONFIG_ANSWER_LABELS[a.reason])}</Tag>
                       <Mono>{releaseLabel(state, a.configId)}</Mono>
@@ -312,7 +313,7 @@ function OtaTab({ projectId }: { projectId: string }) {
 
 function CreateOtaModal({ projectId, onClose }: { projectId: string; onClose: () => void }) {
   const state = useEngineState();
-  const { L } = useI18n();
+  const { L, B } = useI18n();
   const run = useRun();
   const project = state.workspaces[projectId]!;
   const releases = releasesOf(state, project.vehicleModelId);
@@ -389,7 +390,7 @@ function CreateOtaModal({ projectId, onClose }: { projectId: string; onClose: ()
                 {done && <Tag color="green">{L('已运行该版本', 'already runs it')}</Tag>}
                 {problems.map((p) => (
                   <Tag key={p} color="red">
-                    {p}
+                    {B(issueLabel(p), p)}
                   </Tag>
                 ))}
               </Flex>
@@ -463,7 +464,7 @@ function RolloutCard({ deployment: d, canManage }: { deployment: Deployment; can
               </Button>
             )}
             {d.status !== 'CANCELLED' && d.status !== 'ROLLED_BACK' && (
-              <Tooltip title={rollbackIssues.length ? `${L('不能回滚：', 'Cannot roll back: ')}${rollbackIssues.join('；')}` : undefined}>
+              <Tooltip title={rollbackIssues.length ? `${L('不能回滚：', 'Cannot roll back: ')}${rollbackIssues.map((i) => B(issueLabel(i), i)).join(L('；', '; '))}` : undefined}>
                 <Button size="small" danger disabled={rollbackIssues.length > 0} onClick={() => (setReason(''), setPrompt({ kind: 'rollback' }))}>
                   {L('回滚', 'Roll back')}
                 </Button>
@@ -503,7 +504,7 @@ function RolloutCard({ deployment: d, canManage }: { deployment: Deployment; can
                   '保持暂停并排查；修复后用“恢复（重试失败车辆）”受控重试，或取消本次 OTA 后发布修复版本。平台不会虚构回滚版本。',
                   'Keep it paused and investigate; after a fix, retry the failed vehicles with “Resume”, or cancel and release a fixed version. The platform never invents a rollback version.',
                 )
-              : rollbackIssues.join('；')
+              : rollbackIssues.map((i) => B(issueLabel(i), i)).join(L('；', '; '))
           }
         />
       )}

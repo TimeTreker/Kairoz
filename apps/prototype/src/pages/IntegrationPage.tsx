@@ -17,6 +17,7 @@ import { cancelCandidate, confirmProcessing, freezeCandidate, isCollectible, isC
 import type { Candidate, MergeConflict, MergePlan, State } from '../engine/types.ts';
 import { cancelDeployment, candidateTestStatus, candidateVehicleProblems, candidateVerifyBlockers, deploymentsOf, dispatchCandidate, recordCandidateTest, verifyCandidate } from '../engine/validation.ts';
 import { useI18n } from '../i18n/i18n.tsx';
+import { issueLabel } from '../i18n/issues.ts';
 import {
   CANDIDATE_STATUS_COLORS,
   CANDIDATE_STATUS_LABELS,
@@ -298,7 +299,7 @@ function PlanCard({ plan, onCandidate }: { plan: MergePlan; onCandidate: (id: st
           description={
             <ul style={{ margin: 0, paddingLeft: 18 }}>
               {plan.issues.map((i) => (
-                <li key={i}>{i}</li>
+                <li key={i}>{B(issueLabel(i), i)}</li>
               ))}
             </ul>
           }
@@ -482,7 +483,7 @@ function CandidatesTab({ projectId, candidateId }: { projectId: string; candidat
 
 function CandidateDetail({ candidate: c }: { candidate: Candidate }) {
   const state = useEngineState();
-  const { L } = useI18n();
+  const { L, B } = useI18n();
   const can = useCan();
   const run = useRun();
   const [dispatching, setDispatching] = useState(false);
@@ -499,7 +500,7 @@ function CandidateDetail({ candidate: c }: { candidate: Candidate }) {
       const blocked = problems.some((p) => p.endsWith('software version unknown'))
         ? L('非首版候选需要已确认整车版本的车辆', 'a candidate on a release needs vehicles with known software')
         : problems.length
-          ? problems.map((p) => p.replace(`${r.id}: `, '')).join('；')
+          ? problems.map((p) => B(issueLabel(p), p)).join(L('；', '; '))
           : undefined;
       return { id: r.id, label: `${r.id} · ${r.type === 'SIMULATION' ? L('仿真', 'simulation') : L('实车', 'physical')} · ${r.integrationVersion ?? L('整车版本未知', 'software unknown')}`, blocked };
     });
@@ -599,7 +600,7 @@ function CandidateDetail({ candidate: c }: { candidate: Candidate }) {
             'Integration testing is independent of Feature tests: the candidate goes to the integration workspace’s testing vehicle groups, simulation first, then physical; integration testing confirms once every target passes.',
           )}
         </Hint>
-        {c.status === 'TESTING' && blockers.length > 0 && <Alert type="warning" showIcon style={{ marginBottom: 12 }} title={L('尚不能确认', 'Not verifiable yet')} description={blockers.join('；')} />}
+        {c.status === 'TESTING' && blockers.length > 0 && <Alert type="warning" showIcon style={{ marginBottom: 12 }} title={L('尚不能确认', 'Not verifiable yet')} description={blockers.map((x) => B(issueLabel(x), x)).join(L('；', '; '))} />}
         {c.status === 'VERIFIED' && <Alert type="success" showIcon style={{ marginBottom: 12 }} title={L('候选已通过集成验证，可由配置发布推广为正式版本。', 'The candidate is verified and can be promoted to a release by configuration release.')} />}
         <TargetsTable
           status={status}
