@@ -12,6 +12,7 @@ import { aftersalesQuery, eventTarget, exportManifest, reprocessEvent, trainingQ
 import type { AftersalesFilter, TrainingFilter } from '../engine/events.ts';
 import type { CollectionEvent, State } from '../engine/types.ts';
 import { useI18n } from '../i18n/i18n.tsx';
+import { issueLabel } from '../i18n/issues.ts';
 import { EVENT_ORIGIN_LABELS, EVENT_STATUS_COLORS, EVENT_STATUS_LABELS, FILE_PROCESS_LABELS, FILE_TYPE_LABELS, QUALITY_LABELS, TRAINING_BLOCKER_LABELS, TRAINING_USE_LABELS } from '../i18n/vocab.ts';
 
 const pipelineName = (s: State, id: string) => {
@@ -110,7 +111,7 @@ function AftersalesTab({ workspaceId }: { workspaceId: string }) {
           { title: L('时间', 'When'), render: (_, e) => when(e.occurredAt) },
           { title: L('采集文件', 'Files'), render: (_, e) => e.files.length },
           { title: L('处理状态', 'Status'), render: (_, e) => <LabelTag map={EVENT_STATUS_LABELS} value={e.status} color={EVENT_STATUS_COLORS[e.status]} /> },
-          { title: L('失败原因', 'Failure'), render: (_, e) => (e.failure ? <Typography.Text type="danger">{e.failure}</Typography.Text> : '—') },
+          { title: L('失败原因', 'Failure'), render: (_, e) => (e.failure ? <Typography.Text type="danger">{B(issueLabel(e.failure), e.failure)}</Typography.Text> : '—') },
           { title: L('来源', 'Origin'), render: (_, e) => <LabelTag map={EVENT_ORIGIN_LABELS} value={e.origin} /> },
         ]}
       />
@@ -134,7 +135,7 @@ function EventDetail({ event: e }: { event: CollectionEvent }) {
         <Alert
           type="error"
           showIcon
-          title={e.failure}
+          title={e.failure ? B(issueLabel(e.failure), e.failure) : undefined}
           action={
             can('event.reprocess', eventTarget(state, e)) && (
               <Button size="small" onClick={() => run((c) => reprocessEvent(c, e.id), L('已重新提交处理，固定版本不变', 'Reprocessing with the same pinned versions'))}>

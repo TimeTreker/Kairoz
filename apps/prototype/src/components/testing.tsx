@@ -9,6 +9,7 @@ import { membersOf } from '../engine/fleet.ts';
 import type { Deployment, VehicleGroup } from '../engine/types.ts';
 import type { TargetStatus } from '../engine/validation.ts';
 import { useI18n } from '../i18n/i18n.tsx';
+import { issueLabel } from '../i18n/issues.ts';
 import { DEPLOYMENT_STATUS_LABELS, RESOURCE_TYPE_LABELS, TARGET_STATUS_COLORS, TARGET_STATUS_LABELS } from '../i18n/vocab.ts';
 import { EnvTag, Hint, LabelTag, Mono, when } from './common.tsx';
 
@@ -73,7 +74,7 @@ export function DeploymentsTable({ deployments, canCancel, onCancel }: { deploym
               { title: L('车辆组', 'Group'), render: (_, t) => (t.vehicleGroupId ? state.vehicleGroups[t.vehicleGroupId]?.name : <Tag>{L('直投', 'direct')}</Tag>) },
               { title: L('尝试', 'Attempt'), dataIndex: 'attempt' },
               { title: L('状态', 'Status'), render: (_, t) => <Tag color={TARGET_STATUS_COLORS[t.status]}>{B(TARGET_STATUS_LABELS[t.status])}</Tag> },
-              { title: L('错误', 'Error'), render: (_, t) => t.error ?? '—' },
+              { title: L('错误', 'Error'), render: (_, t) => (t.error ? B(issueLabel(t.error), t.error) : '—') },
               { title: L('更新', 'Updated'), render: (_, t) => when(t.updatedAt) },
             ]}
           />

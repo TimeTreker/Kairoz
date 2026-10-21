@@ -518,10 +518,10 @@ function RolloutCard({ deployment: d, canManage }: { deployment: Deployment; can
           { title: L('尝试', 'Attempt'), dataIndex: 'attempt' },
           { title: L('状态', 'Status'), render: (_, t) => <Tag color={TARGET_STATUS_COLORS[t.status]}>{B(TARGET_STATUS_LABELS[t.status])}</Tag> },
           { title: L('之前生效', 'Previously'), render: (_, t) => <Mono>{releaseLabel(state, t.previousConfigId)}</Mono> },
-          { title: L('错误', 'Error'), render: (_, t) => t.error ?? '—' },
+          { title: L('错误', 'Error'), render: (_, t) => (t.error ? B(issueLabel(t.error), t.error) : '—') },
           {
             title: L('历史尝试', 'Earlier attempts'),
-            render: (_, t) => (t.history.length ? t.history.map((h) => <Tag key={h.attempt}>{`#${h.attempt} ${h.status}${h.error ? ` · ${h.error}` : ''}`}</Tag>) : '—'),
+            render: (_, t) => (t.history.length ? t.history.map((h) => <Tag key={h.attempt}>{`#${h.attempt} ${B(TARGET_STATUS_LABELS[h.status], h.status)}${h.error ? ` · ${B(issueLabel(h.error), h.error)}` : ''}`}</Tag>) : '—'),
           },
           { title: L('更新', 'Updated'), render: (_, t) => when(t.updatedAt) },
         ]}

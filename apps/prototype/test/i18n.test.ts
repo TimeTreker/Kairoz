@@ -36,6 +36,9 @@ describe('bilingual error text', () => {
       ['rollout ota_1 is a rollback; start a new rollout to resume', 'OTA ota_1 是回滚；新建 OTA 后才恢复同步'],
       ['describe uploadControl', '请说明上传控制'],
       ['ev_1: quality unknown', 'ev_1：质量未知'],
+      ['simulated apply failure', '模拟的应用失败'],
+      ['rolled back: 演示回滚', '已回滚：演示回滚'],
+      ['ParserFailure: opaque-bin-log@1 could not be parsed', 'ParserFailure：无法按 opaque-bin-log@1 解析'],
     ];
     for (const [line, zh] of cases) assert.deepEqual(issueLabel(line), { zh, en: line }, line);
     assert.equal(issueLabel('something the engine never says'), undefined);

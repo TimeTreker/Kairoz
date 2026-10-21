@@ -44,6 +44,11 @@ const PROBLEMS: Pattern[] = [
   [/rollout (\S+) is (a rollback|paused|cancelled|rolled_back); start a new rollout to resume/, ([d, st]) => `OTA ${d} ${HELD[st!]}；新建 OTA 后才恢复同步`],
   [/the vehicle is (available|maintenance|retired)/, ([st]) => `车辆状态：${STATUS[st!]}`],
   [/unknown vehicle/, () => '未知车辆'],
+  // Receipts, rollbacks and processing outcomes shown in history columns
+  [/simulated apply failure/, () => '模拟的应用失败'],
+  [/apply failed/, () => '应用失败'],
+  [/rolled back: (.+)/, ([r]) => `已回滚：${r}`],
+  [/ParserFailure: (\S+) could not be parsed/, ([sc]) => `ParserFailure：无法按 ${sc} 解析`],
   // Vehicle groups
   [/vehicle group does not exist/, () => '车辆组不存在'],
   [/vehicle group is archived/, () => '车辆组已归档'],
