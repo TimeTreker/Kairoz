@@ -4,15 +4,24 @@
 import { ExperimentOutlined } from '@ant-design/icons';
 import { App, Button, Dropdown, Input, Modal } from 'antd';
 import { useState } from 'react';
+import { JsonExportModal, downloadJson } from '../components/JsonExport.tsx';
+import type { JsonFile } from '../components/JsonExport.tsx';
 import { useI18n } from '../i18n/i18n.tsx';
 import { navigate } from './router.ts';
 import { exportState, importState, resetPlatform } from './store.ts';
+
+/** 2026-10-22T143005 in local time, for file names. */
+function fileStamp(d: Date): string {
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`;
+}
 
 export function PrototypeMenu({ compact = false }: { compact?: boolean }) {
   const { L } = useI18n();
   const { modal, message } = App.useApp();
   const [importing, setImporting] = useState(false);
   const [json, setJson] = useState('');
+  const [exported, setExported] = useState<JsonFile | null>(null);
 
   const confirmReset = (kind: 'demo' | 'clean') =>
     modal.confirm({
@@ -24,12 +33,9 @@ export function PrototypeMenu({ compact = false }: { compact?: boolean }) {
     });
 
   const download = () => {
-    const blob = new Blob([exportState()], { type: 'application/json' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = `kairoz-state-${new Date().toISOString().slice(0, 19).replaceAll(':', '')}.json`;
-    a.click();
-    URL.revokeObjectURL(a.href);
+    const file = { name: `kairoz-state-${fileStamp(new Date())}.json`, json: exportState() };
+    setExported(file);
+    downloadJson(file);
   };
 
   return (
@@ -69,6 +75,7 @@ export function PrototypeMenu({ compact = false }: { compact?: boolean }) {
       >
         <Input.TextArea rows={10} value={json} onChange={(e) => setJson(e.target.value)} placeholder="{ ... }" />
       </Modal>
+      <JsonExportModal title={L('导出状态 JSON', 'Export state JSON')} file={exported} onClose={() => setExported(null)} />
     </>
   );
 }

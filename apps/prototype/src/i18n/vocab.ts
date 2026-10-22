@@ -201,7 +201,7 @@ Object.assign(ERROR_LABELS, {
   VERIFY_BLOCKED: b('暂不能确认 Verified', 'Cannot verify yet'),
   NOT_TESTING: b('不在测试中', 'Not in testing'),
   SUMMARY_REQUIRED: b('请填写测试说明', 'Describe the test'),
-  VEHICLE_BUSY: b('车辆正在等待另一次下发的回执', 'The vehicle is waiting for another dispatch'),
+  VEHICLE_BUSY: b('车辆还有未完成的下发（等待回执或 OTA 未结束），请完成后再操作', 'The vehicle still has an unfinished dispatch (awaiting a receipt or an open OTA rollout); try again when it finishes'),
   VEHICLE_ALREADY_GROUPED: b('车辆已属于另一个车辆组，请先移出', 'The vehicle is in another vehicle group; remove it there first'),
   VEHICLE_NOT_ASSIGNABLE: b('车辆不符合本工作区（车型、资源池或环境）或已加入', 'The vehicle does not fit this workspace (model, pool, environment) or is already assigned'),
   VEHICLE_NOT_IN_WORKSPACE: b('请先把车辆加入工作区', 'Add the vehicle to the workspace first'),
@@ -216,14 +216,16 @@ Object.assign(ERROR_LABELS, {
   TARGET_NOT_PENDING: b('该目标未在等待回执', 'The target is not awaiting a receipt'),
 });
 
+/** Merge preview statuses; AWAITING_DCL is a READY preview whose processing set DCL has not confirmed yet. */
 export const PLAN_STATUS_LABELS: Record<string, Bilingual> = {
+  AWAITING_DCL: b('等待 DCL 确认', 'Awaiting DCL confirmation'),
   READY: b('可冻结', 'Ready'),
   CONFLICT: b('有冲突', 'Conflicts'),
   BLOCKED: b('集合有问题', 'Blocked'),
   FROZEN: b('已冻结为候选', 'Frozen'),
   SUPERSEDED: b('已被新预览取代', 'Superseded'),
 };
-export const PLAN_STATUS_COLORS: Record<string, string> = { READY: 'green', CONFLICT: 'red', BLOCKED: 'orange', FROZEN: 'blue', SUPERSEDED: 'default' };
+export const PLAN_STATUS_COLORS: Record<string, string> = { AWAITING_DCL: 'gold', READY: 'green', CONFLICT: 'red', BLOCKED: 'orange', FROZEN: 'blue', SUPERSEDED: 'default' };
 
 export const CANDIDATE_STATUS_LABELS: Record<string, Bilingual> = {
   CANDIDATE: b('待集成测试', 'Awaiting tests'),

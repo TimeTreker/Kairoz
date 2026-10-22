@@ -55,6 +55,15 @@ const short = (v: unknown) => {
   return text.length > 60 ? `${text.slice(0, 60)}…` : text;
 };
 
+/** A ready preview waits for DCL to confirm its processing set before it can be frozen. */
+const planStatus = (s: State, p: MergePlan) => (p.status === 'READY' && !isConfirmed(s, p) ? 'AWAITING_DCL' : p.status);
+
+/** The pinned pipeline version, e.g. default-edge-text-log@1. */
+const pipelineName = (s: State, id: string) => {
+  const p = s.pipelines[id];
+  return p ? `${p.code}@${p.version}` : id;
+};
+
 function dataName(s: State, key: string): string {
   return (
     Object.values(s.fileSpecVersions)
@@ -67,6 +76,7 @@ export function IntegrationPage({ candidateId }: { candidateId?: string }) {
   const state = useEngineState();
   const { L } = useI18n();
   const { workspace, access } = useWorkspace();
+  const can = useCan();
   const projectId = projectOf(state, workspace?.id);
   const [tab, setTab] = useState<string>(candidateId || workspace?.kind === 'INTEGRATION' ? 'candidates' : 'merge');
 
@@ -77,23 +87,25 @@ export function IntegrationPage({ candidateId }: { candidateId?: string }) {
       <div className="kz-page">
         <PageHeader title={L('配置集成', 'Integration')} />
         <Alert type="info" showIcon style={{ marginBottom: 16 }} title={L('配置集成在项目工作区或集成测试工作区中进行，请在顶部切换工作区。', 'Integration happens in a project or integration workspace; switch workspace at the top.')} />
-        <Card title={L('等待 DCL 确认的处理集合', 'Processing sets awaiting DCL confirmation')}>
-          {waiting.length === 0 && <Typography.Text type="secondary">{L('没有等待确认的合并预览。', 'No merge preview is waiting.')}</Typography.Text>}
-          {waiting.map((p) => (
-            <Flex key={p.id} justify="space-between" align="center" style={{ padding: '8px 0', borderBottom: '1px solid #f0f0f0' }}>
-              <Space>
-                <Typography.Text>{state.workspaces[p.workspaceId]?.name}</Typography.Text>
-                <Mono>{p.id}</Mono>
-                <Typography.Text type="secondary">{when(p.createdAt)}</Typography.Text>
-              </Space>
-              {access.some((a) => a.workspaceId === p.workspaceId) && (
-                <Button size="small" onClick={() => setSession({ workspaceId: p.workspaceId })}>
-                  {L('进入该工作区', 'Open workspace')}
-                </Button>
-              )}
-            </Flex>
-          ))}
-        </Card>
+        {can('merge.confirmProcessing', {}) && (
+          <Card title={L('等待 DCL 确认的处理集合', 'Processing sets awaiting DCL confirmation')}>
+            {waiting.length === 0 && <Typography.Text type="secondary">{L('没有等待确认的合并预览。', 'No merge preview is waiting.')}</Typography.Text>}
+            {waiting.map((p) => (
+              <Flex key={p.id} justify="space-between" align="center" style={{ padding: '8px 0', borderBottom: '1px solid #f0f0f0' }}>
+                <Space>
+                  <Typography.Text>{state.workspaces[p.workspaceId]?.name}</Typography.Text>
+                  <Mono>{p.id}</Mono>
+                  <Typography.Text type="secondary">{when(p.createdAt)}</Typography.Text>
+                </Space>
+                {access.some((a) => a.workspaceId === p.workspaceId) && (
+                  <Button size="small" onClick={() => setSession({ workspaceId: p.workspaceId })}>
+                    {L('进入该工作区', 'Open workspace')}
+                  </Button>
+                )}
+              </Flex>
+            ))}
+          </Card>
+        )}
       </div>
     );
   }
@@ -181,7 +193,7 @@ function MergeTab({ projectId, onCandidate }: { projectId: string; onCandidate: 
             dataSource={plans.slice(0, -1).reverse()}
             columns={[
               { title: L('预览', 'Preview'), render: (_, p) => <Mono>{p.id}</Mono> },
-              { title: L('状态', 'Status'), render: (_, p) => <LabelTag map={PLAN_STATUS_LABELS} value={p.status} color={PLAN_STATUS_COLORS[p.status]} /> },
+              { title: L('状态', 'Status'), render: (_, p) => <LabelTag map={PLAN_STATUS_LABELS} value={planStatus(state, p)} color={PLAN_STATUS_COLORS[planStatus(state, p)]} /> },
               { title: L('来源', 'Sources'), render: (_, p) => p.sources.map((x) => state.features[x.featureId]?.name).join(', ') },
               { title: L('冲突 / 问题', 'Conflicts / issues'), render: (_, p) => `${p.conflicts.length} / ${p.issues.length}` },
               { title: L('时间', 'When'), render: (_, p) => when(p.createdAt) },
@@ -203,6 +215,7 @@ function PlanCard({ plan, onCandidate }: { plan: MergePlan; onCandidate: (id: st
   const [note, setNote] = useState('');
   const [label, setLabel] = useState('');
   const confirmed = isConfirmed(state, plan);
+  const status = planStatus(state, plan);
   const confirmation = state.processingConfirmations.find((c) => c.mergePlanId === plan.id && c.digest === plan.digest);
   const groups = Object.keys(plan.merged);
   const canConfirm = can('merge.confirmProcessing', { workspaceId: plan.workspaceId, groupId: groups.length === 1 ? groups[0]! : WILDCARD });
@@ -227,7 +240,7 @@ function PlanCard({ plan, onCandidate }: { plan: MergePlan; onCandidate: (id: st
         <Space>
           {L('合并预览', 'Merge preview')}
           <Mono>{plan.id}</Mono>
-          <LabelTag map={PLAN_STATUS_LABELS} value={plan.status} color={PLAN_STATUS_COLORS[plan.status]} />
+          <LabelTag map={PLAN_STATUS_LABELS} value={status} color={PLAN_STATUS_COLORS[status]} />
         </Space>
       }
       extra={
@@ -354,7 +367,7 @@ function PlanCard({ plan, onCandidate }: { plan: MergePlan; onCandidate: (id: st
               { title: L('文件', 'File'), render: (_, l) => (l.owned ? l.name : <Space size={4}>{l.name}<Tag>{L('引用', 'reference')}</Tag></Space>) },
               { title: L('类型', 'Type'), render: (_, l) => B(FILE_TYPE_LABELS[l.fileType], l.fileType) },
               { title: L('格式 / Schema', 'Format / schema'), render: (_, l) => <Mono>{`${l.format} · ${l.schema}`}</Mono> },
-              { title: L('边缘 / 云端处理', 'Edge / cloud'), render: (_, l) => <Mono>{`${state.pipelines[l.edgePipelineId]?.code ?? l.edgePipelineId} → ${state.pipelines[l.cloudPipelineId]?.code ?? l.cloudPipelineId}`}</Mono> },
+              { title: L('边缘 / 云端处理', 'Edge / cloud'), render: (_, l) => <Mono>{`${pipelineName(state, l.edgePipelineId)} → ${pipelineName(state, l.cloudPipelineId)}`}</Mono> },
               {
                 title: L('敏感审核', 'Sensitive review'),
                 render: (_, l) => (!l.requiresReview ? <Typography.Text type="secondary">{L('不需要', 'not needed')}</Typography.Text> : <LabelTag map={REVIEW_STATUS_LABELS} value={l.review?.status ?? 'PENDING'} color={l.review?.status === 'APPROVED' ? 'green' : 'orange'} />),

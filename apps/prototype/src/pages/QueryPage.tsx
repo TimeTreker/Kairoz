@@ -6,6 +6,8 @@ import { useState } from 'react';
 import { useActor, useCan, useRun, useWorkspace } from '../app/hooks.ts';
 import { navigate } from '../app/router.ts';
 import { useEngineState } from '../app/store.ts';
+import { JsonExportModal, downloadJson } from '../components/JsonExport.tsx';
+import type { JsonFile } from '../components/JsonExport.tsx';
 import { EnvTag, Hint, LabelTag, Mono, PageHeader, when } from '../components/common.tsx';
 import { displayName } from '../engine/config.ts';
 import { aftersalesQuery, eventTarget, exportManifest, reprocessEvent, trainingQuery } from '../engine/events.ts';
@@ -230,19 +232,16 @@ function TrainingTab({ workspaceId }: { workspaceId: string }) {
   const run = useRun();
   const [filter, setFilter] = useState<TrainingFilter>({ quality: 'ALL', availability: 'SELECTABLE' });
   const [selected, setSelected] = useState<string[]>([]);
+  const [exported, setExported] = useState<JsonFile | null>(null);
   const results = trainingQuery(state, actor, workspaceId, filter);
   const chosen = selected.filter((id) => results.some((r) => r.eventId === id && r.blockers.length === 0));
 
   const download = () => {
     const manifest = run((c) => exportManifest(c, chosen), L(`已导出 ${chosen.length} 条数据清单`, `Exported a manifest of ${chosen.length}`));
     if (!manifest) return;
-    const blob = new Blob([JSON.stringify(manifest, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `kairoz-data-manifest-${manifest.generatedAt.slice(0, 10)}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
+    const file = { name: `kairoz-data-manifest-${manifest.generatedAt.slice(0, 10)}.json`, json: JSON.stringify(manifest, null, 2) };
+    setExported(file);
+    downloadJson(file);
   };
 
   return (
@@ -321,6 +320,7 @@ function TrainingTab({ workspaceId }: { workspaceId: string }) {
           },
         ]}
       />
+      <JsonExportModal title={L('导出数据清单（JSON）', 'Export manifest (JSON)')} file={exported} onClose={() => setExported(null)} />
     </Card>
   );
 }
