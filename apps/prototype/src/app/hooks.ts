@@ -57,20 +57,24 @@ export function useErrorText() {
   );
 }
 
+/** What `run` returns on success: the operation's result, or `true` for an operation without one. */
+type Ran<R> = R extends void ? true : R;
+
 /**
- * Runs an engine operation as the signed-in user. Shows a localized error and returns undefined
- * on failure; shows `success` (if given) on success.
+ * Runs an engine operation as the signed-in user. Shows `success` (if given) and returns the
+ * result on success — `true` when the operation returns nothing, so callers can close a dialog on
+ * `!== undefined`. Shows a localized error and returns undefined on failure.
  */
 export function useRun() {
   const { message } = App.useApp();
   const { username } = useSession();
   const errorText = useErrorText();
   return useCallback(
-    <R,>(operation: (ctx: Ctx) => R, success?: string): R | undefined => {
+    <R,>(operation: (ctx: Ctx) => R, success?: string): Ran<R> | undefined => {
       try {
         const result = engine.run(username, operation);
         if (success) message.success(success);
-        return result;
+        return (result === undefined ? true : result) as Ran<R>;
       } catch (e) {
         if (e instanceof DomainError && e.code === 'UNAUTHENTICATED') setSession({ username: null });
         message.error({ content: errorText(e), duration: 6 });
