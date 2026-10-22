@@ -7,6 +7,8 @@ import { useCan, useRun, useWorkspace } from '../app/hooks.ts';
 import { navigate } from '../app/router.ts';
 import { useEngineState } from '../app/store.ts';
 import { EnvTag, Hint, LabelTag, Mono, PageHeader, ShortId, when } from '../components/common.tsx';
+import { JsonExportModal, downloadJson } from '../components/JsonExport.tsx';
+import type { JsonFile } from '../components/JsonExport.tsx';
 import { displayName } from '../engine/config.ts';
 import { membersOf, ungroupedVehicles, vehicleGroupsOf } from '../engine/fleet.ts';
 import { answerConfigRequest, cancelOta, createOta, expandOta, otaProblems, otaRollouts, pauseOta, resumeOta, rollbackOta, rollbackProblems } from '../engine/ota.ts';
@@ -27,15 +29,6 @@ function projectOf(s: State, workspaceId: string | undefined): string | undefine
 const releaseLabel = (s: State, configId: string | null) => (configId ? (s.resolvedConfigs[configId]?.label ?? configId) : '—');
 
 const ANSWER_COLORS: Record<string, string> = { HELD: 'purple', TASK: 'processing', LATEST_RELEASE: 'green', GROUP_TARGET: 'blue', APPLIED: 'default', INITIAL: 'default', BLOCKED: 'red' };
-
-function downloadJson(fileName: string, data: unknown): void {
-  const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }));
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = fileName;
-  a.click();
-  URL.revokeObjectURL(url);
-}
 
 export function ReleasePage({ tab = 'releases' }: { tab?: string }) {
   const state = useEngineState();
@@ -69,6 +62,13 @@ function ReleasesTab({ modelId }: { modelId: string }) {
   const { L } = useI18n();
   const can = useCan();
   const [promoting, setPromoting] = useState<Candidate | null>(null);
+  const [exported, setExported] = useState<JsonFile | null>(null);
+  const exportConfiguration = (releaseId: string) => {
+    const r = state.releases[releaseId]!;
+    const file = { name: `DCL_${r.vehicleModelId}_${r.dclVersion}_config.json`, json: JSON.stringify(releaseConfiguration(state, r.id), null, 2) };
+    setExported(file);
+    downloadJson(file);
+  };
   const waiting = Object.values(state.candidates).filter((c) => c.vehicleModelId === modelId && c.status === 'VERIFIED');
   const releases = releasesOf(state, modelId);
 
@@ -136,7 +136,7 @@ function ReleasesTab({ modelId }: { modelId: string }) {
             {
               title: '',
               render: (_, r) => (
-                <Button size="small" onClick={() => downloadJson(`DCL_${r.vehicleModelId}_${r.dclVersion}_config.json`, releaseConfiguration(state, r.id))}>
+                <Button size="small" onClick={() => exportConfiguration(r.id)}>
                   {L('导出配置集合', 'Export configuration')}
                 </Button>
               ),
@@ -145,6 +145,7 @@ function ReleasesTab({ modelId }: { modelId: string }) {
         />
       </Card>
       {promoting && <PromoteModal candidate={promoting} onClose={() => setPromoting(null)} />}
+      <JsonExportModal title={L('导出配置集合', 'Export configuration')} file={exported} onClose={() => setExported(null)} />
     </Space>
   );
 }
