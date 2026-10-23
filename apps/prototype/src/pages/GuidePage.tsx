@@ -112,6 +112,30 @@ export const SCENARIOS: Scenario[] = [
     ],
   },
   {
+    key: 'subsystem',
+    titleZh: '子系统集成：ADC 先集成发布，整车再收集',
+    titleEn: 'Subsystem integration: ADC integrates and publishes, then the whole vehicle collects it',
+    steps: [
+      { account: 'adc_parking', workspace: 'team-adc-parking', page: 'features', zh: '创建 Feature，添加文本日志和采集它的策略并提交', en: 'Create a Feature with a text log and a policy capturing it, and submit', expectZh: '生成 r001，DCL Ready', expectEn: 'Commit r001, DCL Ready' },
+      { account: 'adc_parking_tester', workspace: 'team-adc-parking', page: 'features', zh: '下发到泊车研发车组，回执后先仿真后实车登记 PASS，确认 Verified', en: 'Dispatch to 泊车研发车组, then record PASS on the simulator and the car and confirm Verified', expectZh: 'Feature 为 Verified', expectEn: 'The Feature is Verified' },
+      { account: 'adc_integrator', workspace: 'x89-adc-integration', page: 'integration', zh: '在 ADC 子系统集成中勾选已验证 Feature 并预览合并', en: 'In the ADC subsystem merge tick the Verified Feature and preview', expectZh: '只列出 ADC 域的 Feature；预览等待 DCL 确认', expectEn: 'Only ADC Features are listed; the preview awaits DCL' },
+      { account: 'dcl', workspace: 'x89-adc-integration', page: 'integration', zh: '确认处理集合', en: 'Confirm the processing set', expectZh: '预览变为可冻结', expectEn: 'The preview can be frozen' },
+      { account: 'adc_integrator', workspace: 'x89-adc-integration', page: 'integration', zh: '冻结、下发到 ADC 域集成测试车组、先仿真后实车登记 PASS、确认验证，再“发布子系统”', en: 'Freeze, dispatch to ADC 域集成测试车组, record PASS (simulator first), confirm, then Publish subsystem', expectZh: '得到 ADC-S1：可供整车集成，不是 DCL 正式版本', expectEn: 'ADC-S1: ready for whole-vehicle integration, not a DCL release' },
+      { account: 'integrator', workspace: 'x89-project', page: 'integration', zh: '在“可集成的子系统发布”勾选 ADC-S1，与底盘 Feature 一起预览合并', en: 'Tick ADC-S1 under Subsystem releases to integrate, with a chassis Feature, and preview', expectZh: '来源中显示子系统发布；冻结后候选沿用它的提交', expectEn: 'The subsystem release is a source; the candidate keeps its commits' },
+    ],
+  },
+  {
+    key: 'client-report',
+    titleZh: '车辆客户端状态上报',
+    titleEn: 'Vehicle client reports',
+    steps: [
+      { account: 'resource', page: 'fleet', zh: '在“车辆台账”打开 SIM-021 的客户端状态', en: 'Under Vehicle registry open SIM-021’s client state', expectZh: '实际版本、DCL 客户端、已生效配置与平台记录对照；历史中有重启前的启动', expectEn: 'Actual software, DCL client and applied configuration compared with the platform; the history shows the boot before the restart' },
+      { account: 'resource', page: 'simulator', zh: '在车辆模拟器把 SIM-021 设为离线，升级客户端后点“上报”', en: 'In the simulator set SIM-021 offline, upgrade the client, then Report', expectZh: '离线，已暂存待补报；平台最新状态不变', expectEn: 'Offline, queued; the platform’s latest report is unchanged' },
+      { account: 'resource', page: 'simulator', zh: '恢复在线后点“补报”', en: 'Back online, Send queued', expectZh: '最新状态更新为新客户端版本，历史保留', expectEn: 'The latest report shows the new client; history is kept' },
+      { account: 'resource', page: 'simulator', zh: '在“更多”中重放上一份、篡改签名、乱序到达', en: 'Under More resend the last report, tamper with one, deliver two out of order', expectZh: '重复被忽略；篡改被拒绝；较旧的只进入历史', expectEn: 'The resend is ignored; the tampered one refused; the older one only joins the history' },
+    ],
+  },
+  {
     key: 'setup',
     titleZh: '从零开始（干净安装）',
     titleEn: 'From scratch (clean installation)',
