@@ -106,6 +106,7 @@ function baseResource(ctx: Ctx, input: { id: string; vehicleModelId: string; env
     reservation: null,
     appliedConfigId: null,
     agent: { online: true, autoAck: false, failNext: false },
+    deviceKey: null,
     createdBy: ctx.user().username,
     createdAt: ctx.now,
     updatedAt: ctx.now,

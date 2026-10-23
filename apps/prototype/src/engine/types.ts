@@ -2,13 +2,14 @@
 // persisted in the browser; there is no server.
 
 import type { Grant } from '../domain/authz.ts';
+import type { ClientReportPayload, SignedReport } from '../domain/client-report.ts';
 import type { FileSpecContent, GroupConfig, PolicyContent } from '../domain/config.ts';
 import type { DataSource } from '../domain/data-source.ts';
 import type { FileType, Privacy } from '../domain/file-types.ts';
 import type { ReviewControls } from '../domain/intake.ts';
 import type { Domain, Env, GroupPurpose, Scope, WorkspaceKind } from '../domain/vocabulary.ts';
 
-export const STATE_SCHEMA = 6;
+export const STATE_SCHEMA = 7;
 
 export interface Account {
   username: string;
@@ -289,6 +290,14 @@ export interface ControllerState {
   status: 'PASS' | 'FAIL';
 }
 
+/** A device public key registered by vehicle resources; only registered devices may report. */
+export interface DeviceKey {
+  keyId: string;
+  publicKey: string;
+  registeredBy: string;
+  registeredAt: string;
+}
+
 export interface Resource {
   id: string;
   type: 'PHYSICAL' | 'SIMULATION';
@@ -321,6 +330,7 @@ export interface Resource {
   /** Confirmed only by an APPLIED receipt. */
   appliedConfigId: string | null;
   agent: AgentState;
+  deviceKey: DeviceKey | null;
   createdBy: string;
   createdAt: string;
   updatedAt: string;
@@ -486,17 +496,27 @@ export interface MergeConflict {
   ours: unknown;
   theirs: unknown;
   featureIds: string[];
+  subsystemReleaseIds: string[];
   /** Who must fix it: the owning business group, or DCL for processing fields. */
   owner: 'BUSINESS' | 'DCL';
 }
 
-/** A three-way merge preview of Verified Features onto a target set. */
+/** A subsystem release used as a merge input, pinned to its changed group commits. */
+export interface SubsystemRef {
+  subsystemReleaseId: string;
+  groups: Record<string, string>;
+}
+
+/** A three-way merge preview of Verified Features (and subsystem releases) onto a target set. */
 export interface MergePlan {
   id: string;
   workspaceId: string;
   vehicleModelId: string;
+  /** Vehicle for a whole-vehicle merge, or the one domain a subsystem merge covers. */
+  scope: Scope;
   targetReleaseId: string | null;
   sources: { featureId: string; commitId: string }[];
+  subsystems: SubsystemRef[];
   status: 'READY' | 'CONFLICT' | 'BLOCKED' | 'FROZEN' | 'SUPERSEDED';
   /** Merged configuration of every group a source changed. */
   merged: Record<string, GroupConfig>;
@@ -531,7 +551,9 @@ export interface Candidate {
   targetReleaseId: string | null;
   /** group id -> commit id: the complete set. */
   groups: Record<string, string>;
+  scope: Scope;
   sources: { featureId: string; commitId: string }[];
+  subsystems: SubsystemRef[];
   resolvedConfigId: string;
   status: CandidateStatus;
   createdBy: string;
@@ -624,6 +646,68 @@ export interface AuditEvent {
   workspaceId: string | null;
 }
 
+/**
+ * A domain's published subsystem set (子系统发布): an input to whole-vehicle integration. It is not
+ * a DCL version, lists no vehicle software and never goes to vehicles in production.
+ */
+export interface SubsystemRelease {
+  id: string;
+  /** e.g. ADC-S1, numbered per vehicle model and domain. */
+  label: string;
+  domain: Domain;
+  vehicleModelId: string;
+  workspaceId: string;
+  candidateId: string;
+  resolvedConfigId: string;
+  /** The whole-vehicle release its changes were made against. */
+  baseReleaseId: string | null;
+  /** Changed groups only: group id -> commit id. */
+  groups: Record<string, string>;
+  /** Every Feature it contains, including those of earlier releases in its chain. */
+  features: { featureId: string; commitId: string }[];
+  supersedesId: string | null;
+  sequence: number;
+  status: 'ACTIVE' | 'INTEGRATING' | 'INTEGRATED' | 'SUPERSEDED';
+  notes: string;
+  publishedBy: string;
+  publishedAt: string;
+}
+
+export interface StoredReport {
+  bootCounter: number;
+  bootId: string;
+  sequence: number;
+  digest: string;
+  payload: ClientReportPayload;
+  receivedAt: string;
+  /** ACCEPTED became the latest when received; STALE arrived after a newer one. */
+  result: 'ACCEPTED' | 'STALE';
+}
+
+/** What the platform keeps for one vehicle's client reports. */
+export interface ClientReportLog {
+  latest: StoredReport | null;
+  /** Newest first, capped. */
+  history: StoredReport[];
+  /** boot counter -> boot id, to refuse a second boot under one counter. */
+  boots: Record<string, string>;
+}
+
+/** The simulated vehicle's own storage (prototype only). The platform never reads it. */
+export interface DeviceState {
+  keyId: string;
+  secret: string;
+  publicKey: string;
+  bootCounter: number;
+  bootId: string;
+  sequence: number;
+  clientVersion: string;
+  /** Reports waiting for a connection; removed only once accepted. */
+  outbox: { signed: SignedReport; lastError: string | null }[];
+  lastContentDigest: string | null;
+  lastSentAt: string | null;
+}
+
 export interface State {
   schema: number;
   /** Monotonic counter for ordering (decisions, test runs, audit). */
@@ -668,6 +752,11 @@ export interface State {
   candidates: Record<string, Candidate>;
   events: Record<string, CollectionEvent>;
   testRequests: Record<string, TestRequest>;
+  subsystemReleases: Record<string, SubsystemRelease>;
+  /** resource id -> its client reports */
+  clientReports: Record<string, ClientReportLog>;
+  /** resource id -> simulated device storage (the simulator's, not the platform's) */
+  devices: Record<string, DeviceState>;
   audit: AuditEvent[];
 }
 
@@ -712,6 +801,9 @@ export function emptyState(): State {
     candidates: {},
     events: {},
     testRequests: {},
+    subsystemReleases: {},
+    clientReports: {},
+    devices: {},
     audit: [],
   };
 }

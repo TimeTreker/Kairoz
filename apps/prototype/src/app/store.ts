@@ -3,6 +3,7 @@
 
 import { useCallback, useSyncExternalStore } from 'react';
 import { Engine } from '../engine/engine.ts';
+import { migrate } from '../engine/migrate.ts';
 import { cleanState, demoState } from '../engine/seed.ts';
 import { STATE_SCHEMA } from '../engine/types.ts';
 import type { State } from '../engine/types.ts';
@@ -31,8 +32,13 @@ function loadState(): State {
   const raw = safeGet(STATE_KEY);
   if (raw) {
     try {
-      const parsed = JSON.parse(raw) as State;
-      if (parsed.schema === STATE_SCHEMA) return parsed;
+      const parsed = JSON.parse(raw) as { schema?: unknown };
+      const upgraded = parsed.schema !== STATE_SCHEMA;
+      const state = migrate(parsed);
+      if (state) {
+        if (upgraded) safeSet(STATE_KEY, JSON.stringify(state));
+        return state;
+      }
     } catch {
       // Fall through to a fresh demo.
     }
@@ -56,8 +62,8 @@ export const engine = new Engine(loadState(), persist);
 window.addEventListener('storage', (e) => {
   if (e.key !== STATE_KEY || !e.newValue) return;
   try {
-    const parsed = JSON.parse(e.newValue) as State;
-    if (parsed.schema === STATE_SCHEMA) engine.replace(parsed);
+    const state = migrate(JSON.parse(e.newValue));
+    if (state) engine.replace(state);
   } catch {
     // Ignore a save this version cannot read.
   }
@@ -111,8 +117,9 @@ export function exportState(): string {
 }
 
 export function importState(json: string): void {
-  const parsed = JSON.parse(json) as State;
-  if (parsed.schema !== STATE_SCHEMA) throw new Error(`unsupported state schema ${parsed.schema}`);
-  engine.replace(parsed);
+  const parsed = JSON.parse(json) as { schema?: unknown };
+  const state = migrate(parsed);
+  if (!state) throw new Error(`unsupported state schema ${String(parsed.schema)}`);
+  engine.replace(state);
   setSession({ username: null, workspaceId: null });
 }

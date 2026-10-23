@@ -6,7 +6,7 @@ import { Alert, App, Button, Card, Checkbox, Col, Descriptions, Empty, Flex, Inp
 import { useEffect, useMemo, useState } from 'react';
 import { SCENE_NOTES, SCRIPT_NOTES } from '../acceptance/notes.ts';
 import { NEGATIVE_CASES, SCRIPTS } from '../acceptance/scripts.ts';
-import type { Scene } from '../acceptance/scripts.ts';
+import type { Scene, Script } from '../acceptance/scripts.ts';
 import { useActor, useWorkspace } from '../app/hooks.ts';
 import { resetPlatform, setSession, useEngineState } from '../app/store.ts';
 import { PageHeader, when } from '../components/common.tsx';
@@ -62,6 +62,8 @@ const emptyScene = (): SceneRecord => ({ checked: [], result: 'NOT_RUN', executo
 const NEGATIVE_SCRIPT = {
   id: 'negative',
   name: '反向用例 T-N01–T-N24',
+  /** Negative cases run on whatever state the tester prepared. */
+  start: null as Script['start'] | null,
   scenes: NEGATIVE_CASES.map<Scene>((c) => ({ id: c.id, title: c.action, actor: c.role, accounts: [], workspace: null, page: '', pre: '', steps: [c.action], done: c.expected, fail: '' })),
 };
 
@@ -161,15 +163,15 @@ export function AcceptancePage() {
           style={{ marginBottom: 12 }}
           title={SCRIPT_NOTES[scriptId]}
           action={
-            scriptId !== 'negative' && (
+            script.start && (
               <Button
                 size="small"
                 onClick={() =>
                   modal.confirm({
-                    title: scriptId === 'data-usage' ? L('重置为演示数据？', 'Reset to demo data?') : L('重置为干净安装？', 'Reset to a clean installation?'),
+                    title: script.start === 'demo' ? L('重置为演示数据？', 'Reset to demo data?') : L('重置为干净安装？', 'Reset to a clean installation?'),
                     content: L('当前浏览器中的原型数据会被替换；验收记录保留。', 'Prototype data in this browser is replaced; the acceptance record stays.'),
                     onOk: () => {
-                      resetPlatform(scriptId === 'data-usage' ? 'demo' : 'clean');
+                      resetPlatform(script.start!);
                       message.success(L('已重置，请重新选择账号', 'Reset; choose an account again'));
                     },
                   })

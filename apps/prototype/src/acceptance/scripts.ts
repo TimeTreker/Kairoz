@@ -19,6 +19,8 @@ export interface Scene {
 export interface Script {
   id: string;
   name: string;
+  /** Where the script starts: a clean installation or the demo data. */
+  start: 'clean' | 'demo';
   scenes: Scene[];
 }
 
@@ -33,6 +35,7 @@ export const SCRIPTS: Script[] = [
   {
     "id": "startup",
     "name": "从零启动 · 角色协作",
+    "start": "clean",
     "scenes": [
       {
         "id": "A01",
@@ -913,6 +916,7 @@ export const SCRIPTS: Script[] = [
   {
     "id": "first-ota",
     "name": "首次 OTA · 集成与发布",
+    "start": "clean",
     "scenes": [
       {
         "id": "E01",
@@ -1351,6 +1355,7 @@ export const SCRIPTS: Script[] = [
   {
     "id": "data-usage",
     "name": "数据使用 · 售后与训练",
+    "start": "demo",
     "scenes": [
       {
         "id": "U01",

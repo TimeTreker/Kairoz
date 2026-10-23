@@ -134,7 +134,7 @@ export function previewMerge(ctx: Ctx, input: { workspaceId: string; featureIds:
     );
     recomputeReview(ctx.s, result.merged);
     merged[groupId] = result.merged;
-    for (const c of result.conflicts) conflicts.push({ ...c, groupId, owner: PROCESSING_FIELDS.has(c.field) ? 'DCL' : 'BUSINESS' });
+    for (const c of result.conflicts) conflicts.push({ ...c, subsystemReleaseIds: [], groupId, owner: PROCESSING_FIELDS.has(c.field) ? 'DCL' : 'BUSINESS' });
   }
   const finalSet: Record<string, GroupConfig> = {};
   for (const [g, commitId] of Object.entries(targetGroups(ctx.s, release))) finalSet[g] = commitSnapshot(ctx.s, commitId);
@@ -150,8 +150,10 @@ export function previewMerge(ctx: Ctx, input: { workspaceId: string; featureIds:
     id,
     workspaceId: ws.id,
     vehicleModelId: ws.vehicleModelId,
+    scope: 'Vehicle',
     targetReleaseId: release?.id ?? null,
     sources,
+    subsystems: [],
     status: conflicts.length ? 'CONFLICT' : issues.length ? 'BLOCKED' : 'READY',
     merged,
     conflicts,
@@ -342,7 +344,9 @@ export function freezeCandidate(ctx: Ctx, planId: string, input: { label: string
     mergePlanId: plan.id,
     targetReleaseId: plan.targetReleaseId,
     groups,
+    scope: plan.scope,
     sources: plan.sources.map((x) => ({ ...x })),
+    subsystems: plan.subsystems.map((x) => ({ ...x, groups: { ...x.groups } })),
     resolvedConfigId,
     status: 'CANDIDATE',
     createdBy: ctx.user().username,
