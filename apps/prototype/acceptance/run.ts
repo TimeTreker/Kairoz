@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { SCENE_NOTES } from '../src/acceptance/notes.ts';
 import { NEGATIVE_CASES, SCRIPTS } from '../src/acceptance/scripts.ts';
 import type { State } from '../src/engine/types.ts';
+import * as clientReport from './client-report.ts';
 import * as dataUsage from './data-usage.ts';
 import * as firstOta from './first-ota.ts';
 import * as negative from './negative.ts';
@@ -42,6 +43,7 @@ const suites = [
   { id: 'startup', mod: startup },
   { id: 'first-ota', mod: firstOta },
   { id: 'data-usage', mod: dataUsage },
+  { id: 'client-report', mod: clientReport },
 ] as const;
 
 const report: { script: string; name: string; rows: Row[] }[] = [];

@@ -5,6 +5,7 @@ export const SCRIPT_NOTES: Record<string, string> = {
   startup: '从“原型工具 → 重置为干净安装”开始。车辆回执、事件与外部服务由车辆模拟器扮演；服务端部署、数据库备份等幕记为不适用。',
   'first-ota': '从“原型工具 → 重置为干净安装”开始。剧本中的终端命令（mock_receipt.mjs、curl）由车辆模拟器与平台页面代替；签名配置包需要服务端，原型只导出配置集合 JSON。',
   'data-usage': '使用演示数据（原型工具 → 重置为演示数据）。样例事件日期固定为 2026-10-18。',
+  'client-report': '使用演示数据。车端客户端由车辆模拟器扮演，设备签名为 Mock（可伪造），不代表真实设备认证；剧本中的 Mock 控制台与 curl 由模拟器按钮代替。',
 };
 
 /** Keyed by script and scene, e.g. 'first-ota/E05'. */

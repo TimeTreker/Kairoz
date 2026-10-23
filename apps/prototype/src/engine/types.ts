@@ -704,6 +704,8 @@ export interface DeviceState {
   clientVersion: string;
   /** Reports waiting for a connection; removed only once accepted. */
   outbox: { signed: SignedReport; lastError: string | null }[];
+  /** The last report the platform accepted, kept to resend. */
+  lastSent: SignedReport | null;
   lastContentDigest: string | null;
   lastSentAt: string | null;
 }

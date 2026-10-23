@@ -10,11 +10,12 @@ import { createGroup, createOrgUnit, createProject, createVehicleModel, createWo
 import { createPipeline, createTemplate } from './processing.ts';
 import { requestReference } from './references.ts';
 import { addGroupMember, addWorkspaceVehicle, confirmIntegration, createSimulation, createVehicleGroup, recordSoftwareVersion, registerImage, registerPhysical } from './fleet.ts';
+import { registerDeviceKey } from './client-report.ts';
 import { captureEvent, processEvent } from './events.ts';
 import { confirmProcessing, freezeCandidate, previewMerge } from './integration.ts';
 import { createOta } from './ota.ts';
 import { promoteCandidate } from './release.ts';
-import { sendReceipt } from './simulator.ts';
+import { devicePublicKey, provisionDevice, reportNow, restartClient, sendReceipt, upgradeClient } from './simulator.ts';
 import { dispatchCandidate, dispatchFeature, recordCandidateTest, recordFeatureTest, verifyCandidate, verifyFeature } from './validation.ts';
 import { sha256Hex } from '../domain/canonical.ts';
 import { emptyState } from './types.ts';
@@ -345,6 +346,24 @@ export function demoState(): State {
 
   // Steering asks brake for read-only use of the brake debug data; brake has not decided yet.
   as('steering', (c) => requestReference(c, { dataKey: brakeKey, readerGroupId: 'steering', reason: '转向事件分析需要制动压力上下文' }));
+
+  // Every vehicle's DCL client: vehicle resources registers its device key, and it reports what it
+  // runs. SIM-021 ran an older client before an upgrade and restart, so its history shows a new boot.
+  for (const id of Object.keys(engine.getState().resources).sort()) {
+    const key = engine.run(null, (c) => {
+      provisionDevice(c, id);
+      if (id === 'SIM-021') upgradeClient(c, id, '2.2.0');
+      return devicePublicKey(c.s, id)!;
+    }) as { keyId: string; publicKey: string };
+    as('resource', (c) => registerDeviceKey(c, id, key));
+    if (engine.getState().resources[id]!.instance === 'STOPPED') continue;
+    engine.run(null, (c) => reportNow(c, id));
+    engine.run(null, (c) => reportNow(c, id));
+  }
+  engine.run(null, (c) => {
+    upgradeClient(c, 'SIM-021', '2.3.0');
+    restartClient(c, 'SIM-021');
+  });
 
   return produce(engine.getState(), (s) => {
     s.installation = 'DEMO';

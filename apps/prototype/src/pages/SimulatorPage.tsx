@@ -1,7 +1,7 @@
 // The vehicle simulator: plays the vehicles and simulators. It is a prototype tool, clearly
 // separate from the product's role pages, which never fabricate results themselves.
 
-import { App, Alert, Button, Card, Checkbox, Select, Space, Switch, Table, Tag, Tooltip, Typography } from 'antd';
+import { App, Alert, Button, Card, Checkbox, Dropdown, Select, Space, Switch, Table, Tag, Tooltip, Typography } from 'antd';
 import { useEffect, useState } from 'react';
 import { useErrorText } from '../app/hooks.ts';
 import { engine, useEngineState } from '../app/store.ts';
@@ -9,9 +9,10 @@ import { EnvTag, LabelTag, Mono, PageHeader, when } from '../components/common.t
 import type { Ctx } from '../engine/engine.ts';
 import { advanceEvent, assessEvent, capturablePolicies, captureEvent, deliverCallback, receiveChunk, setFailParse } from '../engine/events.ts';
 import type { Quality, TrainingUse } from '../engine/types.ts';
-import { pendingForVehicles, sendReceipt, setAgent, tick } from '../engine/simulator.ts';
+import { deviceSummary, flushOutbox, pendingForVehicles, reportNow, restartClient, sendFault, sendReceipt, setAgent, tick, upgradeClient } from '../engine/simulator.ts';
+import type { ReportFault } from '../engine/simulator.ts';
 import { useI18n } from '../i18n/i18n.tsx';
-import { EVENT_STATUS_COLORS, EVENT_STATUS_LABELS, QUALITY_LABELS, RESOURCE_TYPE_LABELS, TRAINING_USE_LABELS } from '../i18n/vocab.ts';
+import { ERROR_LABELS, EVENT_STATUS_COLORS, EVENT_STATUS_LABELS, QUALITY_LABELS, REPORT_RESULT_LABELS, RESOURCE_TYPE_LABELS, TRAINING_USE_LABELS } from '../i18n/vocab.ts';
 
 let autoTimer: ReturnType<typeof setInterval> | undefined;
 
@@ -128,6 +129,89 @@ export function SimulatorPage() {
               { title: L('自动回执', 'Auto receipt'), render: (_, r) => <Switch size="small" checked={r.agent.autoAck} onChange={(v) => system((c) => setAgent(c, r.id, { autoAck: v }))} /> },
               { title: L('下一次应用失败', 'Fail next apply'), render: (_, r) => <Switch size="small" checked={r.agent.failNext} onChange={(v) => system((c) => setAgent(c, r.id, { failNext: v }))} /> },
               { title: L('已生效配置', 'Applied'), render: (_, r) => <Mono>{r.appliedConfigId ? state.resolvedConfigs[r.appliedConfigId]?.label : '—'}</Mono> },
+              {
+                title: (
+                  <Tooltip title={L('客户端上报实际运行的内容；离线时暂存，恢复连接后补报。签名为 Mock。', 'The client reports what it actually runs; offline, reports wait and are sent on reconnect. Signatures are mock.')}>
+                    {L('DCL 客户端', 'DCL client')}
+                  </Tooltip>
+                ),
+                render: (_, r) => {
+                  const d = deviceSummary(state, r.id);
+                  const stopped = r.instance === 'STOPPED';
+                  const result = (x: string) => (REPORT_RESULT_LABELS[x] ? B(REPORT_RESULT_LABELS[x]!) : x);
+                  const fault = (f: ReportFault) => {
+                    const out = system((c) => sendFault(c, r.id, f));
+                    if (out !== undefined) message.info(result(out));
+                  };
+                  const next = d ? d.clientVersion.replace(/^(\d+)\.(\d+)\..*$/, (_m, a: string, b: string) => `${a}.${Number(b) + 1}.0`) : '2.4.0';
+                  return (
+                    <Space size={4} wrap>
+                      {d && (
+                        <Typography.Text type="secondary">
+                          v{d.clientVersion} · {L(`启动 ${d.bootCounter} / 序号 ${d.sequence}`, `boot ${d.bootCounter} / seq ${d.sequence}`)}
+                        </Typography.Text>
+                      )}
+                      {d && d.queued > 0 && (
+                        <Tooltip title={d.lastError ? B(ERROR_LABELS[d.lastError] ?? { zh: d.lastError, en: d.lastError }) : L('等待恢复连接', 'Waiting for a connection')}>
+                          <Tag color={d.lastError ? 'red' : 'gold'}>{L(`待补报 ${d.queued}`, `${d.queued} queued`)}</Tag>
+                        </Tooltip>
+                      )}
+                      <Button
+                        size="small"
+                        disabled={stopped}
+                        onClick={() => {
+                          const out = system((c) => reportNow(c, r.id));
+                          if (out !== undefined) message.success(result(out));
+                        }}
+                      >
+                        {L('上报', 'Report')}
+                      </Button>
+                      <Button
+                        size="small"
+                        disabled={stopped}
+                        onClick={() => {
+                          const out = system((c) => restartClient(c, r.id));
+                          if (out !== undefined) message.success(`${L('已重启客户端', 'Client restarted')} · ${result(out)}`);
+                        }}
+                      >
+                        {L('重启客户端', 'Restart client')}
+                      </Button>
+                      {d && d.queued > 0 && (
+                        <Button
+                          size="small"
+                          disabled={stopped}
+                          onClick={() => {
+                            const out = system((c) => flushOutbox(c, r.id));
+                            if (out) message.info(L(`已补报 ${out.sent} 份，仍待 ${out.waiting} 份`, `Sent ${out.sent}; ${out.waiting} still queued`));
+                          }}
+                        >
+                          {L('补报', 'Send queued')}
+                        </Button>
+                      )}
+                      <Dropdown
+                        disabled={stopped}
+                        menu={{
+                          items: [
+                            { key: 'upgrade', label: L(`升级客户端到 ${next}`, `Upgrade client to ${next}`) },
+                            { type: 'divider' },
+                            { key: 'REPLAY', label: L('重放上一份上报', 'Resend the last report'), disabled: !d?.hasSent },
+                            { key: 'SEQUENCE_CONFLICT', label: L('同序号发送不同内容', 'Same sequence, other content'), disabled: !d?.hasSent },
+                            { key: 'TAMPER', label: L('篡改签名后的上报', 'Tamper with a signed report') },
+                            { key: 'BOOT_CONFLICT', label: L('同一启动计数换启动 ID', 'Same boot counter, other boot id') },
+                            { key: 'OUT_OF_ORDER', label: L('两份上报乱序到达', 'Two reports arrive out of order') },
+                          ],
+                          onClick: ({ key }) => {
+                            if (key === 'upgrade') system((c) => upgradeClient(c, r.id, next), L(`客户端已升级到 ${next}，下一次上报会带上新版本`, `Client upgraded to ${next}; the next report carries it`));
+                            else fault(key as ReportFault);
+                          },
+                        }}
+                      >
+                        <Button size="small">{L('更多', 'More')}</Button>
+                      </Dropdown>
+                    </Space>
+                  );
+                },
+              },
             ]}
           />
         </Card>

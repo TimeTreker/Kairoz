@@ -1,8 +1,8 @@
 {
-  "runAt": "2026-10-21T06:43:41.866Z",
+  "runAt": "2026-10-23T07:15:55.357Z",
   "layer": "engine",
   "counts": {
-    "PASS": 85,
+    "PASS": 90,
     "FAIL": 0,
     "GAP": 0,
     "BLOCKED": 0,
@@ -597,6 +597,57 @@
           "id": "U02",
           "title": "训练按策略和场景选用数据",
           "actor": "business / 陈明 · 业务研发；制动团队工作区；研发环境",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        }
+      ]
+    },
+    {
+      "script": "client-report",
+      "name": "客户端状态上报 · 车辆资源与 DCL 联调",
+      "rows": [
+        {
+          "id": "R01",
+          "title": "查看客户端实际状态与上报历史",
+          "actor": "resource / 刘子衡 · 车辆资源；研发环境",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "R02",
+          "title": "离线时版本变化暂存待补报",
+          "actor": "车辆模拟器 · SIM-021",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "R03",
+          "title": "恢复连接后补报",
+          "actor": "车辆模拟器 · SIM-021；resource 核对",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "R04",
+          "title": "设备身份与签名",
+          "actor": "resource / 车辆资源；车辆模拟器",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "R05",
+          "title": "重复、乱序与重启",
+          "actor": "车辆模拟器 · SIM-021",
           "adaptation": null,
           "status": "PASS",
           "detail": null,

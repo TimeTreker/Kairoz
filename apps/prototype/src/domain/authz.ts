@@ -66,6 +66,12 @@ export const ACTIONS = {
   'simulation.manage': { roles: ['WORKSPACE_ADMIN', 'VEHICLE_RESOURCE'], env: 'target' },
   'workspace.resources': { roles: ['WORKSPACE_ADMIN', 'VEHICLE_RESOURCE'], env: 'target' },
   'vehicleGroup.manage': { roles: ['WORKSPACE_ADMIN', 'CONFIG_RELEASE'], env: 'target' },
+  /** What a vehicle's client reports it runs: for those who work with the vehicle in a workspace. */
+  'clientReport.read': {
+    roles: ['VEHICLE_RESOURCE', 'WORKSPACE_ADMIN', 'BUSINESS_DEV', 'BUSINESS_TEST', 'INTEGRATION_TEST', 'CONFIG_RELEASE', 'DCL_ENGINEER'],
+    env: 'target',
+    excludeDispatchOnly: true,
+  },
   // Integration (配置集成) and release (配置发布)
   'merge.manage': { roles: ['CONFIG_INTEGRATOR'], env: 'testing' },
   'release.promote': { roles: ['CONFIG_RELEASE'], env: 'production' },

@@ -439,3 +439,36 @@ export const CONFIG_ANSWER_LABELS: Record<string, Bilingual> = {
   INITIAL: b('初始研发配置', 'Initial configuration'),
   BLOCKED: b('阻止', 'Blocked'),
 };
+
+// Client reports (DCL Client 实际状态上报)
+Object.assign(ERROR_LABELS, {
+  INVALID_DEVICE_KEY: b('请填写设备密钥编号与设备公钥（mock-ed25519:…）', 'Give a key id and the device’s public key (mock-ed25519:…)'),
+  DEVICE_NOT_REGISTERED: b('设备密钥未登记，不能上报', 'The device key is not registered; the vehicle cannot report'),
+  SIGNATURE_INVALID: b('上报签名与登记的设备密钥不符', 'The report’s signature does not match the registered device key'),
+  REPORT_IDENTITY_MISMATCH: b('上报的车辆身份（资源 ID、VIN/UVID）与登记不符', 'The report’s vehicle identity (id, VIN/UVID) differs from the registration'),
+  REPORT_BOOT_CONFLICT: b('同一启动计数已有另一个启动 ID', 'This boot counter already has another boot id'),
+  REPORT_SEQUENCE_CONFLICT: b('同一启动与序号已上报过不同内容', 'This boot and sequence were already reported with other content'),
+  REPORT_SCHEMA_UNSUPPORTED: b('上报格式不受支持', 'The report format is not supported'),
+  REPORT_TOO_LARGE: b('上报内容超出限制（每类最多 256 项，执行信息最多 8 KiB）', 'The report is too large (256 items per list, 8 KiB of execution detail)'),
+  CLIENT_NOT_RUNNING: b('车端客户端未运行（仿真实例已停止或车辆已报废）', 'The vehicle client is not running (instance stopped or vehicle retired)'),
+  NOTHING_TO_REPLAY: b('客户端还没有发送过上报', 'The client has not sent a report yet'),
+});
+
+export const REPORT_RESULT_LABELS: Record<string, Bilingual> = {
+  ACCEPTED: b('已接收', 'Accepted'),
+  STALE: b('较旧，仅入历史', 'Older; history only'),
+  REPLAYED: b('重复上报，已忽略', 'Duplicate; ignored'),
+  QUEUED: b('离线，已暂存待补报', 'Offline; queued'),
+};
+
+/** Statuses a client reports for its controllers, nodes, policies and files. */
+export const CLIENT_ITEM_STATUS_LABELS: Record<string, Bilingual> = {
+  CONFIGURED: b('已配置', 'Configured'),
+  RUNNING: b('运行中', 'Running'),
+  STOPPED: b('已停止', 'Stopped'),
+  PASS: b('通过', 'Pass'),
+  FAIL: b('失败', 'Fail'),
+  CONSISTENT: b('一致', 'Consistent'),
+  PARTIAL_FAILURE: b('部分失败', 'Partial failure'),
+  UNKNOWN: b('未知', 'Unknown'),
+};

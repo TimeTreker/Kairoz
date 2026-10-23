@@ -2,7 +2,8 @@ import { MinusCircleOutlined, PlusOutlined } from '@ant-design/icons';
 import { Button, Card, Col, Collapse, Empty, Form, Input, Modal, Row, Select, Space, Switch, Table, Tabs, Tag, Timeline, Tooltip, Typography } from 'antd';
 import { useState } from 'react';
 import { useActor, useCan, useRun, useWorkspace } from '../app/hooks.ts';
-import { useEngineState } from '../app/store.ts';
+import { engine, useEngineState } from '../app/store.ts';
+import { ClientReportDrawer } from '../components/client-report.tsx';
 import { EnvTag, Hint, LabelTag, Mono, PageHeader, ShortId, when } from '../components/common.tsx';
 import { ENVS, SCOPES } from '../domain/vocabulary.ts';
 import {
@@ -31,7 +32,9 @@ import {
   vehicleGroupsOf,
   workspaceVehicles,
 } from '../engine/fleet.ts';
+import { registerDeviceKey } from '../engine/client-report.ts';
 import { displayName } from '../engine/config.ts';
+import { devicePublicKey, provisionDevice } from '../engine/simulator.ts';
 import { decideTestRequest, testRequestsOf } from '../engine/validation.ts';
 import type { Resource, State, TestRequest } from '../engine/types.ts';
 import { sha256Hex } from '../domain/canonical.ts';
@@ -120,6 +123,7 @@ function WorkspaceVehicles() {
   const [creating, setCreating] = useState(false);
   const [reserving, setReserving] = useState<Resource | null>(null);
   const [purpose, setPurpose] = useState('');
+  const [clientOf, setClientOf] = useState<string | null>(null);
   const [form] = Form.useForm();
   if (!workspace) return null;
   const vehicles = workspaceVehicles(state, workspace.id);
@@ -170,6 +174,11 @@ function WorkspaceVehicles() {
                   {L('预约', 'Reserve')}
                 </Button>
               ))}
+            {can('clientReport.read', { workspaceId: workspace.id, env: r.env }) && (
+              <Button type="link" size="small" onClick={() => setClientOf(r.id)}>
+                {L('客户端状态', 'Client state')}
+              </Button>
+            )}
             {manages(r) && (
               <Button type="link" size="small" danger onClick={() => run((c) => removeWorkspaceVehicle(c, workspace.id, r.id), L('已移出工作区', 'Removed from the workspace'))}>
                 {L('移出', 'Remove')}
@@ -178,6 +187,7 @@ function WorkspaceVehicles() {
           </Space>
         )}
       />
+      <ClientReportDrawer resourceId={clientOf} workspaceId={workspace.id} onClose={() => setClientOf(null)} />
       <Modal
         open={reserving !== null}
         title={`${L('预约车辆', 'Reserve vehicle')} · ${reserving?.id}`}
@@ -518,7 +528,10 @@ function Registry() {
   const [confirming, setConfirming] = useState<Resource | null>(null);
   const [statusOf, setStatusOf] = useState<Resource | null>(null);
   const [reporting, setReporting] = useState<Resource | null>(null);
+  const [keying, setKeying] = useState<Resource | null>(null);
+  const [clientOf, setClientOf] = useState<string | null>(null);
   const [cf] = Form.useForm();
+  const [kf] = Form.useForm();
   const [form] = Form.useForm();
   const [vf] = Form.useForm();
   const [sf] = Form.useForm();
@@ -550,9 +563,56 @@ function Registry() {
             <Button type="link" size="small" onClick={() => (sf.setFieldsValue({ status: r.status, reason: '' }), setStatusOf(r))}>
               {L('状态', 'Status')}
             </Button>
+            {r.deviceKey ? (
+              <Button type="link" size="small" onClick={() => setClientOf(r.id)}>
+                {L('客户端状态', 'Client state')}
+              </Button>
+            ) : (
+              <Button type="link" size="small" onClick={() => (kf.resetFields(), setKeying(r))}>
+                {L('登记设备密钥（Mock）', 'Register device key (mock)')}
+              </Button>
+            )}
           </Space>
         )}
       />
+      <ClientReportDrawer resourceId={clientOf} workspaceId={null} onClose={() => setClientOf(null)} />
+      <Modal
+        open={keying !== null}
+        title={L(`登记设备密钥 · ${keying?.id ?? ''}`, `Register device key · ${keying?.id ?? ''}`)}
+        onCancel={() => setKeying(null)}
+        onOk={() =>
+          kf.validateFields().then((v) => {
+            if (run((c) => registerDeviceKey(c, keying!.id, v), L('已登记设备密钥', 'Device key registered')) !== undefined) setKeying(null);
+          })
+        }
+      >
+        <Hint>
+          {L(
+            '只有登记了公钥的设备才能上报客户端状态。原型使用 Mock 密钥与签名，可以伪造，不代表真实设备认证。',
+            'Only a device whose public key is registered may report its client state. The prototype uses mock keys and signatures, which can be forged: this is not real device authentication.',
+          )}
+        </Hint>
+        <Form form={kf} name="device-key" layout="vertical">
+          <Form.Item name="keyId" label={L('密钥编号', 'Key id')} rules={[{ required: true }]}>
+            <Input placeholder="VEH-901-k1" />
+          </Form.Item>
+          <Form.Item name="publicKey" label={L('设备公钥', 'Device public key')} rules={[{ required: true }]}>
+            <Input.TextArea rows={2} placeholder="mock-ed25519:…" />
+          </Form.Item>
+          <Button
+            size="small"
+            onClick={() => {
+              const key = engine.run(null, (c) => {
+                provisionDevice(c, keying!.id);
+                return devicePublicKey(c.s, keying!.id);
+              });
+              if (key) kf.setFieldsValue(key);
+            }}
+          >
+            {L('从模拟设备读取公钥（原型工具）', 'Read the key from the simulated device (prototype tool)')}
+          </Button>
+        </Form>
+      </Modal>
       <Modal
         open={registering}
         title={L('登记实车', 'Register a physical vehicle')}
