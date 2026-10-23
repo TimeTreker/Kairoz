@@ -45,8 +45,8 @@ describe('three-way merge', () => {
     const base = cfg({ a: spec() });
     const ours = cfg({ a: spec({ retentionDays: 60 }) }); // the target moved on since the base
     const result = mergeGroup(ours, [
-      { featureId: 'f1', base, theirs: cfg({ a: spec({ purpose: 'new' }) }) },
-      { featureId: 'f2', base: emptyConfig(), theirs: cfg({ b: spec({ name: 'b' }) }) },
+      { sourceId: 'f1', base, theirs: cfg({ a: spec({ purpose: 'new' }) }) },
+      { sourceId: 'f2', base: emptyConfig(), theirs: cfg({ b: spec({ name: 'b' }) }) },
     ]);
     assert.deepEqual(result.conflicts, []);
     assert.equal(result.merged.files.a!.retentionDays, 60);
@@ -57,24 +57,24 @@ describe('three-way merge', () => {
   test('the same field changed two ways conflicts, naming both sources; processing fields are DCL’s', () => {
     const base = cfg({ a: spec() });
     const result = mergeGroup(base, [
-      { featureId: 'f1', base, theirs: cfg({ a: spec({ format: 'mcap' }) }) },
-      { featureId: 'f2', base, theirs: cfg({ a: spec({ format: 'text' }) }) },
+      { sourceId: 'f1', base, theirs: cfg({ a: spec({ format: 'mcap' }) }) },
+      { sourceId: 'f2', base, theirs: cfg({ a: spec({ format: 'text' }) }) },
     ]);
     assert.equal(result.conflicts.length, 1);
     const c = result.conflicts[0]!;
     assert.deepEqual([c.section, c.key, c.field, c.ours, c.theirs], ['files', 'a', 'format', 'mcap', 'text']);
-    assert.deepEqual(c.featureIds, ['f1', 'f2']);
+    assert.deepEqual(c.sourceIds, ['f1', 'f2']);
     assert.ok(PROCESSING_FIELDS.has(c.field));
   });
 
   test('removing an item someone else changed conflicts; the derived review flag never does', () => {
     const base = cfg({ a: spec() });
     const result = mergeGroup(base, [
-      { featureId: 'f1', base, theirs: cfg({ a: spec({ purpose: 'x', requiresReview: true }) }) },
-      { featureId: 'f2', base, theirs: emptyConfig() },
+      { sourceId: 'f1', base, theirs: cfg({ a: spec({ purpose: 'x', requiresReview: true }) }) },
+      { sourceId: 'f2', base, theirs: emptyConfig() },
     ]);
     assert.deepEqual(
-      result.conflicts.map((c) => [c.key, c.field, c.featureIds]),
+      result.conflicts.map((c) => [c.key, c.field, c.sourceIds]),
       [['a', '*', ['f2']]],
     );
     assert.equal(result.merged.files.a!.requiresReview, false, 'derived flags are recomputed by the caller');

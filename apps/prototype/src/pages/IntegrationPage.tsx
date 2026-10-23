@@ -2,7 +2,7 @@
 // three-way merge, have DCL confirm the final processing set, freeze a candidate, and test the
 // candidate independently in the integration workspace.
 
-import { Alert, Button, Card, Descriptions, Empty, Flex, Input, Modal, Space, Steps, Table, Tabs, Tag, Typography } from 'antd';
+import { Alert, Button, Card, Descriptions, Empty, Flex, Input, Modal, Segmented, Space, Steps, Table, Tabs, Tag, Typography } from 'antd';
 import { useState } from 'react';
 import { useCan, useRun, useWorkspace } from '../app/hooks.ts';
 import { navigate } from '../app/router.ts';
@@ -11,10 +11,27 @@ import { DiffView } from '../components/DiffView.tsx';
 import { Hint, LabelTag, Mono, PageHeader, ShortId, StageTag, when } from '../components/common.tsx';
 import { DeploymentsTable, DispatchModal, RecordTestModal, TargetsTable } from '../components/testing.tsx';
 import { WILDCARD } from '../domain/vocabulary.ts';
+import type { Scope } from '../domain/vocabulary.ts';
 import { displayName } from '../engine/config.ts';
 import { ungroupedVehicles, vehicleGroupsOf } from '../engine/fleet.ts';
-import { cancelCandidate, confirmProcessing, freezeCandidate, isCollectible, isConfirmed, isMergeWorkspace, planGroups, latestRelease, previewMerge, processingSummary, verifiedSources } from '../engine/integration.ts';
-import type { Candidate, MergeConflict, MergePlan, State } from '../engine/types.ts';
+import {
+  cancelCandidate,
+  collectibleSubsystems,
+  confirmProcessing,
+  currentSubsystem,
+  defaultScope,
+  freezeCandidate,
+  isCollectible,
+  isConfirmed,
+  isMergeWorkspace,
+  latestRelease,
+  planGroups,
+  previewMerge,
+  processingSummary,
+  publishSubsystem,
+  verifiedSources,
+} from '../engine/integration.ts';
+import type { Candidate, MergeConflict, MergePlan, State, SubsystemRef, SubsystemRelease } from '../engine/types.ts';
 import { cancelDeployment, candidateTestStatus, candidateVehicleProblems, candidateVerifyBlockers, deploymentsOf, dispatchCandidate, recordCandidateTest, verifyCandidate } from '../engine/validation.ts';
 import { useI18n } from '../i18n/i18n.tsx';
 import { issueLabel } from '../i18n/issues.ts';
@@ -29,6 +46,7 @@ import {
   PLAN_STATUS_COLORS,
   PLAN_STATUS_LABELS,
   REVIEW_STATUS_LABELS,
+  SUBSYSTEM_STATUS_LABELS,
 } from '../i18n/vocab.ts';
 
 /** The project workspace integration works on, from the current project or integration workspace. */
@@ -72,13 +90,34 @@ function dataName(s: State, key: string): string {
   );
 }
 
+/** The names of what went into a merge: Features, then subsystem releases. */
+function sourceNames(s: State, x: { sources: { featureId: string }[]; subsystems: SubsystemRef[] }): string[] {
+  return [...x.sources.map((f) => s.features[f.featureId]?.name ?? f.featureId), ...x.subsystems.map((r) => s.subsystemReleases[r.subsystemReleaseId]?.label ?? r.subsystemReleaseId)];
+}
+
+/** Whether a merge input is still what the preview pinned: an active release (or, inside its own domain, one in a whole-vehicle candidate). */
+function subsystemUsable(s: State, plan: MergePlan, ref: SubsystemRef): boolean {
+  const r = s.subsystemReleases[ref.subsystemReleaseId];
+  return plan.scope === 'Vehicle' ? r?.status === 'ACTIVE' : r?.status === 'ACTIVE' || r?.status === 'INTEGRATING';
+}
+
+/** Subsystem releases a workspace shows: its own, or those of its source domain workspaces. */
+function subsystemReleasesOf(s: State, workspaceId: string): SubsystemRelease[] {
+  const ws = s.workspaces[workspaceId];
+  if (!ws) return [];
+  return Object.values(s.subsystemReleases)
+    .filter((r) => r.workspaceId === ws.id || ws.sourceWorkspaceIds.includes(r.workspaceId))
+    .sort((a, b) => a.domain.localeCompare(b.domain) || b.sequence - a.sequence);
+}
+
 export function IntegrationPage({ candidateId }: { candidateId?: string }) {
   const state = useEngineState();
   const { L } = useI18n();
   const { workspace, access } = useWorkspace();
   const can = useCan();
   const projectId = projectOf(state, workspace?.id);
-  const [tab, setTab] = useState<string>(candidateId || workspace?.kind === 'INTEGRATION' ? 'candidates' : 'merge');
+  // A test-only integration workspace opens on its candidates; a merge workspace on merging.
+  const [tab, setTab] = useState<string>(candidateId || (workspace?.kind === 'INTEGRATION' && !isMergeWorkspace(state, workspace.id)) ? 'candidates' : 'merge');
 
   if (!projectId) {
     // DCL works across projects: list previews waiting for its confirmation.
@@ -112,11 +151,13 @@ export function IntegrationPage({ candidateId }: { candidateId?: string }) {
 
   const project = state.workspaces[projectId]!;
   const release = latestRelease(state, project.vehicleModelId);
+  const domainOnly = !project.scopes.includes('Vehicle');
+  const subsystems = subsystemReleasesOf(state, projectId);
   return (
     <div className="kz-page">
       <PageHeader
         title={L('配置集成', 'Integration')}
-        subtitle={`${project.name} · ${project.vehicleModelId} · ${L('目标版本', 'Target')}: ${release ? `${release.dclVersion}` : L('无（首次集成）', 'none (first integration)')}`}
+        subtitle={`${project.name} · ${project.vehicleModelId}${domainOnly ? ` · ${L('子系统集成', 'Subsystem integration')} ${project.scopes.join(', ')}` : ''} · ${L('目标版本', 'Target')}: ${release ? `${release.dclVersion}` : L('无（首次集成）', 'none (first integration)')}`}
       />
       <Tabs
         activeKey={tab}
@@ -127,6 +168,9 @@ export function IntegrationPage({ candidateId }: { candidateId?: string }) {
         items={[
           { key: 'merge', label: L('合并与处理确认', 'Merge & processing'), children: <MergeTab projectId={projectId} onCandidate={(id) => (setTab('candidates'), navigate(`integration/${id}`))} /> },
           { key: 'candidates', label: L('集成候选', 'Candidates'), children: <CandidatesTab projectId={projectId} candidateId={candidateId} /> },
+          ...(domainOnly || subsystems.length
+            ? [{ key: 'subsystems', label: `${L('子系统发布', 'Subsystem releases')} · ${subsystems.length}`, children: <SubsystemsTab releases={subsystems} /> }]
+            : []),
         ]}
       />
     </div>
@@ -142,21 +186,57 @@ function MergeTab({ projectId, onCandidate }: { projectId: string; onCandidate: 
   const { L } = useI18n();
   const can = useCan();
   const run = useRun();
-  const sources = verifiedSources(state, projectId);
+  const ws = state.workspaces[projectId]!;
+  // A workspace may integrate several scopes (the whole vehicle, or one domain as a subsystem).
+  const scopeOptions = ws.scopes.filter((sc) => can('merge.manage', { workspaceId: projectId, scope: sc }) || Object.values(state.mergePlans).some((p) => p.workspaceId === projectId && p.scope === sc));
+  const [scopeChoice, setScope] = useState<Scope | null>(null);
+  const scope: Scope = scopeChoice && scopeOptions.includes(scopeChoice) ? scopeChoice : scopeOptions.includes(defaultScope(ws)) ? defaultScope(ws) : (scopeOptions[0] ?? defaultScope(ws));
+  const sources = verifiedSources(state, projectId, scope);
   const [selected, setSelected] = useState<string[]>([]);
-  const canMerge = can('merge.manage', { workspaceId: projectId, scope: 'Vehicle' });
-  const plans = Object.values(state.mergePlans).filter((p) => p.workspaceId === projectId);
+  const [selectedSubs, setSelectedSubs] = useState<string[]>([]);
+  const canMerge = can('merge.manage', { workspaceId: projectId, scope });
+  const plans = Object.values(state.mergePlans).filter((p) => p.workspaceId === projectId && p.scope === scope);
   const current = plans.at(-1);
   const chosen = selected.filter((id) => sources.some((f) => f.id === id));
+  const subsystems = scope === 'Vehicle' ? collectibleSubsystems(state, projectId) : [];
+  const chosenSubs = selectedSubs.filter((id) => subsystems.some((r) => r.id === id));
+  const chain = scope === 'Vehicle' ? undefined : currentSubsystem(state, ws.vehicleModelId, scope);
+  const count = chosen.length + chosenSubs.length;
 
   return (
     <Space orientation="vertical" size={16} style={{ width: '100%' }}>
+      {scopeOptions.length > 1 && (
+        <Space>
+          <Typography.Text type="secondary">{L('集成范围', 'Integration scope')}</Typography.Text>
+          <Segmented
+            value={scope}
+            onChange={(v) => setScope(v as Scope)}
+            options={scopeOptions.map((sc) => ({ value: sc, label: sc === 'Vehicle' ? L('整车', 'Whole vehicle') : L(`${sc} 子系统`, `${sc} subsystem`) }))}
+          />
+        </Space>
+      )}
+      {scope !== 'Vehicle' && (
+        <Alert
+          type="info"
+          showIcon
+          title={L(`${scope} 子系统集成：只收集 ${scope} 域业务分组的 Verified Feature，候选在本域集成工作区测试，通过后由本域配置发布为子系统发布，供整车集成收集。`, `${scope} subsystem integration: only Verified Features of ${scope} business groups; the candidate is tested in this domain workspace and then published by the domain as a subsystem release for whole-vehicle integration.`)}
+          description={
+            chain
+              ? L(`本次合并会自动包含 ${chain.label}（${SUBSYSTEM_STATUS_LABELS[chain.status]!.zh}），新的子系统发布包含它的全部内容。`, `The merge includes ${chain.label} (${SUBSYSTEM_STATUS_LABELS[chain.status]!.en}) by itself, so the new subsystem release contains all of it.`)
+              : L('本域还没有子系统发布：首次子系统集成以当前正式版本为目标。', 'The domain has no subsystem release yet: the first one builds on the current formal release.')
+          }
+        />
+      )}
       <Card
-        title={`${L('可集成的 Verified Feature', 'Verified Features to integrate')} · ${sources.length}`}
+        title={`${scope === 'Vehicle' ? L('可集成的 Verified Feature', 'Verified Features to integrate') : L(`${scope} 域可集成的 Verified Feature`, `${scope} Verified Features to integrate`)} · ${sources.length}`}
         extra={
           canMerge && (
-            <Button type="primary" disabled={chosen.length === 0} onClick={() => run((c) => previewMerge(c, { workspaceId: projectId, featureIds: chosen }), L('已生成合并预览', 'Merge previewed'))}>
-              {L(`预览合并（${chosen.length}）`, `Preview merge (${chosen.length})`)}
+            <Button
+              type="primary"
+              disabled={scope === 'Vehicle' ? count === 0 : chosen.length === 0}
+              onClick={() => run((c) => previewMerge(c, { workspaceId: projectId, featureIds: chosen, subsystemReleaseIds: chosenSubs, scope }), L('已生成合并预览', 'Merge previewed'))}
+            >
+              {L(`预览合并（${count}）`, `Preview merge (${count})`)}
             </Button>
           )
         }
@@ -183,6 +263,32 @@ function MergeTab({ projectId, onCandidate }: { projectId: string; onCandidate: 
           ]}
         />
       </Card>
+      {scope === 'Vehicle' && (subsystems.length > 0 || ws.sourceWorkspaceIds.some((id) => state.workspaces[id]?.kind === 'INTEGRATION')) && (
+        <Card title={`${L('可集成的子系统发布', 'Subsystem releases to integrate')} · ${subsystems.length}`}>
+          <Hint>
+            {L(
+              '各域先做子系统集成并发布；整车集成按域收集最新的子系统发布，与其他 Feature 一起三方合并。子系统发布不是正式版本，也不会下发给量产车。',
+              'Domains integrate and publish their subsystems first; whole-vehicle integration collects each domain’s newest subsystem release and merges it three-way with other Features. A subsystem release is not a formal release and never goes to production vehicles.',
+            )}
+          </Hint>
+          <Table
+            rowKey="id"
+            size="small"
+            pagination={false}
+            dataSource={subsystems}
+            rowSelection={canMerge ? { selectedRowKeys: chosenSubs, onChange: (keys) => setSelectedSubs(keys as string[]) } : undefined}
+            locale={{ emptyText: L('暂无可集成的子系统发布', 'No subsystem release to integrate') }}
+            columns={[
+              { title: L('子系统发布', 'Subsystem release'), render: (_, r) => <Mono>{r.label}</Mono> },
+              { title: L('域', 'Domain'), dataIndex: 'domain' },
+              { title: L('变更分组', 'Changed groups'), render: (_, r) => <Mono>{Object.keys(r.groups).map((g) => state.groups[g]?.code ?? g).join(', ')}</Mono> },
+              { title: L('包含 Feature', 'Features'), render: (_, r) => r.features.map((f) => state.features[f.featureId]?.name).join(', ') },
+              { title: L('基线', 'Base'), render: (_, r) => (r.baseReleaseId ? state.releases[r.baseReleaseId]?.dclVersion : L('无', 'none')) },
+              { title: L('发布', 'Published'), render: (_, r) => `${state.accounts[r.publishedBy]?.displayName} · ${when(r.publishedAt)}` },
+            ]}
+          />
+        </Card>
+      )}
       {current ? <PlanCard plan={current} onCandidate={onCandidate} /> : <Card><Empty description={L('还没有合并预览', 'No merge preview yet')} /></Card>}
       {plans.length > 1 && (
         <Card size="small" title={L('历史预览', 'Earlier previews')}>
@@ -194,7 +300,7 @@ function MergeTab({ projectId, onCandidate }: { projectId: string; onCandidate: 
             columns={[
               { title: L('预览', 'Preview'), render: (_, p) => <Mono>{p.id}</Mono> },
               { title: L('状态', 'Status'), render: (_, p) => <LabelTag map={PLAN_STATUS_LABELS} value={planStatus(state, p)} color={PLAN_STATUS_COLORS[planStatus(state, p)]} /> },
-              { title: L('来源', 'Sources'), render: (_, p) => p.sources.map((x) => state.features[x.featureId]?.name).join(', ') },
+              { title: L('来源', 'Sources'), render: (_, p) => sourceNames(state, p).join(', ') },
               { title: L('冲突 / 问题', 'Conflicts / issues'), render: (_, p) => `${p.conflicts.length} / ${p.issues.length}` },
               { title: L('时间', 'When'), render: (_, p) => when(p.createdAt) },
             ]}
@@ -219,13 +325,14 @@ function PlanCard({ plan, onCandidate }: { plan: MergePlan; onCandidate: (id: st
   const confirmation = state.processingConfirmations.find((c) => c.mergePlanId === plan.id && c.digest === plan.digest);
   const groups = Object.keys(plan.merged);
   const canConfirm = can('merge.confirmProcessing', { workspaceId: plan.workspaceId, groupId: groups.length === 1 ? groups[0]! : WILDCARD });
-  const canMerge = can('merge.manage', { workspaceId: plan.workspaceId, scope: 'Vehicle' });
+  const canMerge = can('merge.manage', { workspaceId: plan.workspaceId, scope: plan.scope });
   const candidate = Object.values(state.candidates).find((c) => c.mergePlanId === plan.id);
   const lines = processingSummary(state, plan);
   const release = plan.targetReleaseId ? state.releases[plan.targetReleaseId] : undefined;
   const step = plan.status === 'FROZEN' ? 3 : confirmed ? 2 : plan.status === 'READY' ? 1 : 0;
   const unreviewed = lines.filter((l) => l.requiresReview && l.review?.status !== 'APPROVED');
-  const nextLabel = `${plan.vehicleModelId}-C${Object.values(state.candidates).filter((c) => c.workspaceId === plan.workspaceId).length + 1}`;
+  const sameLine = Object.values(state.candidates).filter((c) => c.workspaceId === plan.workspaceId && c.scope === plan.scope).length + 1;
+  const nextLabel = plan.scope === 'Vehicle' ? `${plan.vehicleModelId}-C${sameLine}` : `${plan.vehicleModelId}-${plan.scope}-C${sameLine}`;
   // A preview is pinned to its source commits; a newer head (or a lost verification) makes it stale.
   const staleSources = ['READY', 'CONFLICT', 'BLOCKED'].includes(plan.status)
     ? plan.sources.filter((x) => {
@@ -233,6 +340,7 @@ function PlanCard({ plan, onCandidate }: { plan: MergePlan; onCandidate: (id: st
         return !f || f.headCommitId !== x.commitId || !isCollectible(state, f);
       })
     : [];
+  const staleSubsystems = ['READY', 'CONFLICT', 'BLOCKED'].includes(plan.status) ? plan.subsystems.filter((x) => !subsystemUsable(state, plan, x)) : [];
 
   return (
     <Card
@@ -245,12 +353,12 @@ function PlanCard({ plan, onCandidate }: { plan: MergePlan; onCandidate: (id: st
       }
       extra={
         <Space>
-          {plan.status === 'READY' && staleSources.length === 0 && !confirmed && canConfirm && (
+          {plan.status === 'READY' && staleSources.length === 0 && staleSubsystems.length === 0 && !confirmed && canConfirm && (
             <Button type="primary" onClick={() => (setNote(''), setConfirming(true))}>
               {L('确认处理集合', 'Confirm processing set')}
             </Button>
           )}
-          {plan.status === 'READY' && staleSources.length === 0 && confirmed && canMerge && (
+          {plan.status === 'READY' && staleSources.length === 0 && staleSubsystems.length === 0 && confirmed && canMerge && (
             <Button type="primary" onClick={() => (setLabel(nextLabel), setFreezing(true))}>
               {L('冻结为集成候选', 'Freeze as candidate')}
             </Button>
@@ -279,6 +387,11 @@ function PlanCard({ plan, onCandidate }: { plan: MergePlan; onCandidate: (id: st
         </Descriptions.Item>
         <Descriptions.Item label={L('来源', 'Sources')} span={2}>
           <Space wrap>
+            {plan.subsystems.map((x) => (
+              <Tag key={x.subsystemReleaseId} color="geekblue">
+                {state.subsystemReleases[x.subsystemReleaseId]?.label} · {L('子系统发布', 'subsystem release')}
+              </Tag>
+            ))}
             {plan.sources.map((x) => (
               <Tag key={x.featureId}>
                 {state.features[x.featureId]?.name} · {displayName(state, x.commitId)}
@@ -288,6 +401,20 @@ function PlanCard({ plan, onCandidate }: { plan: MergePlan; onCandidate: (id: st
         </Descriptions.Item>
       </Descriptions>
 
+      {staleSubsystems.length > 0 && (
+        <Alert
+          type="warning"
+          showIcon
+          style={{ marginBottom: 12 }}
+          title={L('子系统发布已变化，此预览已过期；请重新预览合并。', 'A subsystem release changed since this preview; preview the merge again.')}
+          description={staleSubsystems
+            .map((x) => {
+              const r = state.subsystemReleases[x.subsystemReleaseId];
+              return `${r?.label ?? x.subsystemReleaseId}: ${r ? B(SUBSYSTEM_STATUS_LABELS[r.status]!) : '—'}`;
+            })
+            .join(L('；', '; '))}
+        />
+      )}
       {staleSources.length > 0 && (
         <Alert
           type="warning"
@@ -409,8 +536,12 @@ function PlanCard({ plan, onCandidate }: { plan: MergePlan; onCandidate: (id: st
       >
         <Hint>
           {L(
-            '冻结后生成不可变的合并提交与完整车辆配置；来源 Feature 进入“已集成”。候选的测试从零开始，不继承各 Feature 的测试结果。',
-            'Freezing creates immutable merge commits and a complete vehicle configuration; the source Features become Integrated. Candidate tests start from zero and inherit no Feature results.',
+            plan.scope === 'Vehicle'
+              ? '冻结后生成不可变的合并提交与完整车辆配置；来源 Feature 进入“已集成”。候选的测试从零开始，不继承各 Feature 的测试结果。'
+              : '冻结后生成本域的子系统候选，在本域集成工作区测试；通过后由本域配置发布为子系统发布。候选的测试从零开始，不继承各 Feature 的测试结果。',
+            plan.scope === 'Vehicle'
+              ? 'Freezing creates immutable merge commits and a complete vehicle configuration; the source Features become Integrated. Candidate tests start from zero and inherit no Feature results.'
+              : 'Freezing creates the domain’s subsystem candidate, tested in this domain workspace and then published by the domain as a subsystem release. Candidate tests start from zero and inherit no Feature results.',
           )}
         </Hint>
         <Input value={label} onChange={(e) => setLabel(e.target.value)} placeholder={L('候选名称', 'Candidate name')} />
@@ -452,7 +583,7 @@ function ConflictsTable({ conflicts }: { conflicts: MergeConflict[] }) {
           { title: L('基线', 'Base'), render: (_, c) => <Mono>{short(c.base)}</Mono> },
           { title: L('目标 / 先合入', 'Target / merged first'), render: (_, c) => <Mono>{short(c.ours)}</Mono> },
           { title: L('来源', 'Source'), render: (_, c) => <Mono>{short(c.theirs)}</Mono> },
-          { title: L('涉及 Feature', 'Features'), render: (_, c) => c.featureIds.map((id) => state.features[id]?.name).join(' ↔ ') },
+          { title: L('涉及来源', 'Sources'), render: (_, c) => [...c.subsystemReleaseIds.map((id) => state.subsystemReleases[id]?.label), ...c.featureIds.map((id) => state.features[id]?.name)].join(' ↔ ') },
           { title: L('解决方', 'Owner'), render: (_, c) => <LabelTag map={CONFLICT_OWNER_LABELS} value={c.owner} color={c.owner === 'DCL' ? 'purple' : 'blue'} /> },
         ]}
       />
@@ -484,7 +615,8 @@ function CandidatesTab({ projectId, candidateId }: { projectId: string; candidat
           columns={[
             { title: L('候选', 'Candidate'), render: (_, c) => <Mono>{c.label}</Mono> },
             { title: L('状态', 'Status'), render: (_, c) => <LabelTag map={CANDIDATE_STATUS_LABELS} value={c.status} color={CANDIDATE_STATUS_COLORS[c.status]} /> },
-            { title: L('来源 Feature', 'Sources'), render: (_, c) => c.sources.map((x) => state.features[x.featureId]?.name).join(', ') },
+            { title: L('范围', 'Scope'), render: (_, c) => (c.scope === 'Vehicle' ? L('整车', 'Whole vehicle') : L(`${c.scope} 子系统`, `${c.scope} subsystem`)) },
+            { title: L('来源', 'Sources'), render: (_, c) => sourceNames(state, c).join(', ') },
             { title: L('冻结', 'Frozen'), render: (_, c) => `${state.accounts[c.createdBy]?.displayName} · ${when(c.createdAt)}` },
           ]}
         />
@@ -503,8 +635,14 @@ function CandidateDetail({ candidate: c }: { candidate: Candidate }) {
   const [testing, setTesting] = useState<string | null>(null);
   const [cancelling, setCancelling] = useState(false);
   const [reason, setReason] = useState('');
+  const [publishing, setPublishing] = useState(false);
+  const [notes, setNotes] = useState('');
   const open = ['CANDIDATE', 'TESTING', 'VERIFIED'].includes(c.status);
-  const target = { workspaceId: c.testWorkspaceId, scope: 'Vehicle' as const };
+  const target = { workspaceId: c.testWorkspaceId, scope: c.scope };
+  const subsystem = c.scope !== 'Vehicle';
+  const published = Object.values(state.subsystemReleases).find((r) => r.candidateId === c.id);
+  const canPublish = subsystem && c.status === 'VERIFIED' && can('subsystem.publish', { workspaceId: c.workspaceId, scope: c.scope });
+  const subsystemCommits = new Map(c.subsystems.flatMap((x) => Object.values(x.groups).map((commitId) => [commitId, state.subsystemReleases[x.subsystemReleaseId]?.label ?? ''] as const)));
   const vehicleGroups = vehicleGroupsOf(state, c.testWorkspaceId).filter((g) => g.status === 'ACTIVE' && g.purpose === 'TEST' && g.env === 'testing');
   const ungrouped = ungroupedVehicles(state, c.testWorkspaceId)
     .filter((r) => r.env === 'testing')
@@ -519,7 +657,7 @@ function CandidateDetail({ candidate: c }: { candidate: Candidate }) {
     });
   const canDispatch = open && can('candidate.dispatch', target);
   const canVerify = c.status === 'TESTING' && can('candidate.verify', target);
-  const canCancel = open && can('merge.manage', { workspaceId: c.workspaceId, scope: 'Vehicle' });
+  const canCancel = open && can('merge.manage', { workspaceId: c.workspaceId, scope: c.scope });
   const status = candidateTestStatus(state, c);
   const blockers = candidateVerifyBlockers(state, c);
   const resolved = state.resolvedConfigs[c.resolvedConfigId];
@@ -568,6 +706,8 @@ function CandidateDetail({ candidate: c }: { candidate: Candidate }) {
               render: (_, r) =>
                 release?.groups[r.groupId] === r.commitId ? (
                   <Tag>{L('沿用目标版本', 'from target')}</Tag>
+                ) : subsystemCommits.has(r.commitId) ? (
+                  <Tag color="geekblue">{L(`子系统发布 ${subsystemCommits.get(r.commitId)}`, `subsystem ${subsystemCommits.get(r.commitId)}`)}</Tag>
                 ) : sourceCommits.has(r.commitId) ? (
                   <Tag color="blue">{L('来源 Feature 提交', 'source commit')}</Tag>
                 ) : (
@@ -578,6 +718,11 @@ function CandidateDetail({ candidate: c }: { candidate: Candidate }) {
         />
         <Typography.Paragraph style={{ marginTop: 12, marginBottom: 0 }}>
           <Space wrap>
+            {c.subsystems.map((x) => (
+              <Tag key={x.subsystemReleaseId} color="geekblue">
+                {state.subsystemReleases[x.subsystemReleaseId]?.label}
+              </Tag>
+            ))}
             {c.sources.map((x) => {
               const f = state.features[x.featureId];
               return (
@@ -600,7 +745,7 @@ function CandidateDetail({ candidate: c }: { candidate: Candidate }) {
               </Button>
             )}
             {canVerify && (
-              <Button disabled={blockers.length > 0} onClick={() => run((cx) => verifyCandidate(cx, c.id), L('集成测试已确认，可交给配置发布', 'Verified; ready for release'))}>
+              <Button disabled={blockers.length > 0} onClick={() => run((cx) => verifyCandidate(cx, c.id), subsystem ? L('集成测试已确认，可由本域发布为子系统发布', 'Verified; the domain can publish it as a subsystem release') : L('集成测试已确认，可交给配置发布', 'Verified; ready for release'))}>
                 {L('确认集成验证通过', 'Confirm Verified')}
               </Button>
             )}
@@ -614,7 +759,31 @@ function CandidateDetail({ candidate: c }: { candidate: Candidate }) {
           )}
         </Hint>
         {c.status === 'TESTING' && blockers.length > 0 && <Alert type="warning" showIcon style={{ marginBottom: 12 }} title={L('尚不能确认', 'Not verifiable yet')} description={blockers.map((x) => B(issueLabel(x), x)).join(L('；', '; '))} />}
-        {c.status === 'VERIFIED' && <Alert type="success" showIcon style={{ marginBottom: 12 }} title={L('候选已通过集成验证，可由配置发布推广为正式版本。', 'The candidate is verified and can be promoted to a release by configuration release.')} />}
+        {c.status === 'VERIFIED' && !subsystem && <Alert type="success" showIcon style={{ marginBottom: 12 }} title={L('候选已通过集成验证，可由配置发布推广为正式版本。', 'The candidate is verified and can be promoted to a release by configuration release.')} />}
+        {c.status === 'VERIFIED' && subsystem && (
+          <Alert
+            type="success"
+            showIcon
+            style={{ marginBottom: 12 }}
+            title={L('子系统候选已通过集成验证，可由本域配置发布为子系统发布，供整车集成收集。', 'The subsystem candidate is verified; the domain can publish it as a subsystem release for whole-vehicle integration.')}
+            action={
+              canPublish && (
+                <Button type="primary" size="small" onClick={() => (setNotes(''), setPublishing(true))}>
+                  {L('发布子系统', 'Publish subsystem')}
+                </Button>
+              )
+            }
+          />
+        )}
+        {published && (
+          <Alert
+            type="info"
+            showIcon
+            style={{ marginBottom: 12 }}
+            title={L(`已发布为子系统发布 ${published.label}`, `Published as subsystem release ${published.label}`)}
+            description={B(SUBSYSTEM_STATUS_LABELS[published.status]!)}
+          />
+        )}
         <TargetsTable
           status={status}
           action={(t) =>
@@ -647,6 +816,23 @@ function CandidateDetail({ candidate: c }: { candidate: Candidate }) {
       />
       <RecordTestModal resourceId={testing} onClose={() => setTesting(null)} onRecord={(v) => run((cx) => recordCandidateTest(cx, c.id, { resourceId: testing!, ...v }), L('已登记', 'Recorded')) !== undefined} />
       <Modal
+        open={publishing}
+        title={L(`发布子系统 · ${c.label}`, `Publish subsystem · ${c.label}`)}
+        okText={L('发布子系统', 'Publish subsystem')}
+        onCancel={() => setPublishing(false)}
+        onOk={() => {
+          if (run((cx) => publishSubsystem(cx, c.id, { notes }), L('已发布子系统，可供整车集成收集', 'Subsystem published; whole-vehicle integration can collect it')) !== undefined) setPublishing(false);
+        }}
+      >
+        <Hint>
+          {L(
+            '子系统发布是整车集成的输入：它不是 DCL 正式版本，不列适用整车软件版本，也不会下发给量产车。本域之前未纳入正式版本的子系统发布会被它替代，它包含其全部内容。',
+            'A subsystem release is an input to whole-vehicle integration: not a DCL release, no software versions, never sent to production vehicles. It replaces the domain’s earlier subsystem release not yet in a formal release, and contains all of it.',
+          )}
+        </Hint>
+        <Input.TextArea rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder={L('发布说明（可选）', 'Notes (optional)')} />
+      </Modal>
+      <Modal
         open={cancelling}
         title={L('取消候选', 'Cancel candidate')}
         okText={L('取消候选', 'Cancel candidate')}
@@ -659,5 +845,41 @@ function CandidateDetail({ candidate: c }: { candidate: Candidate }) {
         <Input.TextArea rows={2} value={reason} onChange={(e) => setReason(e.target.value)} placeholder={L('原因', 'Reason')} />
       </Modal>
     </>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Subsystem releases
+// ---------------------------------------------------------------------------
+
+function SubsystemsTab({ releases }: { releases: SubsystemRelease[] }) {
+  const state = useEngineState();
+  const { L } = useI18n();
+  return (
+    <Card title={L('子系统发布', 'Subsystem releases')}>
+      <Hint>
+        {L(
+          '子系统发布由各域在子系统集成后发布，是整车集成的输入。新的子系统发布包含本域之前尚未纳入正式版本的子系统发布。',
+          'Domains publish subsystem releases after subsystem integration, as inputs to whole-vehicle integration. A new one contains the domain’s earlier subsystem release not yet in a formal release.',
+        )}
+      </Hint>
+      <Table
+        rowKey="id"
+        size="small"
+        pagination={false}
+        dataSource={releases}
+        locale={{ emptyText: L('还没有子系统发布', 'No subsystem release yet') }}
+        columns={[
+          { title: L('子系统发布', 'Subsystem release'), render: (_, r) => <Mono>{r.label}</Mono> },
+          { title: L('状态', 'Status'), render: (_, r) => <LabelTag map={SUBSYSTEM_STATUS_LABELS} value={r.status} color={r.status === 'ACTIVE' ? 'green' : r.status === 'INTEGRATING' ? 'processing' : undefined} /> },
+          { title: L('变更分组', 'Changed groups'), render: (_, r) => <Mono>{Object.keys(r.groups).map((g) => state.groups[g]?.code ?? g).join(', ')}</Mono> },
+          { title: L('包含 Feature', 'Features'), render: (_, r) => r.features.map((f) => state.features[f.featureId]?.name).join(', ') },
+          { title: L('基线', 'Base'), render: (_, r) => (r.baseReleaseId ? state.releases[r.baseReleaseId]?.dclVersion : L('无', 'none')) },
+          { title: L('替代', 'Replaces'), render: (_, r) => (r.supersedesId ? state.subsystemReleases[r.supersedesId]?.label : '—') },
+          { title: L('候选', 'Candidate'), render: (_, r) => <a onClick={() => navigate(`integration/${r.candidateId}`)}><Mono>{state.candidates[r.candidateId]?.label}</Mono></a> },
+          { title: L('发布', 'Published'), render: (_, r) => `${state.accounts[r.publishedBy]?.displayName} · ${when(r.publishedAt)}${r.notes ? ` · ${r.notes}` : ''}` },
+        ]}
+      />
+    </Card>
   );
 }

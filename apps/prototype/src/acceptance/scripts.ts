@@ -1498,6 +1498,232 @@ export const SCRIPTS: Script[] = [
         "fail": "以客户端时间排序或用重置计数覆盖历史都是错误的。"
       }
     ]
+  },
+  {
+    "id": "domain-integration",
+    "name": "子系统集成 · ADC/CDC 联合演练",
+    "start": "demo",
+    "scenes": [
+      {
+        "id": "S01",
+        "title": "ADC 泊车组研发并提交",
+        "actor": "adc_parking / 张景然 · 业务研发；泊车团队工作区",
+        "accounts": [
+          "adc_parking"
+        ],
+        "workspace": null,
+        "page": "研发 Feature",
+        "pre": "演示数据；ADC、CDC 域集成工作区已建立。",
+        "steps": [
+          "选择 adc_parking，创建 Feature，登记普通文本日志和采集策略并提交。",
+          "记录固定提交版本。"
+        ],
+        "done": "泊车组得到 DCL Ready 的固定提交。",
+        "fail": "个人仿真自测在原型中不适用，改由团队测试车组验证。"
+      },
+      {
+        "id": "S02",
+        "title": "ADC 系统应用组与 CDC 两组研发",
+        "actor": "adc_system、cdc_hmi、cdc_app · 业务研发",
+        "accounts": [
+          "adc_system",
+          "cdc_hmi",
+          "cdc_app"
+        ],
+        "workspace": null,
+        "page": "研发 Feature",
+        "pre": "S01 完成。",
+        "steps": [
+          "adc_system 为本组创建另一 Feature 并提交，不能修改泊车组的文件和策略。",
+          "cdc_hmi 与 cdc_app 重复相同步骤。"
+        ],
+        "done": "四个组各有固定提交，跨组修改被拒绝。",
+        "fail": "跨组写入成功说明授权错误。"
+      },
+      {
+        "id": "S03",
+        "title": "域集成人员以工作区管理员审批团队测试",
+        "actor": "adc_integrator / 梁思齐 · 工作区管理员",
+        "accounts": [
+          "adc_integrator",
+          "adc_parking_tester"
+        ],
+        "workspace": null,
+        "page": "车辆与车辆组；研发 Feature → 下发与测试",
+        "pre": "S01 完成；泊车研发车组已有仿真车与实车。",
+        "steps": [
+          "adc_integrator 以工作区管理员身份为泊车研发车组开启下发审批。",
+          "adc_parking_tester 为固定提交申请团队测试，adc_integrator 批准后执行下发。"
+        ],
+        "done": "审批后的申请只能执行一次，下发固定在申请时的提交。",
+        "fail": "未经审批直接下发到需审批的车组应被拒绝。"
+      },
+      {
+        "id": "S04",
+        "title": "团队测试：先仿真后实车，交付 Verified",
+        "actor": "各组业务测试账号",
+        "accounts": [
+          "adc_parking_tester",
+          "adc_system_tester",
+          "cdc_hmi_tester",
+          "cdc_app_tester"
+        ],
+        "workspace": null,
+        "page": "研发 Feature → 下发与测试",
+        "pre": "S02、S03 完成。",
+        "steps": [
+          "各组测试账号把固定提交下发到本组研发车组。",
+          "车辆回执后先登记仿真 PASS，再登记实车 PASS，确认 Verified。"
+        ],
+        "done": "四个 Feature 均为 Verified。",
+        "fail": "回执前不能登记结果；测试身份不能编辑配置。"
+      },
+      {
+        "id": "S05",
+        "title": "域内合并：ADC 只收本域，CDC 只收本域",
+        "actor": "adc_integrator、cdc_integrator · 配置集成",
+        "accounts": [
+          "adc_integrator",
+          "cdc_integrator"
+        ],
+        "workspace": null,
+        "page": "配置集成 → 合并与处理确认",
+        "pre": "S04 完成。",
+        "steps": [
+          "adc_integrator 在 ADC 域集成工作区选择两个已验证 Feature 预览合并。",
+          "cdc_integrator 在 CDC 域集成工作区只能看到并选择 CDC 来源。"
+        ],
+        "done": "两个域各得到可冻结前的合并预览；跨域来源不可选。",
+        "fail": "跨域输入必须被拒绝。"
+      },
+      {
+        "id": "S06",
+        "title": "同组两分支冲突，由维护方修复",
+        "actor": "adc_parking、adc_parking_tester、adc_integrator",
+        "accounts": [
+          "adc_parking",
+          "adc_parking_tester",
+          "adc_integrator"
+        ],
+        "workspace": null,
+        "page": "研发 Feature；配置集成",
+        "pre": "S05 完成。",
+        "steps": [
+          "泊车组两个分支对同一 policy_id 的触发条件做不同修改，分别提交并验证。",
+          "adc_integrator 合并时显示冲突并阻止冻结。",
+          "策略维护方修复后形成新提交并重新验证，集成人员重新预览。"
+        ],
+        "done": "冲突只能由维护方修复；重新预览后可冻结。",
+        "fail": "集成人员不能代改维护方策略。"
+      },
+      {
+        "id": "S07",
+        "title": "DCL 确认、冻结子系统候选、域内集成测试并发布子系统",
+        "actor": "dcl；adc_integrator、cdc_integrator（配置集成 → 集成测试 → 配置发布）",
+        "accounts": [
+          "dcl",
+          "adc_integrator",
+          "cdc_integrator"
+        ],
+        "workspace": null,
+        "page": "配置集成 → 集成候选",
+        "pre": "S06 完成。",
+        "steps": [
+          "DCL 确认最终处理集合，域集成人员冻结子系统候选。",
+          "以集成测试身份在本域集成测试车组完成仿真与实车验证。",
+          "以配置发布身份发布子系统集合。"
+        ],
+        "done": "得到 ADC 与 CDC 的子系统发布；不产生 DCL 正式版本。",
+        "fail": "子系统发布不能作为整车正式版本或量产目标。"
+      },
+      {
+        "id": "S08",
+        "title": "整车集成、集成测试、正式发布与灰度",
+        "actor": "integrator、dcl、integration_tester、release",
+        "accounts": [
+          "integrator",
+          "dcl",
+          "integration_tester",
+          "release"
+        ],
+        "workspace": null,
+        "page": "配置集成；发布与配置 OTA",
+        "pre": "S07 完成。",
+        "steps": [
+          "integrator 收集 ADC/CDC 子系统发布及底盘变更，完成整车合并。",
+          "DCL 确认，冻结整车候选，integration_tester 完成整车测试。",
+          "release 发布新的 DCL 正式版本并创建灰度 OTA。"
+        ],
+        "done": "整车正式版本包含两个子系统发布与底盘变更；子系统发布进入已纳入状态。",
+        "fail": "域账号不能越权做整车正式发布。"
+      },
+      {
+        "id": "N01",
+        "title": "跨域输入被拒绝",
+        "actor": "adc_integrator · 配置集成",
+        "accounts": [
+          "adc_integrator"
+        ],
+        "workspace": null,
+        "page": "配置集成",
+        "pre": "演示数据。",
+        "steps": [
+          "在 ADC 域集成中选择 CDC 组的已验证 Feature。"
+        ],
+        "done": "请求被拒绝，平台状态不变。",
+        "fail": "—"
+      },
+      {
+        "id": "N02",
+        "title": "域账号不能整车发布或配置 OTA",
+        "actor": "adc_integrator · 配置发布（本域）",
+        "accounts": [
+          "adc_integrator"
+        ],
+        "workspace": null,
+        "page": "发布与配置 OTA",
+        "pre": "存在整车候选与正式版本。",
+        "steps": [
+          "以本域配置发布身份尝试正式发布整车候选、创建配置 OTA。"
+        ],
+        "done": "均被拒绝。",
+        "fail": "—"
+      },
+      {
+        "id": "N03",
+        "title": "子系统发布不是正式版本",
+        "actor": "adc_integrator；release",
+        "accounts": [
+          "adc_integrator",
+          "release"
+        ],
+        "workspace": null,
+        "page": "配置集成；发布与配置 OTA",
+        "pre": "已有子系统发布。",
+        "steps": [
+          "核对最新正式版本、下一 DCL 版本建议、量产车解析与新 Feature 基线在子系统发布后均不变。",
+          "尝试把子系统候选正式发布为 DCL 版本。"
+        ],
+        "done": "子系统发布不改变正式版本与量产解析；正式发布被拒绝。",
+        "fail": "—"
+      },
+      {
+        "id": "N04",
+        "title": "新的子系统发布包含旧的",
+        "actor": "adc_integrator",
+        "accounts": [
+          "adc_integrator"
+        ],
+        "workspace": null,
+        "page": "配置集成 → 子系统发布",
+        "pre": "已有尚未纳入正式版本的子系统发布。",
+        "steps": [
+          "本域新 Feature 验证后再次做子系统集成并发布。"
+        ],
+        "done": "新的子系统发布包含旧发布的全部内容，旧发布被替代。",
+        "fail": "—"
+      }
+    ]
   }
 ];
 

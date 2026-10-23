@@ -54,6 +54,8 @@ export function nextDclVersion(s: State, vehicleModelId: string): string {
 /** Promotes a Verified candidate to a formal release. */
 export function promoteCandidate(ctx: Ctx, candidateId: string, input: { dclVersion: string; vehicleIntegrationVersions: string[]; notes?: string }): string {
   const c = getCandidate(ctx.s, candidateId);
+  // Said first, whoever asks: a subsystem candidate never becomes a DCL release.
+  if (c.scope !== 'Vehicle') throw rule('SUBSYSTEM_CANDIDATE', 'a subsystem candidate is published as a subsystem release by its domain, not promoted to a DCL release');
   ctx.allow('release.promote', { type: 'candidate', id: c.id, workspaceId: c.workspaceId, scope: 'Vehicle' });
   if (c.status !== 'VERIFIED') throw rule('CANDIDATE_NOT_VERIFIED', 'only a candidate verified by integration testing can be released');
   // The release re-checks everything the candidate stands on.
@@ -103,7 +105,13 @@ export function promoteCandidate(ctx: Ctx, candidateId: string, input: { dclVers
   };
   ctx.s.candidates[c.id]!.status = 'RELEASED';
   // The participating Features are closed; later changes start new Features on this release.
-  for (const src of c.sources) {
+  // Subsystem releases it included are now part of a formal release, and so are their Features.
+  const included = c.subsystems.flatMap((ref) => {
+    const r = ctx.s.subsystemReleases[ref.subsystemReleaseId]!;
+    r.status = 'INTEGRATED';
+    return r.features;
+  });
+  for (const src of [...c.sources, ...included]) {
     const f = ctx.s.features[src.featureId];
     if (f && f.stage === 'INTEGRATED') {
       f.stage = 'ARCHIVED';

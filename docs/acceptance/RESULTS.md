@@ -1,10 +1,10 @@
 # 验收结果（引擎层逐幕回放）
 
-运行时间：2026-10-23T07:15:55.357Z。由 `npm run acceptance` 生成；每次重新执行，不沿用历史结果。
+运行时间：2026-10-23T07:37:46.762Z。由 `npm run acceptance` 生成；每次重新执行，不沿用历史结果。
 
 状态：PASS 通过；FAIL 失败；GAP 设计要求尚未实现；BLOCKED 前置幕未通过；NOT_APPLICABLE 浏览器原型不适用（如服务端部署）。
 
-合计：PASS 90 · FAIL 0 · GAP 0 · BLOCKED 0 · NOT_APPLICABLE 3 · NOT_WRITTEN 0
+合计：PASS 102 · FAIL 0 · GAP 0 · BLOCKED 0 · NOT_APPLICABLE 3 · NOT_WRITTEN 0
 
 ## 从零启动 · 角色协作
 
@@ -94,6 +94,23 @@
 | R03 恢复连接后补报 | 车辆模拟器 · SIM-021；resource 核对 | PASS |  |
 | R04 设备身份与签名 | resource / 车辆资源；车辆模拟器 | PASS |  |
 | R05 重复、乱序与重启 | 车辆模拟器 · SIM-021 | PASS |  |
+
+## 子系统集成 · ADC/CDC 联合演练
+
+| 幕 | 执行人 | 状态 | 说明 |
+|---|---|---|---|
+| S01 ADC 泊车组研发并提交 | adc_parking / 张景然 · 业务研发；泊车团队工作区 | PASS | 适配：设计中的个人仿真自测在原型中没有建模；固定提交在 S04 由团队测试车组验证。 |
+| S02 ADC 系统应用组与 CDC 两组研发 | adc_system、cdc_hmi、cdc_app · 业务研发 | PASS |  |
+| S03 域集成人员以工作区管理员审批团队测试 | adc_integrator / 梁思齐 · 工作区管理员 | PASS |  |
+| S04 团队测试：先仿真后实车，交付 Verified | 各组业务测试账号 | PASS |  |
+| S05 域内合并：ADC 只收本域，CDC 只收本域 | adc_integrator、cdc_integrator · 配置集成 | PASS |  |
+| S06 同组两分支冲突，由维护方修复 | adc_parking、adc_parking_tester、adc_integrator | PASS |  |
+| S07 DCL 确认、冻结子系统候选、域内集成测试并发布子系统 | dcl；adc_integrator、cdc_integrator（配置集成 → 集成测试 → 配置发布） | PASS |  |
+| S08 整车集成、集成测试、正式发布与灰度 | integrator、dcl、integration_tester、release | PASS |  |
+| N01 跨域输入被拒绝 | adc_integrator · 配置集成 | PASS | 适配：演示数据中 ADC 域集成工作区只以 ADC 团队为来源，CDC Feature 不在可选范围（SOURCE_NOT_ALLOWED）；来源可达但跨域时返回 CROSS_DOMAIN_SOURCE（见引擎测试）。 |
+| N02 域账号不能整车发布或配置 OTA | adc_integrator · 配置发布（本域） | PASS |  |
+| N03 子系统发布不是正式版本 | adc_integrator；release | PASS |  |
+| N04 新的子系统发布包含旧的 | adc_integrator | PASS |  |
 
 ## 反向用例 T-N01–T-N24
 

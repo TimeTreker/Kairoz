@@ -75,6 +75,8 @@ export const ACTIONS = {
   // Integration (配置集成) and release (配置发布)
   'merge.manage': { roles: ['CONFIG_INTEGRATOR'], env: 'testing' },
   'release.promote': { roles: ['CONFIG_RELEASE'], env: 'production' },
+  /** A domain's subsystem release: an integration input, never a production release. */
+  'subsystem.publish': { roles: ['CONFIG_RELEASE'], env: 'testing' },
   'ota.manage': { roles: ['CONFIG_RELEASE'], env: 'production' },
   // Data use (数据查询): roles that work with the data, within their grants; never platform ops.
   'event.query': {

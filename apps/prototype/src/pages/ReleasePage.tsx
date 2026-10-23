@@ -38,6 +38,21 @@ export function ReleasePage({ tab = 'releases' }: { tab?: string }) {
   const modelId = workspace.vehicleModelId;
   const projectId = projectOf(state, workspace.id);
   const latest = releasesOf(state, modelId)[0];
+  if (!workspace.scopes.includes('Vehicle')) {
+    // A domain workspace publishes subsystem releases; formal releases and OTA are whole-vehicle.
+    return (
+      <div className="kz-page">
+        <PageHeader title={L('发布与配置 OTA', 'Release & OTA')} />
+        <Alert
+          type="info"
+          showIcon
+          title={L('正式发布与配置 OTA 只针对整车，由整车配置发布负责。', 'Formal releases and configuration OTA are whole-vehicle, done by whole-vehicle configuration release.')}
+          description={L('本工作区做子系统集成：通过集成测试的子系统候选，在“配置集成 → 集成候选”中发布为子系统发布。', 'This workspace integrates a subsystem: a verified subsystem candidate is published as a subsystem release under Integration → Candidates.')}
+          action={<Button size="small" onClick={() => navigate('integration')}>{L('配置集成', 'Integration')}</Button>}
+        />
+      </div>
+    );
+  }
   return (
     <div className="kz-page">
       <PageHeader title={L('发布与配置 OTA', 'Release & OTA')} subtitle={`${modelId} · ${L('最新正式版本', 'Latest release')}: ${latest ? `DCL ${latest.dclVersion}` : L('无', 'none')}`} />
@@ -71,7 +86,7 @@ function ReleasesTab({ modelId, workspaceId }: { modelId: string; workspaceId: s
   };
   // The configuration export is release material: only for release rights where the release was promoted.
   const canExport = (r: Release) => can('release.promote', { workspaceId: (r.candidateId ? state.candidates[r.candidateId]?.workspaceId : undefined) ?? workspaceId, scope: 'Vehicle' });
-  const waiting = Object.values(state.candidates).filter((c) => c.vehicleModelId === modelId && c.status === 'VERIFIED');
+  const waiting = Object.values(state.candidates).filter((c) => c.vehicleModelId === modelId && c.scope === 'Vehicle' && c.status === 'VERIFIED');
   const releases = releasesOf(state, modelId);
 
   return (
@@ -91,7 +106,7 @@ function ReleasesTab({ modelId, workspaceId }: { modelId: string; workspaceId: s
           locale={{ emptyText: L('暂无已通过集成测试的候选', 'No verified candidates') }}
           columns={[
             { title: L('候选', 'Candidate'), render: (_, c) => <a onClick={() => navigate(`integration/${c.id}`)}><Mono>{c.label}</Mono></a> },
-            { title: L('来源 Feature', 'Sources'), render: (_, c) => c.sources.map((x) => state.features[x.featureId]?.name).join(', ') },
+            { title: L('来源', 'Sources'), render: (_, c) => [...c.subsystems.map((x) => state.subsystemReleases[x.subsystemReleaseId]?.label), ...c.sources.map((x) => state.features[x.featureId]?.name)].join(', ') },
             { title: L('目标版本', 'Target'), render: (_, c) => (c.targetReleaseId ? `DCL ${state.releases[c.targetReleaseId]?.dclVersion}` : L('无（首次）', 'none (first)')) },
             { title: L('已测试的整车版本', 'Tested software'), render: (_, c) => testedVersions(state, c).map((v) => <Tag key={v}>{v}</Tag>) },
             { title: L('集成验证', 'Verified'), render: (_, c) => `${state.accounts[c.verifiedBy ?? '']?.displayName ?? '—'} · ${c.verifiedAt ? when(c.verifiedAt) : ''}` },

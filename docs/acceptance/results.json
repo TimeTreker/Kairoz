@@ -1,8 +1,8 @@
 {
-  "runAt": "2026-10-23T07:15:55.357Z",
+  "runAt": "2026-10-23T07:37:46.762Z",
   "layer": "engine",
   "counts": {
-    "PASS": 90,
+    "PASS": 102,
     "FAIL": 0,
     "GAP": 0,
     "BLOCKED": 0,
@@ -648,6 +648,120 @@
           "id": "R05",
           "title": "重复、乱序与重启",
           "actor": "车辆模拟器 · SIM-021",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        }
+      ]
+    },
+    {
+      "script": "domain-integration",
+      "name": "子系统集成 · ADC/CDC 联合演练",
+      "rows": [
+        {
+          "id": "S01",
+          "title": "ADC 泊车组研发并提交",
+          "actor": "adc_parking / 张景然 · 业务研发；泊车团队工作区",
+          "adaptation": "设计中的个人仿真自测在原型中没有建模；固定提交在 S04 由团队测试车组验证。",
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "S02",
+          "title": "ADC 系统应用组与 CDC 两组研发",
+          "actor": "adc_system、cdc_hmi、cdc_app · 业务研发",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "S03",
+          "title": "域集成人员以工作区管理员审批团队测试",
+          "actor": "adc_integrator / 梁思齐 · 工作区管理员",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "S04",
+          "title": "团队测试：先仿真后实车，交付 Verified",
+          "actor": "各组业务测试账号",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "S05",
+          "title": "域内合并：ADC 只收本域，CDC 只收本域",
+          "actor": "adc_integrator、cdc_integrator · 配置集成",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "S06",
+          "title": "同组两分支冲突，由维护方修复",
+          "actor": "adc_parking、adc_parking_tester、adc_integrator",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "S07",
+          "title": "DCL 确认、冻结子系统候选、域内集成测试并发布子系统",
+          "actor": "dcl；adc_integrator、cdc_integrator（配置集成 → 集成测试 → 配置发布）",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "S08",
+          "title": "整车集成、集成测试、正式发布与灰度",
+          "actor": "integrator、dcl、integration_tester、release",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "N01",
+          "title": "跨域输入被拒绝",
+          "actor": "adc_integrator · 配置集成",
+          "adaptation": "演示数据中 ADC 域集成工作区只以 ADC 团队为来源，CDC Feature 不在可选范围（SOURCE_NOT_ALLOWED）；来源可达但跨域时返回 CROSS_DOMAIN_SOURCE（见引擎测试）。",
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "N02",
+          "title": "域账号不能整车发布或配置 OTA",
+          "actor": "adc_integrator · 配置发布（本域）",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "N03",
+          "title": "子系统发布不是正式版本",
+          "actor": "adc_integrator；release",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "N04",
+          "title": "新的子系统发布包含旧的",
+          "actor": "adc_integrator",
           "adaptation": null,
           "status": "PASS",
           "detail": null,

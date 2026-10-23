@@ -267,7 +267,7 @@ export function cancelDeployment(ctx: Ctx, deploymentId: string, reason: string)
     const group = getGroup(ctx.s, d.groupId!);
     ctx.allow('feature.dispatch', { type: 'deployment', id: d.id, workspaceId: d.workspaceId, groupId: group.id, scope: group.domain, env: d.env });
   } else {
-    ctx.allow('candidate.dispatch', { type: 'deployment', id: d.id, workspaceId: d.workspaceId, scope: 'Vehicle' });
+    ctx.allow('candidate.dispatch', { type: 'deployment', id: d.id, workspaceId: d.workspaceId, scope: ctx.s.candidates[d.subjectId]?.scope ?? 'Vehicle' });
   }
   if (!reason.trim()) throw rule('REASON_REQUIRED', 'give a reason');
   if (d.status !== 'PENDING') throw rule('NOT_PENDING', 'the deployment is not pending');
@@ -464,7 +464,7 @@ export function candidateVehicleProblems(s: State, c: Candidate, rid: string): s
  */
 export function dispatchCandidate(ctx: Ctx, candidateId: string, input: { vehicleGroupIds?: string[]; resourceIds?: string[] }): string {
   const c = getCandidate(ctx.s, candidateId);
-  ctx.allow('candidate.dispatch', { type: 'candidate', id: c.id, workspaceId: c.testWorkspaceId, scope: 'Vehicle' });
+  ctx.allow('candidate.dispatch', { type: 'candidate', id: c.id, workspaceId: c.testWorkspaceId, scope: c.scope });
   if (!['CANDIDATE', 'TESTING', 'VERIFIED'].includes(c.status)) throw rule('CANDIDATE_CLOSED', 'the candidate is closed');
   const vehicleGroupIds = input.vehicleGroupIds ?? [];
   const direct = input.resourceIds ?? [];
@@ -535,7 +535,7 @@ export function recordCandidateTest(
 ): string {
   const c = getCandidate(ctx.s, candidateId);
   const r = getResource(ctx.s, input.resourceId);
-  ctx.allow('candidate.recordTest', { type: 'candidate', id: c.id, workspaceId: c.testWorkspaceId, scope: 'Vehicle', env: r.env });
+  ctx.allow('candidate.recordTest', { type: 'candidate', id: c.id, workspaceId: c.testWorkspaceId, scope: c.scope, env: r.env });
   if (c.status !== 'TESTING') throw rule('NOT_TESTING', 'the candidate is not in testing');
   const target = candidateTestStatus(ctx.s, c).find((t) => t.resourceId === r.id);
   if (!target) throw rule('NOT_A_TEST_TARGET', `vehicle ${r.id} was not dispatched this candidate`);
@@ -566,7 +566,7 @@ export function recordCandidateTest(
 /** Independent integration testing confirms the candidate: every target passed. */
 export function verifyCandidate(ctx: Ctx, candidateId: string): void {
   const c = getCandidate(ctx.s, candidateId);
-  ctx.allow('candidate.verify', { type: 'candidate', id: c.id, workspaceId: c.testWorkspaceId, scope: 'Vehicle' });
+  ctx.allow('candidate.verify', { type: 'candidate', id: c.id, workspaceId: c.testWorkspaceId, scope: c.scope });
   if (c.status !== 'TESTING') throw rule('NOT_TESTING', 'the candidate is not in testing');
   const blockers = candidateVerifyBlockers(ctx.s, c);
   if (blockers.length) throw rule('VERIFY_BLOCKED', 'the candidate cannot be verified yet', { issues: blockers });

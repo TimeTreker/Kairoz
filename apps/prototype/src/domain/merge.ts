@@ -5,8 +5,9 @@
 import { canonicalJson } from './canonical.ts';
 import type { GroupConfig } from './config.ts';
 
+/** One input's changes: a Feature's commit, or one group of a subsystem release, against its own base. */
 export interface MergeSource {
-  featureId: string;
+  sourceId: string;
   base: GroupConfig;
   theirs: GroupConfig;
 }
@@ -19,7 +20,7 @@ export interface FieldConflict {
   base: unknown;
   ours: unknown;
   theirs: unknown;
-  featureIds: string[];
+  sourceIds: string[];
 }
 
 export interface GroupMergeResult {
@@ -41,9 +42,9 @@ export function mergeGroup(ours: GroupConfig, sources: MergeSource[]): GroupMerg
   /** Which source last changed an item or field, to name both sides of a conflict. */
   const writers = new Map<string, string>();
   const writer = (path: string) => writers.get(path);
-  const conflict = (c: Omit<FieldConflict, 'featureIds'>, featureId: string, path: string) => {
+  const conflict = (c: Omit<FieldConflict, 'sourceIds'>, sourceId: string, path: string) => {
     const previous = writer(path);
-    conflicts.push({ ...c, featureIds: previous && previous !== featureId ? [previous, featureId] : [featureId] });
+    conflicts.push({ ...c, sourceIds: previous && previous !== sourceId ? [previous, sourceId] : [sourceId] });
   };
 
   for (const src of sources) {
@@ -61,9 +62,9 @@ export function mergeGroup(ours: GroupConfig, sources: MergeSource[]): GroupMerg
           // Added by the source.
           if (r === undefined) {
             result[key] = clone(t!);
-            writers.set(itemPath, src.featureId);
+            writers.set(itemPath, src.sourceId);
           } else if (!eq(r, t)) {
-            conflict({ section, key, field: '*', base: undefined, ours: r, theirs: t }, src.featureId, itemPath);
+            conflict({ section, key, field: '*', base: undefined, ours: r, theirs: t }, src.sourceId, itemPath);
           }
           continue;
         }
@@ -72,15 +73,15 @@ export function mergeGroup(ours: GroupConfig, sources: MergeSource[]): GroupMerg
           if (r === undefined) continue;
           if (eq(r, b)) {
             delete result[key];
-            writers.set(itemPath, src.featureId);
+            writers.set(itemPath, src.sourceId);
           } else {
-            conflict({ section, key, field: '*', base: b, ours: r, theirs: undefined }, src.featureId, itemPath);
+            conflict({ section, key, field: '*', base: b, ours: r, theirs: undefined }, src.sourceId, itemPath);
           }
           continue;
         }
         // Changed by the source: merge field by field.
         if (r === undefined) {
-          conflict({ section, key, field: '*', base: b, ours: undefined, theirs: t }, src.featureId, itemPath);
+          conflict({ section, key, field: '*', base: b, ours: undefined, theirs: t }, src.sourceId, itemPath);
           continue;
         }
         for (const field of [...new Set([...Object.keys(b), ...Object.keys(t)])].sort()) {
@@ -88,9 +89,9 @@ export function mergeGroup(ours: GroupConfig, sources: MergeSource[]): GroupMerg
           const fieldPath = `${itemPath}:${field}`;
           if (eq(r[field], b[field])) {
             r[field] = clone(t[field]);
-            writers.set(fieldPath, src.featureId);
+            writers.set(fieldPath, src.sourceId);
           } else if (!eq(r[field], t[field])) {
-            conflict({ section, key, field, base: b[field], ours: r[field], theirs: t[field] }, src.featureId, fieldPath);
+            conflict({ section, key, field, base: b[field], ours: r[field], theirs: t[field] }, src.sourceId, fieldPath);
           }
         }
       }
@@ -107,9 +108,9 @@ export function mergeGroup(ours: GroupConfig, sources: MergeSource[]): GroupMerg
       if (r === b) {
         if (t === undefined) delete merged.references[key];
         else merged.references[key] = t;
-        writers.set(path, src.featureId);
+        writers.set(path, src.sourceId);
       } else if (r !== t) {
-        conflict({ section: 'references', key, field: '*', base: b, ours: r, theirs: t }, src.featureId, path);
+        conflict({ section: 'references', key, field: '*', base: b, ours: r, theirs: t }, src.sourceId, path);
       }
     }
   }

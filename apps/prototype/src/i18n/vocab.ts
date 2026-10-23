@@ -472,3 +472,19 @@ export const CLIENT_ITEM_STATUS_LABELS: Record<string, Bilingual> = {
   PARTIAL_FAILURE: b('部分失败', 'Partial failure'),
   UNKNOWN: b('未知', 'Unknown'),
 };
+
+// Subsystem (domain) integration
+Object.assign(ERROR_LABELS, {
+  CROSS_DOMAIN_SOURCE: b('该 Feature 属于其他域，不能纳入本域的子系统集成', 'The Feature belongs to another domain; a subsystem merge takes only its own domain'),
+  SCOPE_OUTSIDE_WORKSPACE: b('该工作区不负责这个集成范围', 'This workspace does not integrate that scope'),
+  SUBSYSTEM_NOT_ALLOWED: b('子系统集成只收集本域 Feature，会自动包含本域当前的子系统发布', 'A subsystem merge takes Features only; it includes the domain’s current subsystem release by itself'),
+  SUBSYSTEM_CANDIDATE: b('子系统候选由本域发布为子系统，不能正式发布为 DCL 版本', 'A subsystem candidate is published by its domain as a subsystem release, not promoted to a DCL release'),
+  NOT_A_SUBSYSTEM_CANDIDATE: b('整车候选应正式发布为 DCL 版本，而不是子系统发布', 'A whole-vehicle candidate is promoted to a DCL release, not published as a subsystem'),
+});
+
+export const SUBSYSTEM_STATUS_LABELS: Record<string, Bilingual> = {
+  ACTIVE: b('可供整车集成', 'Ready for whole-vehicle integration'),
+  INTEGRATING: b('整车集成中', 'In a whole-vehicle candidate'),
+  INTEGRATED: b('已纳入正式版本', 'In a formal release'),
+  SUPERSEDED: b('已被新子系统发布替代', 'Superseded by a newer subsystem release'),
+};

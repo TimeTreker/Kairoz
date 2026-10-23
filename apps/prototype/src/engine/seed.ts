@@ -107,7 +107,27 @@ export function demoState(): State {
       }),
     );
   }
-  const teamWorkspaces = DEMO_TEAMS.map((t) => `team-${t.group}`);
+  // ADC and CDC integrate their teams first (子系统集成), each in its own domain workspace that also
+  // tests the subsystem candidates. The project then takes chassis Features directly and ADC/CDC
+  // only through their subsystem releases.
+  for (const [domain, unit, name] of [
+    ['ADC', 'x89-adc', 'ADC 域集成'],
+    ['CDC', 'x89-cdc', 'CDC 域集成'],
+  ] as const) {
+    const teams = DEMO_TEAMS.filter((t) => t.domain === domain);
+    as(admin, (c) =>
+      createWorkspace(c, {
+        id: `x89-${domain.toLowerCase()}-integration`,
+        name,
+        kind: 'INTEGRATION',
+        orgUnitId: unit,
+        vehicleModelId: 'X89',
+        groupIds: teams.map((t) => t.group),
+        scopes: [domain],
+        sourceWorkspaceIds: teams.map((t) => `team-${t.group}`),
+      }),
+    );
+  }
   as(admin, (c) =>
     createWorkspace(c, {
       id: 'x89-project',
@@ -117,7 +137,7 @@ export function demoState(): State {
       vehicleModelId: 'X89',
       groupIds: DEMO_TEAMS.map((t) => t.group),
       scopes: ['Vehicle', 'Chassis', 'ADC', 'CDC'],
-      sourceWorkspaceIds: teamWorkspaces,
+      sourceWorkspaceIds: [...DEMO_TEAMS.filter((t) => t.domain === 'Chassis').map((t) => `team-${t.group}`), 'x89-adc-integration', 'x89-cdc-integration'],
     }),
   );
   as(admin, (c) =>
@@ -154,6 +174,21 @@ export function demoState(): State {
   account('integration_tester', '钱思源', [{ role: 'INTEGRATION_TEST', workspaces: ['x89-integration'], scopes: ['Vehicle'], envs: ['testing'] }]);
   account('release', '孙立', [{ role: 'CONFIG_RELEASE', workspaces: ['x89-project', 'x89-integration'], scopes: ['Vehicle'], envs: ALL_ENVS }]);
   account('resource', '刘子衡', [{ role: 'VEHICLE_RESOURCE', workspaces: ['*'], scopes: ['Vehicle', 'Chassis', 'ADC', 'CDC'], envs: ALL_ENVS }]);
+  // Domain integrators: integrate, test and publish their domain's subsystem, and run its team
+  // vehicles as workspace admin. Never a whole-vehicle or production release.
+  for (const [username, name, domain] of [
+    ['adc_integrator', '梁思齐', 'ADC'],
+    ['cdc_integrator', '顾言之', 'CDC'],
+  ] as const) {
+    const domainWs = `x89-${domain.toLowerCase()}-integration`;
+    const teams = DEMO_TEAMS.filter((t) => t.domain === domain).map((t) => `team-${t.group}`);
+    account(username, name, [
+      { role: 'CONFIG_INTEGRATOR', workspaces: [domainWs], scopes: [domain] },
+      { role: 'INTEGRATION_TEST', workspaces: [domainWs], scopes: [domain], envs: ['testing'] },
+      { role: 'WORKSPACE_ADMIN', workspaces: [...teams, domainWs] },
+      { role: 'CONFIG_RELEASE', workspaces: [domainWs], scopes: [domain], envs: ['testing'] },
+    ]);
+  }
 
   // DCL engineering publishes RawStorage pipelines and default templates for every file type.
   for (const [fileType, format] of FILE_TYPE_FORMATS) {
@@ -219,6 +254,46 @@ export function demoState(): State {
     as('resource', (c) => registerPhysical(c, { id, vin, licensePlate: plate, vehicleModelId: 'X89', env, pool, displayName: name }));
     if (version) as('resource', (c) => confirmIntegration(c, id, { version, source: 'DIP 上报 2026-10-15' }));
   }
+  // ADC and CDC teams test on their own development vehicles; each domain workspace has testing
+  // vehicles confirmed on software 1.0 for its subsystem candidates.
+  for (const [id, vin, plate, pool, name] of [
+    ['VEH-004', 'LSDEM0X8900000004', '沪A·D0004', 'ADC', '智驾研发车 4'],
+    ['VEH-005', 'LSDEM0X8900000005', '沪A·D0005', 'CDC', '座舱研发车 5'],
+    ['VEH-006', 'LSDEM0X8900000006', '沪A·D0006', 'CDC', '座舱研发车 6'],
+  ] as const) {
+    as('resource', (c) => registerPhysical(c, { id, vin, licensePlate: plate, vehicleModelId: 'X89', env: 'development', pool, displayName: name }));
+  }
+  for (const [id, vin, plate, pool, name] of [
+    ['VEH-141', 'LSDEM0X8900000141', '沪A·T0141', 'ADC', 'ADC 域集成测试车'],
+    ['VEH-151', 'LSDEM0X8900000151', '沪A·T0151', 'CDC', 'CDC 域集成测试车'],
+  ] as const) {
+    as('resource', (c) => registerPhysical(c, { id, vin, licensePlate: plate, vehicleModelId: 'X89', env: 'testing', pool, displayName: name }));
+    as('resource', (c) => confirmIntegration(c, id, { version: '1.0', source: 'DIP 上报 2026-10-15' }));
+  }
+  for (const [admin_, team, group, sim, vehicle, groupName] of [
+    ['adc_integrator', 'team-adc-parking', 'adc-parking', 'SIM-041', 'VEH-002', '泊车研发车组'],
+    ['adc_integrator', 'team-adc-system', 'adc-system', 'SIM-042', 'VEH-004', '系统应用研发车组'],
+    ['cdc_integrator', 'team-cdc-hmi', 'cdc-hmi', 'SIM-051', 'VEH-005', 'HMI 研发车组'],
+    ['cdc_integrator', 'team-cdc-app', 'cdc-app', 'SIM-052', 'VEH-006', '座舱应用研发车组'],
+  ] as const) {
+    const pool = group.startsWith('adc') ? 'ADC' : 'CDC';
+    as(admin_, (c) => createSimulation(c, { id: sim, workspaceId: team, imageId: 'x89-1.0-sim', env: 'development', pool, displayName: `${groupName.replace('车组', '')}仿真` }));
+    as(admin_, (c) => addWorkspaceVehicle(c, team, vehicle));
+    const g = as<string>(admin_, (c) => createVehicleGroup(c, { workspaceId: team, groupId: group, name: groupName, purpose: 'DEV', env: 'development' }));
+    as(admin_, (c) => addGroupMember(c, g, sim, '团队 Feature 仿真验证'));
+    as(admin_, (c) => addGroupMember(c, g, vehicle, '团队 Feature 实车验证'));
+  }
+  for (const [admin_, domainWs, pool, sim, vehicle, groupName] of [
+    ['adc_integrator', 'x89-adc-integration', 'ADC', 'SIM-141', 'VEH-141', 'ADC 域集成测试车组'],
+    ['cdc_integrator', 'x89-cdc-integration', 'CDC', 'SIM-151', 'VEH-151', 'CDC 域集成测试车组'],
+  ] as const) {
+    as(admin_, (c) => createSimulation(c, { id: sim, workspaceId: domainWs, imageId: 'x89-1.0-sim', env: 'testing', pool, displayName: `${pool} 域集成仿真` }));
+    as(admin_, (c) => addWorkspaceVehicle(c, domainWs, vehicle));
+    const g = as<string>(admin_, (c) => createVehicleGroup(c, { workspaceId: domainWs, groupId: null, name: groupName, purpose: 'TEST', env: 'testing' }));
+    as(admin_, (c) => addGroupMember(c, g, sim, '子系统候选仿真验证'));
+    as(admin_, (c) => addGroupMember(c, g, vehicle, '子系统候选实车验证'));
+  }
+
   as('workspace_manager', (c) => createSimulation(c, { id: 'SIM-021', workspaceId: 'team-brake', imageId: 'x89-1.0-sim', env: 'development', pool: 'Chassis', displayName: '制动仿真 21' }));
   as('workspace_manager', (c) => addWorkspaceVehicle(c, 'team-brake', 'VEH-001'));
   const brakeGroup = as<string>('workspace_manager', (c) =>

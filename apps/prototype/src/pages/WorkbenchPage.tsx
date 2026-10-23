@@ -7,7 +7,7 @@ import { LabelTag, Mono, RoleTag, StageTag } from '../components/common.tsx';
 import { authorize } from '../domain/authz.ts';
 import { visibleFeatures } from '../engine/config.ts';
 import { intakeQueue } from '../engine/intake.ts';
-import { isConfirmed, verifiedSources } from '../engine/integration.ts';
+import { isConfirmed, isMergeWorkspace, verifiedSources } from '../engine/integration.ts';
 import { otaRollouts } from '../engine/ota.ts';
 import { releaseFor, releasesOf } from '../engine/release.ts';
 import { managedResources, pendingDeploymentOf, vehicleGroupsOf, workspaceVehicles } from '../engine/fleet.ts';
@@ -121,7 +121,7 @@ export function WorkbenchPage() {
       </Card>,
     );
   }
-  if (roles.includes('CONFIG_INTEGRATOR') && workspace?.kind === 'PROJECT') {
+  if (roles.includes('CONFIG_INTEGRATOR') && workspace && isMergeWorkspace(state, workspace.id)) {
     const plans = Object.values(state.mergePlans).filter((p) => p.workspaceId === workspace.id);
     const latest = plans.at(-1);
     const openCandidates = Object.values(state.candidates).filter((c) => c.workspaceId === workspace.id && ['CANDIDATE', 'TESTING', 'VERIFIED'].includes(c.status));
@@ -163,8 +163,26 @@ export function WorkbenchPage() {
       </Card>,
     );
   }
-  if (roles.includes('CONFIG_RELEASE') && workspace) {
-    const toRelease = Object.values(state.candidates).filter((c) => c.vehicleModelId === workspace.vehicleModelId && c.status === 'VERIFIED');
+  if (roles.includes('CONFIG_RELEASE') && workspace && !workspace.scopes.includes('Vehicle')) {
+    // A domain's release role publishes subsystem releases, never whole-vehicle releases.
+    const toPublish = Object.values(state.candidates).filter((c) => c.workspaceId === workspace.id && c.scope !== 'Vehicle' && c.status === 'VERIFIED');
+    const published = Object.values(state.subsystemReleases).filter((r) => r.workspaceId === workspace.id);
+    cards.push(
+      <Card key="cr" title={<RoleTag role="CONFIG_RELEASE" />} extra={<Button size="small" onClick={() => navigate('integration')}>{L('配置集成', 'Integration')}</Button>}>
+        <Row gutter={16} style={{ marginBottom: 12 }}>
+          <Col span={12}><Statistic title={L('待发布的子系统候选', 'Subsystem candidates to publish')} value={toPublish.length} /></Col>
+          <Col span={12}><Statistic title={L('可供整车集成的子系统发布', 'Subsystem releases ready')} value={published.filter((r) => r.status === 'ACTIVE').length} /></Col>
+        </Row>
+        {toPublish.map((c) => (
+          <Row2 key={c.id} onClick={() => navigate(`integration/${c.id}`)}>
+            <Mono>{c.label}</Mono>
+            <LabelTag map={CANDIDATE_STATUS_LABELS} value={c.status} color={CANDIDATE_STATUS_COLORS[c.status]} />
+          </Row2>
+        ))}
+      </Card>,
+    );
+  } else if (roles.includes('CONFIG_RELEASE') && workspace) {
+    const toRelease = Object.values(state.candidates).filter((c) => c.vehicleModelId === workspace.vehicleModelId && c.scope === 'Vehicle' && c.status === 'VERIFIED');
     const rollouts = otaRollouts(state).filter((d) => state.workspaces[d.workspaceId]?.vehicleModelId === workspace.vehicleModelId);
     const production = Object.values(state.resources).filter((r) => r.env === 'production' && r.vehicleModelId === workspace.vehicleModelId && r.status !== 'RETIRED');
     const due = production.filter((r) => {

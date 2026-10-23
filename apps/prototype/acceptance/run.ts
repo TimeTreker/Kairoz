@@ -9,6 +9,7 @@ import { NEGATIVE_CASES, SCRIPTS } from '../src/acceptance/scripts.ts';
 import type { State } from '../src/engine/types.ts';
 import * as clientReport from './client-report.ts';
 import * as dataUsage from './data-usage.ts';
+import * as domainIntegration from './domain-integration.ts';
 import * as firstOta from './first-ota.ts';
 import * as negative from './negative.ts';
 import * as startup from './startup.ts';
@@ -44,6 +45,7 @@ const suites = [
   { id: 'first-ota', mod: firstOta },
   { id: 'data-usage', mod: dataUsage },
   { id: 'client-report', mod: clientReport },
+  { id: 'domain-integration', mod: domainIntegration },
 ] as const;
 
 const report: { script: string; name: string; rows: Row[] }[] = [];
