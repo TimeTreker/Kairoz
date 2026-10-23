@@ -1,6 +1,6 @@
 import { App } from 'antd';
 import { useCallback, useMemo } from 'react';
-import { authorize } from '../domain/authz.ts';
+import { authorize, canOpenPage } from '../domain/authz.ts';
 import type { Action, AuthzTarget } from '../domain/authz.ts';
 import { DomainError, ForbiddenError } from '../domain/errors.ts';
 import type { Actor, Ctx } from '../engine/engine.ts';
@@ -99,4 +99,11 @@ export function useCan() {
     },
     [actor],
   );
+}
+
+/** Whether the actor may open a page in the current workspace: menu entries and the page guard. */
+export function useCanOpen() {
+  const actor = useActor();
+  const { workspace } = useWorkspace();
+  return useCallback((page: string) => !!actor && canOpenPage(actor.grants, page, workspace?.id ?? null), [actor, workspace]);
 }

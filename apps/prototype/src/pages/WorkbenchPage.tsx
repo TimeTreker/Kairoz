@@ -1,6 +1,6 @@
 import { Badge, Button, Card, Col, Flex, Row, Space, Statistic, Typography } from 'antd';
 import type { ReactNode } from 'react';
-import { useActor, useWorkspace } from '../app/hooks.ts';
+import { useActor, useCanOpen, useWorkspace } from '../app/hooks.ts';
 import { navigate } from '../app/router.ts';
 import { useEngineState } from '../app/store.ts';
 import { LabelTag, Mono, RoleTag, StageTag } from '../components/common.tsx';
@@ -42,6 +42,7 @@ function FeatureList({ items, empty }: { items: Feature[]; empty: string }) {
 export function WorkbenchPage() {
   const state = useEngineState();
   const actor = useActor()!;
+  const canOpen = useCanOpen();
   const { workspace, roles } = useWorkspace();
   const { L, B } = useI18n();
   const cards: ReactNode[] = [];
@@ -219,7 +220,7 @@ export function WorkbenchPage() {
       </Card>,
     );
   }
-  if (actor.grants.some((g) => g.role === 'PLATFORM_OPS')) {
+  if (canOpen('org') || canOpen('accounts')) {
     cards.push(
       <Card key="ops" title={<RoleTag role="PLATFORM_OPS" />}>
         <Row gutter={16}>
@@ -228,8 +229,8 @@ export function WorkbenchPage() {
           <Col span={8}><Statistic title={L('业务分组', 'Groups')} value={Object.keys(state.groups).length} /></Col>
         </Row>
         <Space style={{ marginTop: 12 }}>
-          <Button onClick={() => navigate('org')}>{L('组织与工作区', 'Organization')}</Button>
-          <Button onClick={() => navigate('accounts')}>{L('账号与授权', 'Accounts')}</Button>
+          {canOpen('org') && <Button onClick={() => navigate('org')}>{L('组织与工作区', 'Organization')}</Button>}
+          {canOpen('accounts') && <Button onClick={() => navigate('accounts')}>{L('账号与授权', 'Accounts')}</Button>}
         </Space>
       </Card>,
     );

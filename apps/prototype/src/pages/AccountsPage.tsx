@@ -1,7 +1,7 @@
 import { MinusCircleOutlined, PlusOutlined } from '@ant-design/icons';
 import { Button, Card, Checkbox, Form, Input, Modal, Select, Space, Switch, Table, Tag, Typography } from 'antd';
 import { useState } from 'react';
-import { useRun } from '../app/hooks.ts';
+import { useCan, useRun } from '../app/hooks.ts';
 import { useEngineState } from '../app/store.ts';
 import { EnvTag, Hint, Mono, PageHeader, RoleTag } from '../components/common.tsx';
 import type { Grant, GrantInput } from '../domain/authz.ts';
@@ -43,6 +43,8 @@ export function AccountsPage() {
   const state = useEngineState();
   const { L, B } = useI18n();
   const run = useRun();
+  const can = useCan();
+  const canManage = can('account.manage', {});
   const [editing, setEditing] = useState<string | 'new' | null>(null);
   const [form] = Form.useForm();
   const workspaceOptions = [{ value: '*', label: L('* 全部', '* all') }, ...Object.values(state.workspaces).map((w) => ({ value: w.id, label: w.name }))];
@@ -83,7 +85,7 @@ export function AccountsPage() {
       <PageHeader
         title={L('账号与授权', 'Accounts & grants')}
         subtitle={L('每一行授权都是一条完整授权：角色 + 工作区 + 分组或范围 + 环境。操作必须由同一条授权完整满足，授权不能拼接。', 'Each grant row is one complete authorization: role + workspaces + groups or scopes + environments. An action must be satisfied by one grant; grants are never combined.')}
-        extra={<Button type="primary" icon={<PlusOutlined />} onClick={() => open('new')}>{L('新建账号', 'New account')}</Button>}
+        extra={canManage && <Button type="primary" icon={<PlusOutlined />} onClick={() => open('new')}>{L('新建账号', 'New account')}</Button>}
       />
       <Card>
         <Table
@@ -95,9 +97,9 @@ export function AccountsPage() {
             { title: L('授权', 'Grants'), render: (_, a) => <Space orientation="vertical">{a.grants.map((g) => <GrantSummary key={g.id} grant={g} />)}</Space> },
             {
               title: L('启用', 'Active'),
-              render: (_, a) => <Switch checked={a.status === 'ACTIVE'} onChange={(on) => run((c) => updateAccount(c, a.username, { status: on ? 'ACTIVE' : 'DISABLED' }))} />,
+              render: (_, a) => <Switch checked={a.status === 'ACTIVE'} disabled={!canManage} onChange={(on) => run((c) => updateAccount(c, a.username, { status: on ? 'ACTIVE' : 'DISABLED' }))} />,
             },
-            { title: '', render: (_, a) => <Button type="link" onClick={() => open(a.username)}>{L('编辑', 'Edit')}</Button> },
+            { title: '', render: (_, a) => canManage && <Button type="link" onClick={() => open(a.username)}>{L('编辑', 'Edit')}</Button> },
           ]}
         />
       </Card>

@@ -39,6 +39,12 @@ describe('bilingual error text', () => {
       ['simulated apply failure', '模拟的应用失败'],
       ['rolled back: 演示回滚', '已回滚：演示回滚'],
       ['ParserFailure: opaque-bin-log@1 could not be parsed', 'ParserFailure：无法按 opaque-bin-log@1 解析'],
+      [
+        'chassis.steering: policy chassis.steering.angle_jump has a merged capture window of 125 s (110 s before + 15 s after the trigger), over the 120 s limit',
+        'chassis.steering：策略 chassis.steering.angle_jump 合并后的采集窗口为 125 秒（触发前 110 秒 + 触发后 15 秒），超过 120 秒上限',
+      ],
+      ['chassis.brake: policy chassis.brake.x has an invalid trigger: unexpected end at 7', 'chassis.brake：策略 chassis.brake.x 的触发条件无效：unexpected end（位置 7）'],
+      ['chassis.brake: policy chassis.brake.x captures no file', 'chassis.brake：策略 chassis.brake.x 没有捕获任何文件'],
     ];
     for (const [line, zh] of cases) assert.deepEqual(issueLabel(line), { zh, en: line }, line);
     assert.equal(issueLabel('something the engine never says'), undefined);

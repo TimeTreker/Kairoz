@@ -2,16 +2,17 @@
 // target set, DCL confirmation of the final processing set, and freezing a complete candidate.
 
 import { digestOf } from '../domain/canonical.ts';
-import { capturableKeys, diffConfig, emptyConfig, sameConfig } from '../domain/config.ts';
+import { capturableKeys, diffConfig, emptyConfig, MAX_CAPTURE_WINDOW_SECONDS, sameConfig } from '../domain/config.ts';
 import type { ConfigDiff, GroupConfig } from '../domain/config.ts';
 import { conflict, notFound, rule } from '../domain/errors.ts';
 import { requiresSensitiveReview } from '../domain/file-types.ts';
 import { newId } from '../domain/ids.ts';
 import { mergeGroup, PROCESSING_FIELDS } from '../domain/merge.ts';
+import { parseTrigger } from '../domain/trigger.ts';
 import { WILDCARD } from '../domain/vocabulary.ts';
 import { reviewItems } from './approvals.ts';
 import type { ReviewItem } from './approvals.ts';
-import { baseConfig, fileSpecVersion, headChangesRequested, latestRelease, manifestVersion, policyVersion } from './config.ts';
+import { baseConfig, fileSpecVersion, headChangesRequested, latestRelease, manifestVersion, policyVersion, reviewRequiredBefore } from './config.ts';
 
 export { latestRelease };
 import type { Ctx } from './engine.ts';
@@ -58,14 +59,24 @@ function targetConfig(s: State, release: Release | undefined, groupId: string): 
   return commitId ? commitSnapshot(s, commitId) : emptyConfig();
 }
 
-/** Problems with the complete set after merging: captures, bindings, consistent reference pins. */
+/** Problems with the complete set after merging: policies, bindings, consistent reference pins. */
 function setIssues(s: State, finalSet: Record<string, GroupConfig>): string[] {
   const issues: string[] = [];
   for (const [groupId, config] of Object.entries(finalSet)) {
     const code = s.groups[groupId]?.code ?? groupId;
     const keys = capturableKeys(config);
     for (const [policyId, p] of Object.entries(config.policies)) {
-      for (const k of p.captures) if (!keys.has(k)) issues.push(`${code}: policy ${policyId} captures ${k}, which is not in the merged file list`);
+      // Each source passed the policy rules on its own, but a field-by-field merge can combine
+      // them into a policy none of them had: one source's seconds before the trigger with another's after it.
+      const policy = `${code}: policy ${policyId}`;
+      if (p.captures.length === 0) issues.push(`${policy} captures no file`);
+      for (const k of p.captures) if (!keys.has(k)) issues.push(`${policy} captures ${k}, which is not in the merged file list`);
+      const trigger = parseTrigger(p.trigger);
+      if (!trigger.ok) issues.push(`${policy} has an invalid trigger: ${trigger.error.message} at ${trigger.error.position}`);
+      const window = p.preSeconds + p.postSeconds;
+      if (window > MAX_CAPTURE_WINDOW_SECONDS) {
+        issues.push(`${policy} has a merged capture window of ${window} s (${p.preSeconds} s before + ${p.postSeconds} s after the trigger), over the ${MAX_CAPTURE_WINDOW_SECONDS} s limit`);
+      }
     }
     for (const spec of Object.values(config.files)) {
       for (const problem of bindingIssues(s, spec)) issues.push(`${code}: ${spec.name}: ${problem}`);
@@ -83,16 +94,17 @@ function setIssues(s: State, finalSet: Record<string, GroupConfig>): string[] {
   return issues;
 }
 
-/** Recomputes the derived review flag of merged files. */
+/** Recomputes the derived review flag of merged files; an earlier committed requirement stays. */
 function recomputeReview(s: State, config: GroupConfig): void {
-  for (const spec of Object.values(config.files)) {
-    spec.requiresReview = requiresSensitiveReview({
-      fileType: spec.fileType,
-      privacy: spec.privacy,
-      contentTags: spec.contentTags,
-      templateRequiresReview: s.templates[spec.templateId]?.requiresReview ?? true,
-      pattern: spec.source.pattern,
-    });
+  for (const [dataKey, spec] of Object.entries(config.files)) {
+    spec.requiresReview =
+      requiresSensitiveReview({
+        fileType: spec.fileType,
+        privacy: spec.privacy,
+        contentTags: spec.contentTags,
+        templateRequiresReview: s.templates[spec.templateId]?.requiresReview ?? true,
+        pattern: spec.source.pattern,
+      }) || reviewRequiredBefore(s, dataKey);
   }
 }
 

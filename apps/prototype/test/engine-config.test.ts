@@ -154,6 +154,32 @@ describe('demo workflow rules', () => {
     assert.equal(items[0]!.status, 'REJECTED');
   });
 
+  test('lowering the privacy or dropping a sensitive tag cannot lift a committed review requirement', () => {
+    const e = new Engine(demoState());
+    const f = e.run('business', (c) => config.createFeature(c, { workspaceId: 'team-brake', groupId: 'brake', name: 'private_logs' }));
+    const add = (pattern: string, attrs: { privacy?: 'P1' | 'P2'; contentTags?: string[] }) =>
+      e.run('business', (c) => config.addFile(c, f, { source: { unit: 'ADC', directory: '/var/log/brake', pattern }, name: pattern, purpose: '诊断', ...attrs }));
+    const review = (key: string) => e.getState().features[f]!.draft.files[key]?.requiresReview;
+    const p2 = add('pressure.log', { privacy: 'P2' });
+    const tagged = add('driver.log', { privacy: 'P1', contentTags: ['identity'] });
+    assert.deepEqual([review(p2), review(tagged)], [true, true]);
+    // Before anything is committed the declaration is still a draft and may be corrected.
+    e.run('business', (c) => config.updateFile(c, f, p2, { privacy: 'P1' }));
+    assert.equal(review(p2), false);
+    e.run('business', (c) => config.updateFile(c, f, p2, { privacy: 'P2' }));
+    assert.equal(e.run('business', (c) => config.submitFeature(c, f)).stage, 'SUBMITTED');
+
+    e.run('business', (c) => config.updateFile(c, f, p2, { privacy: 'P1' }));
+    e.run('business', (c) => config.updateFile(c, f, tagged, { contentTags: [] }));
+    assert.deepEqual([review(p2), review(tagged)], [true, true], 'the committed requirement stays');
+    // Removing the file and adding the same source again reuses the data item, and its requirement.
+    e.run('business', (c) => config.removeFile(c, f, p2));
+    assert.equal(add('pressure.log', { privacy: 'P1' }), p2);
+    assert.equal(review(p2), true);
+    assert.deepEqual(config.draftReviewRequired(e.getState(), e.getState().features[f]!), [tagged, p2].sort());
+    assert.equal(e.run('business', (c) => config.submitFeature(c, f)).stage, 'SUBMITTED', 'the lowered content waits for DCL review again');
+  });
+
   test('DCL return and binding changes cannot be undone by an unchanged resubmit', () => {
     const e = new Engine(demoState());
     const f = Object.values(e.getState().features).find((x) => x.name === 'guided_brake')!;

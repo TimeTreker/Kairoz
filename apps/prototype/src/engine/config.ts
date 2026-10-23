@@ -99,6 +99,14 @@ export function featureChanges(s: State, f: Feature): { sinceHead: ConfigDiff; s
   return { sinceHead: diffConfig(head, f.draft), sinceBase: diffConfig(base, f.draft) };
 }
 
+/**
+ * Whether a committed version of the data item needed sensitive review. Lowering the declared
+ * privacy or dropping a sensitive tag later cannot lift that requirement.
+ */
+export function reviewRequiredBefore(s: State, dataKey: string): boolean {
+  return Object.values(s.fileSpecVersions).some((v) => v.dataKey === dataKey && v.content.requiresReview);
+}
+
 /** Files of the draft (owned or referenced) that need DCL sensitive review. */
 export function draftReviewRequired(s: State, f: Feature): string[] {
   const files = resolveFiles(s, f.draft);
@@ -320,13 +328,14 @@ export function addFile(
       schema: template.schema,
       edgePipelineId: template.edgePipelineId,
       cloudPipelineId: template.cloudPipelineId,
-      requiresReview: requiresSensitiveReview({
-        fileType,
-        privacy,
-        contentTags,
-        templateRequiresReview: template.requiresReview,
-        pattern: source.pattern,
-      }),
+      requiresReview:
+        requiresSensitiveReview({
+          fileType,
+          privacy,
+          contentTags,
+          templateRequiresReview: template.requiresReview,
+          pattern: source.pattern,
+        }) || reviewRequiredBefore(ctx.s, dataKey),
     };
     checkAttributes(spec);
     draft.files[dataKey] = spec;
@@ -371,13 +380,14 @@ export function updateFile(ctx: Ctx, featureId: string, dataKey: string, input: 
       retentionDays: input.retentionDays ?? current.retentionDays,
       contentTags,
       priority: input.priority ?? current.priority,
-      requiresReview: requiresSensitiveReview({
-        fileType,
-        privacy,
-        contentTags,
-        templateRequiresReview: reviewByTemplate,
-        pattern: current.source.pattern,
-      }),
+      requiresReview:
+        requiresSensitiveReview({
+          fileType,
+          privacy,
+          contentTags,
+          templateRequiresReview: reviewByTemplate,
+          pattern: current.source.pattern,
+        }) || reviewRequiredBefore(ctx.s, dataKey),
     };
     checkAttributes(spec);
     draft.files[dataKey] = spec;

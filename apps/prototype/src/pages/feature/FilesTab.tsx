@@ -1,12 +1,12 @@
 import { PlusOutlined } from '@ant-design/icons';
-import { Alert, Button, Card, Form, Input, InputNumber, Modal, Popconfirm, Select, Space, Table, Tag, Typography } from 'antd';
+import { Alert, Button, Card, Form, Input, InputNumber, Modal, Popconfirm, Select, Space, Table, Tag, Tooltip, Typography } from 'antd';
 import { useState } from 'react';
 import { useCan, useRun } from '../../app/hooks.ts';
 import { useEngineState } from '../../app/store.ts';
 import { Hint, LabelTag, Mono } from '../../components/common.tsx';
 import type { FileSpecContent } from '../../domain/config.ts';
 import { FILE_TYPES, inferFileType, PRIVACY_LEVELS } from '../../domain/file-types.ts';
-import { addFile, EDITABLE_STAGES, putReference, removeFile, removeReference, updateFile, visibleSuspects } from '../../engine/config.ts';
+import { addFile, EDITABLE_STAGES, putReference, removeFile, removeReference, reviewRequiredBefore, updateFile, visibleSuspects } from '../../engine/config.ts';
 import { setBinding } from '../../engine/intake.ts';
 import { referenceCatalog } from '../../engine/references.ts';
 import { latestCommittedVersion } from '../../engine/snapshots.ts';
@@ -139,7 +139,16 @@ export function FilesTab({ feature }: { feature: Feature }) {
             { title: L('隐私 / 保留', 'Privacy / retention'), render: (_, [, spec]) => `${spec.privacy} · ${spec.retentionDays}${L(' 天', 'd')}` },
             {
               title: L('敏感审核', 'Review'),
-              render: (_, [, spec]) => (spec.requiresReview ? <Tag color="volcano">{L('需审核', 'Required')}</Tag> : <Tag>{L('不需要', 'No')}</Tag>),
+              render: (_, [key, spec]) =>
+                !spec.requiresReview ? (
+                  <Tag>{L('不需要', 'No')}</Tag>
+                ) : reviewRequiredBefore(state, key) ? (
+                  <Tooltip title={L('已提交的版本需要敏感审核；降低隐私等级或移除敏感标签不会解除这项要求。', 'A committed version needed sensitive review; lowering the privacy level or removing sensitive tags does not lift it.')}>
+                    <Tag color="volcano">{L('需审核', 'Required')}</Tag>
+                  </Tooltip>
+                ) : (
+                  <Tag color="volcano">{L('需审核', 'Required')}</Tag>
+                ),
             },
             {
               title: L('处理绑定', 'Binding'),

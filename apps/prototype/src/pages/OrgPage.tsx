@@ -2,7 +2,7 @@ import { PlusOutlined } from '@ant-design/icons';
 import { Button, Card, Col, Form, Input, Modal, Row, Select, Space, Table, Tabs, Tag, Tree, Typography } from 'antd';
 import type { TreeDataNode } from 'antd';
 import { useState } from 'react';
-import { useRun } from '../app/hooks.ts';
+import { useCan, useRun } from '../app/hooks.ts';
 import { useEngineState } from '../app/store.ts';
 import { Hint, LabelTag, Mono, PageHeader } from '../components/common.tsx';
 import { DOMAINS, SCOPES } from '../domain/vocabulary.ts';
@@ -40,6 +40,9 @@ export function OrgPage() {
   const state = useEngineState();
   const { L, B } = useI18n();
   const run = useRun();
+  const can = useCan();
+  const canOrg = can('org.manage', {});
+  const canWorkspaces = can('workspace.manage', {});
   const [modal, setModal] = useState<null | 'unit' | 'project' | 'model' | 'group' | 'workspace' | { edit: string } | { ws: string }>(null);
   const [form] = Form.useForm();
   const units = Object.values(state.orgUnits);
@@ -93,12 +96,12 @@ export function OrgPage() {
             children: (
               <Row gutter={16}>
                 <Col xs={24} lg={12}>
-                  <Card title={L('团队组织', 'Team organization')} extra={<Button icon={<PlusOutlined />} onClick={() => setModal('unit')}>{L('新建节点', 'New unit')}</Button>}>
+                  <Card title={L('团队组织', 'Team organization')} extra={canOrg && <Button icon={<PlusOutlined />} onClick={() => setModal('unit')}>{L('新建节点', 'New unit')}</Button>}>
                     <Tree
                       defaultExpandAll
                       treeData={treeOf(state, (k) => k === 'TEAM')}
                       onSelect={([key]) => {
-                        if (!key) return;
+                        if (!key || !canOrg) return;
                         const u = state.orgUnits[String(key)]!;
                         form.setFieldsValue({ name: u.name, parentId: u.parentId });
                         setModal({ edit: u.id });
@@ -112,9 +115,11 @@ export function OrgPage() {
                       <Tree defaultExpandAll treeData={treeOf(state, (k, pid) => k === 'PROJECT' && pid === p.id)} />
                     </Card>
                   ))}
-                  <Button icon={<PlusOutlined />} onClick={() => setModal('project')}>
-                    {L('成立项目', 'Establish project')}
-                  </Button>
+                  {canOrg && (
+                    <Button icon={<PlusOutlined />} onClick={() => setModal('project')}>
+                      {L('成立项目', 'Establish project')}
+                    </Button>
+                  )}
                 </Col>
               </Row>
             ),
@@ -123,7 +128,7 @@ export function OrgPage() {
             key: 'workspaces',
             label: L('工作区', 'Workspaces'),
             children: (
-              <Card extra={<Button icon={<PlusOutlined />} onClick={() => setModal('workspace')}>{L('新建工作区', 'New workspace')}</Button>}>
+              <Card extra={canWorkspaces && <Button icon={<PlusOutlined />} onClick={() => setModal('workspace')}>{L('新建工作区', 'New workspace')}</Button>}>
                 <Table
                   rowKey="id"
                   pagination={false}
@@ -136,7 +141,7 @@ export function OrgPage() {
                     { title: L('业务分组', 'Groups'), render: (_, w) => w.groupIds.map((g) => <Tag key={g}>{state.groups[g]?.name}</Tag>) },
                     { title: L('范围', 'Scopes'), render: (_, w) => w.scopes.join(', ') },
                     { title: L('来源工作区', 'Sources'), render: (_, w) => w.sourceWorkspaceIds.map((s) => <Tag key={s}>{state.workspaces[s]?.name}</Tag>) },
-                    { title: '', render: (_, w) => <Button type="link" size="small" onClick={() => editWorkspace(w)}>{L('编辑', 'Edit')}</Button> },
+                    { title: '', render: (_, w) => canWorkspaces && <Button type="link" size="small" onClick={() => editWorkspace(w)}>{L('编辑', 'Edit')}</Button> },
                   ]}
                 />
               </Card>
@@ -146,7 +151,7 @@ export function OrgPage() {
             key: 'groups',
             label: L('业务分组', 'Business groups'),
             children: (
-              <Card extra={<Button icon={<PlusOutlined />} onClick={() => setModal('group')}>{L('新建分组', 'New group')}</Button>}>
+              <Card extra={canOrg && <Button icon={<PlusOutlined />} onClick={() => setModal('group')}>{L('新建分组', 'New group')}</Button>}>
                 <Hint>{L('业务分组是文件列表与策略的唯一维护归属；测试用途分组不能维护配置。创建分组不授予任何人权限。', 'A business group is the sole maintainer of its file list and policies; test groups do not maintain configuration. Creating a group grants nobody anything.')}</Hint>
                 <Table
                   rowKey="id"
@@ -167,7 +172,7 @@ export function OrgPage() {
             key: 'models',
             label: L('车型', 'Vehicle models'),
             children: (
-              <Card extra={<Button icon={<PlusOutlined />} onClick={() => setModal('model')}>{L('登记车型', 'Register model')}</Button>}>
+              <Card extra={canOrg && <Button icon={<PlusOutlined />} onClick={() => setModal('model')}>{L('登记车型', 'Register model')}</Button>}>
                 <Table rowKey="id" pagination={false} dataSource={Object.values(state.vehicleModels)} columns={[{ title: 'ID', dataIndex: 'id' }, { title: L('名称', 'Name'), dataIndex: 'name' }, { title: L('状态', 'Status'), dataIndex: 'status' }]} />
               </Card>
             ),

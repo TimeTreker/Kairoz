@@ -14,10 +14,15 @@ export function setAgent(ctx: Ctx, resourceId: string, patch: Partial<AgentState
   Object.assign(r.agent, patch);
 }
 
-/** What each vehicle has been asked to apply and has not answered yet. */
+/**
+ * What each vehicle has been asked to apply and has not answered yet. Targets of a paused rollout
+ * are held: nothing is delivered and no receipt is accepted until the rollout is resumed.
+ */
 export function pendingForVehicles(s: State) {
   return Object.values(s.deployments).flatMap((d) =>
-    d.status === 'PENDING' || d.status === 'PAUSED' ? d.targets.filter((t) => t.status === 'PENDING').map((t) => ({ deployment: d, target: t })) : [],
+    d.status === 'PENDING' || d.status === 'PAUSED'
+      ? d.targets.filter((t) => t.status === 'PENDING').map((t) => ({ deployment: d, target: t, held: d.status === 'PAUSED' }))
+      : [],
   );
 }
 
@@ -29,11 +34,13 @@ export function sendReceipt(ctx: Ctx, deploymentId: string, resourceId: string, 
   return acceptReceipt(ctx, { deploymentId, resourceId, attempt: t.attempt, result, ...(error ? { error } : {}) });
 }
 
-/** One simulator step: online vehicles in automatic mode answer their pending configurations,
- * and in-flight collection events move one processing step. */
+/** One simulator step: online vehicles in automatic mode answer their pending configurations
+ * (not those of a paused rollout), and in-flight collection events move one processing step. */
 export function tick(ctx: Ctx): number {
   let answered = 0;
   for (const { deployment, target } of pendingForVehicles(ctx.s)) {
+    // Read the status now: a failure earlier in this step may have paused the rollout.
+    if (ctx.s.deployments[deployment.id]!.status !== 'PENDING') continue;
     const r = ctx.s.resources[target.resourceId]!;
     if (!r.agent.online || !r.agent.autoAck || r.instance === 'STOPPED') continue;
     if (r.agent.failNext) {

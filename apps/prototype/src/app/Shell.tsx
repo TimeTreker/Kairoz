@@ -14,9 +14,9 @@ import {
   TeamOutlined,
   UserOutlined,
 } from '@ant-design/icons';
-import { Avatar, Breadcrumb, Dropdown, Layout, Menu, Segmented, Select, Space, Tag } from 'antd';
+import { Avatar, Breadcrumb, Button, Dropdown, Layout, Menu, Result, Segmented, Select, Space, Tag } from 'antd';
 import type { ReactNode } from 'react';
-import type { Role } from '../domain/vocabulary.ts';
+import { canOpenPage } from '../domain/authz.ts';
 import { unitPath } from '../engine/org.ts';
 import { useI18n } from '../i18n/i18n.tsx';
 import { ROLE_LABELS, WORKSPACE_KIND_LABELS } from '../i18n/vocab.ts';
@@ -36,7 +36,7 @@ import { QueryPage } from '../pages/QueryPage.tsx';
 import { ReleasePage } from '../pages/ReleasePage.tsx';
 import { SimulatorPage } from '../pages/SimulatorPage.tsx';
 import { WorkbenchPage } from '../pages/WorkbenchPage.tsx';
-import { useActor, useWorkspace } from './hooks.ts';
+import { useActor, useCanOpen, useWorkspace } from './hooks.ts';
 import { PrototypeMenu } from './PrototypeMenu.tsx';
 import { navigate, useRoute } from './router.ts';
 import { setSession, useEngineState } from './store.ts';
@@ -46,42 +46,67 @@ interface NavItem {
   icon: ReactNode;
   zh: string;
   en: string;
-  /** Roles (in the current workspace, or platform-wide) that see the item; empty = everyone. */
-  roles: Role[];
 }
 
+/** Menu entries; who sees each one is `PAGE_ACCESS` in the authorization rules. */
 const NAV: NavItem[] = [
-  { key: 'workbench', icon: <DashboardOutlined />, zh: '工作台', en: 'Workbench', roles: [] },
-  {
-    key: 'features',
-    icon: <BranchesOutlined />,
-    zh: '研发 Feature',
-    en: 'Features',
-    roles: ['BUSINESS_DEV', 'BUSINESS_TEST', 'DCL_ENGINEER', 'CONFIG_INTEGRATOR', 'INTEGRATION_TEST', 'CONFIG_RELEASE'],
-  },
-  { key: 'data', icon: <DatabaseOutlined />, zh: '数据目录与引用', en: 'Data & references', roles: ['BUSINESS_DEV', 'BUSINESS_TEST', 'DCL_ENGINEER'] },
-  { key: 'intake', icon: <SafetyCertificateOutlined />, zh: 'DCL 接入队列', en: 'DCL intake', roles: ['DCL_ENGINEER'] },
-  { key: 'processing', icon: <DeploymentUnitOutlined />, zh: '处理目录', en: 'Processing catalog', roles: ['DCL_ENGINEER', 'BUSINESS_DEV'] },
-  { key: 'fleet', icon: <CarOutlined />, zh: '车辆与车辆组', en: 'Vehicles & groups', roles: ['VEHICLE_RESOURCE', 'WORKSPACE_ADMIN', 'BUSINESS_DEV', 'BUSINESS_TEST', 'INTEGRATION_TEST', 'CONFIG_RELEASE', 'DCL_ENGINEER'] },
-  { key: 'integration', icon: <ClusterOutlined />, zh: '配置集成', en: 'Integration', roles: ['CONFIG_INTEGRATOR', 'INTEGRATION_TEST', 'DCL_ENGINEER', 'CONFIG_RELEASE'] },
-  { key: 'release', icon: <RocketOutlined />, zh: '发布与配置 OTA', en: 'Release & OTA', roles: ['CONFIG_RELEASE', 'VEHICLE_RESOURCE'] },
-  { key: 'query', icon: <FileSearchOutlined />, zh: '数据查询', en: 'Data query', roles: ['BUSINESS_DEV', 'BUSINESS_TEST', 'DCL_ENGINEER', 'CONFIG_INTEGRATOR', 'INTEGRATION_TEST', 'CONFIG_RELEASE'] },
-  { key: 'org', icon: <ApartmentOutlined />, zh: '组织与工作区', en: 'Organization', roles: ['PLATFORM_OPS'] },
-  { key: 'accounts', icon: <TeamOutlined />, zh: '账号与授权', en: 'Accounts & grants', roles: ['PLATFORM_OPS'] },
-  { key: 'audit', icon: <AuditOutlined />, zh: '审计日志', en: 'Audit log', roles: ['PLATFORM_OPS'] },
+  { key: 'workbench', icon: <DashboardOutlined />, zh: '工作台', en: 'Workbench' },
+  { key: 'features', icon: <BranchesOutlined />, zh: '研发 Feature', en: 'Features' },
+  { key: 'data', icon: <DatabaseOutlined />, zh: '数据目录与引用', en: 'Data & references' },
+  { key: 'intake', icon: <SafetyCertificateOutlined />, zh: 'DCL 接入队列', en: 'DCL intake' },
+  { key: 'processing', icon: <DeploymentUnitOutlined />, zh: '处理目录', en: 'Processing catalog' },
+  { key: 'fleet', icon: <CarOutlined />, zh: '车辆与车辆组', en: 'Vehicles & groups' },
+  { key: 'integration', icon: <ClusterOutlined />, zh: '配置集成', en: 'Integration' },
+  { key: 'release', icon: <RocketOutlined />, zh: '发布与配置 OTA', en: 'Release & OTA' },
+  { key: 'query', icon: <FileSearchOutlined />, zh: '数据查询', en: 'Data query' },
+  { key: 'org', icon: <ApartmentOutlined />, zh: '组织与工作区', en: 'Organization' },
+  { key: 'accounts', icon: <TeamOutlined />, zh: '账号与授权', en: 'Accounts & grants' },
+  { key: 'audit', icon: <AuditOutlined />, zh: '审计日志', en: 'Audit log' },
 ];
+
+/** What a link to a page the actor cannot open shows, with the workspaces where it would open. */
+function NoAccess({ page }: { page: string }) {
+  const state = useEngineState();
+  const actor = useActor()!;
+  const { L } = useI18n();
+  const { access } = useWorkspace();
+  const elsewhere = access.filter((a) => canOpenPage(actor.grants, page, a.workspaceId));
+  return (
+    <div className="kz-page">
+      <Result
+        status="403"
+        title={L('无权访问此页面', 'No access to this page')}
+        subTitle={
+          elsewhere.length
+            ? L('当前工作区的授权不包含此页面。可以切换到下列工作区打开：', 'Your grants do not open this page in this workspace. It opens in:')
+            : L('当前账号没有打开此页面所需的授权。', 'This account holds no grant that opens this page.')
+        }
+        extra={[
+          ...elsewhere.map((a) => (
+            <Button key={a.workspaceId} onClick={() => setSession({ workspaceId: a.workspaceId })}>
+              {state.workspaces[a.workspaceId]!.name}
+            </Button>
+          )),
+          <Button key="workbench" type="primary" onClick={() => navigate('workbench')}>
+            {L('返回工作台', 'Back to the workbench')}
+          </Button>,
+        ]}
+      />
+    </div>
+  );
+}
 
 export function Shell() {
   const state = useEngineState();
   const actor = useActor()!;
   const { L, B, lang, setLang } = useI18n();
   const { access, workspace, roles } = useWorkspace();
+  const canOpen = useCanOpen();
   const route = useRoute();
   const page = route[0] ?? 'workbench';
 
   const allRoles = new Set(actor.grants.map((g) => g.role));
-  const visibleRoles = new Set<Role>([...roles, ...(allRoles.has('PLATFORM_OPS') ? (['PLATFORM_OPS'] as Role[]) : [])]);
-  const nav = NAV.filter((n) => n.roles.length === 0 || n.roles.some((r) => visibleRoles.has(r)));
+  const nav = NAV.filter((n) => canOpen(n.key));
 
   const path = workspace ? unitPath(state, workspace.orgUnitId) : [];
   const options = (['TEAM', 'PROJECT', 'INTEGRATION'] as const)
@@ -94,7 +119,8 @@ export function Shell() {
     .filter((g) => g.options.length > 0);
 
   let content: ReactNode;
-  if (page === 'features' && route[1]) content = <FeatureDetailPage featureId={route[1]} />;
+  if (!canOpen(page)) content = <NoAccess page={page} />;
+  else if (page === 'features' && route[1]) content = <FeatureDetailPage featureId={route[1]} />;
   else if (page === 'integration') content = <IntegrationPage key={workspace?.id} candidateId={route[1]} />;
   else
     content = {

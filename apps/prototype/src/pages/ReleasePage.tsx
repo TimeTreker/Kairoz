@@ -13,7 +13,7 @@ import { displayName } from '../engine/config.ts';
 import { membersOf, ungroupedVehicles, vehicleGroupsOf } from '../engine/fleet.ts';
 import { answerConfigRequest, cancelOta, createOta, expandOta, otaProblems, otaRollouts, pauseOta, resumeOta, rollbackOta, rollbackProblems } from '../engine/ota.ts';
 import { compareVersions, nextDclVersion, promoteCandidate, releaseConfiguration, releaseFor, releasesOf, testedVersions } from '../engine/release.ts';
-import type { Candidate, Deployment, State, VehicleGroup } from '../engine/types.ts';
+import type { Candidate, Deployment, Release, State, VehicleGroup } from '../engine/types.ts';
 import { useI18n } from '../i18n/i18n.tsx';
 import { issueLabel } from '../i18n/issues.ts';
 import { CONFIG_ANSWER_LABELS, DEPLOYMENT_STATUS_LABELS, TARGET_STATUS_COLORS, TARGET_STATUS_LABELS } from '../i18n/vocab.ts';
@@ -45,7 +45,7 @@ export function ReleasePage({ tab = 'releases' }: { tab?: string }) {
         activeKey={tab}
         onChange={(k) => navigate(`release/${k}`)}
         items={[
-          { key: 'releases', label: L('正式发布', 'Releases'), children: <ReleasesTab modelId={modelId} /> },
+          { key: 'releases', label: L('正式发布', 'Releases'), children: <ReleasesTab modelId={modelId} workspaceId={workspace.id} /> },
           { key: 'ota', label: L('配置 OTA', 'Configuration OTA'), children: projectId ? <OtaTab projectId={projectId} /> : <Alert type="info" showIcon title={L('该车型没有项目工作区。', 'This vehicle model has no project workspace.')} /> },
         ]}
       />
@@ -57,7 +57,7 @@ export function ReleasePage({ tab = 'releases' }: { tab?: string }) {
 // Releases
 // ---------------------------------------------------------------------------
 
-function ReleasesTab({ modelId }: { modelId: string }) {
+function ReleasesTab({ modelId, workspaceId }: { modelId: string; workspaceId: string }) {
   const state = useEngineState();
   const { L } = useI18n();
   const can = useCan();
@@ -69,6 +69,8 @@ function ReleasesTab({ modelId }: { modelId: string }) {
     setExported(file);
     downloadJson(file);
   };
+  // The configuration export is release material: only for release rights where the release was promoted.
+  const canExport = (r: Release) => can('release.promote', { workspaceId: (r.candidateId ? state.candidates[r.candidateId]?.workspaceId : undefined) ?? workspaceId, scope: 'Vehicle' });
   const waiting = Object.values(state.candidates).filter((c) => c.vehicleModelId === modelId && c.status === 'VERIFIED');
   const releases = releasesOf(state, modelId);
 
@@ -135,11 +137,12 @@ function ReleasesTab({ modelId }: { modelId: string }) {
             { title: L('发布', 'Published'), render: (_, r) => `${state.accounts[r.publishedBy]?.displayName} · ${when(r.publishedAt)}` },
             {
               title: '',
-              render: (_, r) => (
-                <Button size="small" onClick={() => exportConfiguration(r.id)}>
-                  {L('导出配置集合', 'Export configuration')}
-                </Button>
-              ),
+              render: (_, r) =>
+                canExport(r) && (
+                  <Button size="small" onClick={() => exportConfiguration(r.id)}>
+                    {L('导出配置集合', 'Export configuration')}
+                  </Button>
+                ),
             },
           ]}
         />
@@ -471,7 +474,7 @@ function RolloutCard({ deployment: d, canManage }: { deployment: Deployment; can
                 </Button>
               </Tooltip>
             )}
-            {d.targets.some((t) => t.status === 'PENDING') && (
+            {d.status === 'PENDING' && d.targets.some((t) => t.status === 'PENDING') && (
               <Button size="small" type="link" onClick={() => navigate('simulator')}>
                 {L('去车辆模拟器回执', 'Answer in simulator')}
               </Button>

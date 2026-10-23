@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
-import { authorize, canReadGroupConfig, grantIssues } from '../src/domain/authz.ts';
+import { authorize, canOpenPage, canReadGroupConfig, grantIssues } from '../src/domain/authz.ts';
 import type { Grant } from '../src/domain/authz.ts';
 import { canonicalJson, digestOf } from '../src/domain/canonical.ts';
 import { diffConfig, emptyConfig, policyIssues } from '../src/domain/config.ts';
@@ -95,6 +95,33 @@ describe('authorize: single complete grant', () => {
   test('platform operations cannot read business configuration', () => {
     const ops = grant({ role: 'PLATFORM_OPS', workspaces: ['*'], envs: ['development', 'testing', 'production'] });
     assert.equal(canReadGroupConfig([ops], { groupId: 'brake', domain: 'Chassis' }), false);
+  });
+});
+
+describe('page access', () => {
+  const ALL = ['development', 'testing', 'production'] as const;
+
+  test('platform pages need platform operations; a business grant only gets "no access"', () => {
+    const dev = [grant({ role: 'BUSINESS_DEV', groups: ['brake'] })];
+    for (const page of ['accounts', 'audit', 'org']) assert.equal(canOpenPage(dev, page, 'team-brake'), false, page);
+    assert.equal(canOpenPage(dev, 'features', 'team-brake'), true);
+    const ops = [grant({ role: 'PLATFORM_OPS', workspaces: ['*'], envs: [...ALL] })];
+    for (const page of ['accounts', 'audit', 'org']) assert.equal(canOpenPage(ops, page, null), true, page);
+    assert.equal(canOpenPage(ops, 'features', 'team-brake'), false, 'running the platform is not reading business work');
+    // Like every platform action, the one grant must hold every environment.
+    const devOnlyOps = [grant({ role: 'PLATFORM_OPS', workspaces: ['*'], envs: ['development'] })];
+    assert.equal(canOpenPage(devOnlyOps, 'accounts', null), false);
+  });
+
+  test('workspace pages need a grant with the page’s role covering the current workspace', () => {
+    const release = [grant({ role: 'CONFIG_RELEASE', workspaces: ['x89-project'], scopes: ['Vehicle'], envs: [...ALL] })];
+    assert.equal(canOpenPage(release, 'release', 'x89-project'), true);
+    assert.equal(canOpenPage(release, 'release', 'x89-integration'), false);
+    assert.equal(canOpenPage(release, 'release', null), false);
+    const resource = [grant({ role: 'VEHICLE_RESOURCE', workspaces: ['*'], scopes: ['Vehicle'], envs: [...ALL] })];
+    assert.equal(canOpenPage(resource, 'fleet', 'x89-project'), true);
+    assert.equal(canOpenPage(resource, 'release', 'x89-project'), false, 'vehicle resources have no release page');
+    assert.equal(canOpenPage(resource, 'workbench', null), true, 'the workbench is open to everyone');
   });
 });
 

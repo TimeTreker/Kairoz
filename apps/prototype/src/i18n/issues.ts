@@ -77,6 +77,12 @@ const PROBLEMS: Pattern[] = [
   [/pinned version does not belong to this data item/, () => '固定的版本不属于该数据项'],
   [/reference is not \(or no longer\) granted/, () => '引用未获批准或已被撤销'],
   [/policy (\S+) captures (\S+), which is not in the merged file list/, ([p, k]) => `策略 ${p} 捕获的 ${k} 不在合并后的文件列表中`],
+  [/policy (\S+) captures no file/, ([p]) => `策略 ${p} 没有捕获任何文件`],
+  [/policy (\S+) has an invalid trigger: (.+) at (\d+)/, ([p, m, at]) => `策略 ${p} 的触发条件无效：${m}（位置 ${at}）`],
+  [
+    /policy (\S+) has a merged capture window of (\d+) s \((\d+) s before \+ (\d+) s after the trigger\), over the (\d+) s limit/,
+    ([p, w, pre, post, max]) => `策略 ${p} 合并后的采集窗口为 ${w} 秒（触发前 ${pre} 秒 + 触发后 ${post} 秒），超过 ${max} 秒上限`,
+  ],
   [/references (.+), which its owner group neither released nor merges here/, ([n]) => `引用的 ${n} 未被归属分组发布，也不在本次合并中`],
   [/references (.+), but the owner’s merged definition differs; re-pin the reference/, ([n]) => `引用的 ${n} 与归属分组合并后的定义不一致，请重新固定引用`],
   [/name is required/, () => '名称必填'],

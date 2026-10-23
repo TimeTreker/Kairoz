@@ -153,6 +153,34 @@ describe('integration', () => {
     assert.equal(s.resources['VEH-031']!.appliedConfigId, candidate.resolvedConfigId);
   });
 
+  test('a merged policy is checked again: windows from two sources may add up past the limit', () => {
+    const { e, feature, vehicleGroup } = setup();
+    const returnRate = feature('steering_return_rate'); // angle_jump: 5 s before, 15 s after
+    const wider = e.run('steering', (c) => config.createFeature(c, { workspaceId: 'team-steering', groupId: 'steering', name: 'angle_lead_in', description: '' }));
+    const eps = Object.keys(e.getState().features[wider]!.draft.files)[0]!;
+    e.run('steering', (c) =>
+      config.putPolicy(c, wider, 'chassis.steering.angle_jump', { name: '转角突变', trigger: 'steering_angle_rate > 300 AND vehicle_speed > 20', captures: [eps], preSeconds: 110, postSeconds: 10 }),
+    );
+    const head = e.run('steering', (c) => config.submitFeature(c, wider, { message: '更长的事前窗口' })).commitId;
+    const d = e.run('steering_tester', (c) => v.dispatchFeature(c, wider, { commitId: head, vehicleGroupIds: [vehicleGroup('转向研发车组')] }));
+    for (const r of ['SIM-022', 'VEH-003']) e.run(null, (c) => sendReceipt(c, d, r, 'APPLIED'));
+    for (const r of ['SIM-022', 'VEH-003']) e.run('steering_tester', (c) => v.recordFeatureTest(c, wider, { commitId: head, resourceId: r, result: 'PASS', summary: 'ok' }));
+    e.run('steering_tester', (c) => v.verifyFeature(c, wider));
+
+    // Each Feature is valid alone (120 s and 20 s); merged field by field the window is 125 s.
+    const plan = e.run('integrator', (c) => integ.previewMerge(c, { workspaceId: 'x89-project', featureIds: [returnRate.id, wider] }));
+    const p = e.getState().mergePlans[plan]!;
+    assert.deepEqual(p.conflicts, []);
+    assert.equal(p.status, 'BLOCKED');
+    assert.deepEqual(p.issues, [
+      'chassis.steering: policy chassis.steering.angle_jump has a merged capture window of 125 s (110 s before + 15 s after the trigger), over the 120 s limit',
+    ]);
+    fails(() => e.run('dcl', (c) => integ.confirmProcessing(c, plan, { note: '' })), 'PLAN_NOT_READY');
+    fails(() => e.run('integrator', (c) => integ.freezeCandidate(c, plan, { label: 'X89-C2' })), 'PLAN_NOT_READY');
+    const alone = e.run('integrator', (c) => integ.previewMerge(c, { workspaceId: 'x89-project', featureIds: [wider] }));
+    assert.equal(e.getState().mergePlans[alone]!.status, 'READY');
+  });
+
   test('conflicting sources block the preview; a changed source invalidates it; cancel restores Verified', () => {
     const { e, feature, vehicleGroup } = setup();
     const vg = vehicleGroup('制动研发车组');

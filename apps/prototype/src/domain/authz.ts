@@ -36,6 +36,7 @@ export const ACTIONS = {
   'workspace.manage': { roles: ['PLATFORM_OPS'], env: 'all' },
   'group.create': { roles: ['PLATFORM_OPS', 'WORKSPACE_ADMIN'], env: 'development' },
   'reference.administer': { roles: ['PLATFORM_OPS'], env: 'all' },
+  'audit.read': { roles: ['PLATFORM_OPS'], env: 'all' },
   // Processing catalog and intake (DCL 工程)
   'processing.manage': { roles: ['DCL_ENGINEER'], env: 'all' },
   'image.register': { roles: ['DCL_ENGINEER', 'VEHICLE_RESOURCE', 'PLATFORM_OPS'], env: 'all' },
@@ -175,6 +176,37 @@ export function canReadGroupConfig(
     if (dimension === 'scopes') return covers(g.scopes, target.domain) || covers(g.scopes, 'Vehicle');
     return false;
   });
+}
+
+type PageAccess = { roles: readonly Role[] } | { actions: readonly Action[] };
+
+/**
+ * Who may open each page: menus follow roles, and a link to a page the actor cannot open shows
+ * "no access". A workspace page needs one grant with a listed role covering the current
+ * workspace; a platform page needs one grant allowing one of its actions. Opening a page allows
+ * no change: every write is still authorized as its own action. Pages not listed (workbench,
+ * guide, prototype tools) are open to every signed-in account.
+ */
+export const PAGE_ACCESS: Readonly<Record<string, PageAccess>> = {
+  features: { roles: ['BUSINESS_DEV', 'BUSINESS_TEST', 'DCL_ENGINEER', 'CONFIG_INTEGRATOR', 'INTEGRATION_TEST', 'CONFIG_RELEASE'] },
+  data: { roles: ['BUSINESS_DEV', 'BUSINESS_TEST', 'DCL_ENGINEER'] },
+  intake: { roles: ['DCL_ENGINEER'] },
+  processing: { roles: ['DCL_ENGINEER', 'BUSINESS_DEV'] },
+  fleet: { roles: ['VEHICLE_RESOURCE', 'WORKSPACE_ADMIN', 'BUSINESS_DEV', 'BUSINESS_TEST', 'INTEGRATION_TEST', 'CONFIG_RELEASE', 'DCL_ENGINEER'] },
+  integration: { roles: ['CONFIG_INTEGRATOR', 'INTEGRATION_TEST', 'DCL_ENGINEER', 'CONFIG_RELEASE'] },
+  release: { roles: ['CONFIG_RELEASE'] },
+  query: { roles: ['BUSINESS_DEV', 'BUSINESS_TEST', 'DCL_ENGINEER', 'CONFIG_INTEGRATOR', 'INTEGRATION_TEST', 'CONFIG_RELEASE'] },
+  org: { actions: ['org.manage', 'workspace.manage'] },
+  accounts: { actions: ['account.manage'] },
+  audit: { actions: ['audit.read'] },
+};
+
+/** Whether the grants open `page` in the given workspace (null: no workspace chosen). */
+export function canOpenPage(grants: readonly Grant[], page: string, workspaceId: string | null): boolean {
+  const access = PAGE_ACCESS[page];
+  if (!access) return true;
+  if ('actions' in access) return access.actions.some((action) => authorize(grants, action, {}).ok);
+  return workspaceId !== null && grants.some((g) => access.roles.includes(g.role) && covers(g.workspaces, workspaceId));
 }
 
 export interface GrantInput {

@@ -8,7 +8,7 @@ import * as integ from '../src/engine/integration.ts';
 import * as ota from '../src/engine/ota.ts';
 import * as rel from '../src/engine/release.ts';
 import { demoState } from '../src/engine/seed.ts';
-import { sendReceipt } from '../src/engine/simulator.ts';
+import { sendReceipt, setAgent, tick } from '../src/engine/simulator.ts';
 import * as v from '../src/engine/validation.ts';
 
 function fails(fn: () => unknown, code: string): DomainError {
@@ -116,6 +116,51 @@ describe('configuration OTA', () => {
     assert.equal(e.getState().deployments[back!]!.rollbackOf, id);
     for (const r of ['VEH-201', 'VEH-202']) e.run(null, (c) => sendReceipt(c, back!, r, 'APPLIED'));
     assert.equal(appliedLabel(e, 'VEH-202'), 'DCL 1.0.0');
+  });
+
+  test('a pause holds every vehicle until an explicit resume; the simulator delivers nothing meanwhile', () => {
+    const { e, cand, production } = verifiedCandidate();
+    const r101 = e.run('release', (c) => rel.promoteCandidate(c, cand, { dclVersion: '1.0.1', vehicleIntegrationVersions: ['1.0'] }));
+    const id = e.run('release', (c) => ota.createOta(c, { releaseId: r101, vehicleGroupIds: [production], firstWave: 'ALL' }));
+    e.run(null, (c) => ['VEH-201', 'VEH-202'].forEach((r) => setAgent(c, r, { autoAck: true })));
+    const status = () => e.getState().deployments[id]!.targets.map((t) => [t.resourceId, t.status, t.attempt]);
+
+    e.run('release', (c) => ota.pauseOta(c, id, '观察首批数据'));
+    assert.equal(e.run(null, (c) => tick(c)), 0, 'automatic vehicles do not answer a paused rollout');
+    assert.deepEqual(status(), [
+      ['VEH-201', 'PENDING', 0],
+      ['VEH-202', 'PENDING', 0],
+    ]);
+    assert.equal(ota.answerConfigRequest(e.getState(), 'VEH-201').reason, 'HELD');
+    // A vehicle that had already started keeps its receipt until the resume; nothing changes meanwhile.
+    fails(() => e.run(null, (c) => sendReceipt(c, id, 'VEH-201', 'APPLIED')), 'OTA_PAUSED');
+    assert.equal(appliedLabel(e, 'VEH-201'), 'DCL 1.0.0');
+
+    e.run('release', (c) => ota.resumeOta(c, id));
+    assert.equal(ota.answerConfigRequest(e.getState(), 'VEH-201').reason, 'TASK');
+    e.run(null, (c) => sendReceipt(c, id, 'VEH-201', 'APPLIED'));
+    e.run(null, (c) => tick(c));
+    assert.equal(e.getState().deployments[id]!.status, 'COMPLETED');
+    assert.equal(appliedLabel(e, 'VEH-202'), 'DCL 1.0.1');
+  });
+
+  test('a failure in an automatic step pauses the rollout before the next vehicle answers', () => {
+    const { e, cand, production } = verifiedCandidate();
+    const r101 = e.run('release', (c) => rel.promoteCandidate(c, cand, { dclVersion: '1.0.1', vehicleIntegrationVersions: ['1.0'] }));
+    const id = e.run('release', (c) => ota.createOta(c, { releaseId: r101, vehicleGroupIds: [production], firstWave: 'ALL' }));
+    e.run(null, (c) => {
+      setAgent(c, 'VEH-201', { autoAck: true, failNext: true });
+      setAgent(c, 'VEH-202', { autoAck: true });
+    });
+    assert.equal(e.run(null, (c) => tick(c)), 1);
+    const d = e.getState().deployments[id]!;
+    assert.equal(d.status, 'PAUSED');
+    assert.deepEqual(d.targets.map((t) => t.status), ['FAILED', 'PENDING']);
+    assert.equal(appliedLabel(e, 'VEH-202'), 'DCL 1.0.0');
+
+    e.run('release', (c) => ota.cancelOta(c, id, '停止本次 OTA'));
+    assert.equal(e.run(null, (c) => tick(c)), 0, 'a cancelled rollout is not delivered either');
+    fails(() => e.run(null, (c) => sendReceipt(c, id, 'VEH-202', 'APPLIED')), 'TARGET_NOT_PENDING');
   });
 
   test('every vehicle is checked against the release: software, newest match, rollback target', () => {

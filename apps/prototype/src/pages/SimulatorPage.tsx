@@ -1,7 +1,7 @@
 // The vehicle simulator: plays the vehicles and simulators. It is a prototype tool, clearly
 // separate from the product's role pages, which never fabricate results themselves.
 
-import { App, Alert, Button, Card, Checkbox, Select, Space, Switch, Table, Tag, Typography } from 'antd';
+import { App, Alert, Button, Card, Checkbox, Select, Space, Switch, Table, Tag, Tooltip, Typography } from 'antd';
 import { useEffect, useState } from 'react';
 import { useErrorText } from '../app/hooks.ts';
 import { engine, useEngineState } from '../app/store.ts';
@@ -90,6 +90,13 @@ export function SimulatorPage() {
                   render: (_, p) => {
                     const vehicle = state.resources[p.target.resourceId]!;
                     const online = vehicle.agent.online && vehicle.instance !== 'STOPPED';
+                    if (p.held) {
+                      return (
+                        <Tooltip title={L('暂停期间车辆保持已确认的配置；配置发布恢复 OTA 后再回执。', 'While paused the vehicle keeps its confirmed configuration; it reports once Release resumes the rollout.')}>
+                          <Tag color="orange">{L('OTA 已暂停，恢复后回执', 'Rollout paused; receipt after resume')}</Tag>
+                        </Tooltip>
+                      );
+                    }
                     return (
                       <Space>
                         <Button size="small" type="primary" disabled={!online} onClick={() => system((c) => sendReceipt(c, p.deployment.id, p.target.resourceId, 'APPLIED'), L('车辆已回执：应用成功', 'Receipt sent: applied'))}>

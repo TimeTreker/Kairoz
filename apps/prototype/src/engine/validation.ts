@@ -304,6 +304,9 @@ export function acceptReceipt(
   if (vehicle.instance === 'STOPPED') throw rule('SIMULATION_STOPPED', `${vehicle.id} is stopped and cannot apply configurations`);
   if (input.attempt !== t.attempt) throw rule('STALE_ATTEMPT', `receipt for attempt ${input.attempt}; the current attempt is ${t.attempt}`);
   if (t.status !== 'PENDING') throw rule('TARGET_NOT_PENDING', 'the target is not waiting for a receipt');
+  // A pause holds every vehicle at its confirmed configuration until an explicit resume. A vehicle
+  // that had already started keeps its receipt and sends it again after the resume.
+  if (d.status === 'PAUSED') throw rule('OTA_PAUSED', 'the rollout is paused; the vehicle reports again after it is resumed');
   ctx.s.receipts.push({ id: newId('rx'), deploymentId: d.id, resourceId: t.resourceId, attempt: t.attempt, result: input.result, error: input.error ?? null, receivedAt: ctx.now });
   t.status = input.result;
   t.error = input.result === 'FAILED' ? (input.error ?? 'apply failed') : null;
