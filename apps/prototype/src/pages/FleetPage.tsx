@@ -5,6 +5,8 @@ import { useActor, useCan, useRun, useWorkspace } from '../app/hooks.ts';
 import { engine, useEngineState } from '../app/store.ts';
 import { ClientReportDrawer } from '../components/client-report.tsx';
 import { PersonalSims } from '../components/personal-sim.tsx';
+import { SimSoftwareDrawer, isDerivedImage } from '../components/sim-software.tsx';
+import { catalogImages } from '../engine/sim-software.ts';
 import { EnvTag, Hint, LabelTag, Mono, PageHeader, ShortId, configName, when } from '../components/common.tsx';
 import { ENVS, SCOPES } from '../domain/vocabulary.ts';
 import {
@@ -86,8 +88,11 @@ function VehicleTable({ vehicles, extra }: { vehicles: Resource[]; extra?: (r: R
               <Tooltip title={r.controllers.length ? r.controllers.map((c) => `${c.name} ${c.version}`).join(' · ') : r.integrationSource}>
                 <span>
                   {r.vehicleModelId} {r.integrationVersion}
+                  {isDerivedImage(state, r.imageId) && <Tag color="purple" style={{ marginLeft: 4 }}>{L('派生镜像', 'Derived image')}</Tag>}
                 </span>
               </Tooltip>
+            ) : isDerivedImage(state, r.imageId) ? (
+              <Tag color="purple">{L('派生镜像', 'Derived image')}</Tag>
             ) : (
               <Typography.Text type="secondary">{L('尚未获取', 'Unknown')}</Typography.Text>
             ),
@@ -130,6 +135,7 @@ function WorkspaceVehicles() {
   const [reserving, setReserving] = useState<Resource | null>(null);
   const [purpose, setPurpose] = useState('');
   const [clientOf, setClientOf] = useState<string | null>(null);
+  const [imageOf, setImageOf] = useState<string | null>(null);
   const [form] = Form.useForm();
   if (!workspace) return null;
   const vehicles = workspaceVehicles(state, workspace.id);
@@ -137,7 +143,7 @@ function WorkspaceVehicles() {
   const canSim = ENVS.some((env) => can('simulation.manage', { workspaceId: workspace.id, env }));
   const manages = (r: Resource) => can('workspace.resources', { workspaceId: workspace.id, scope: r.pool, env: r.env });
   const runsSim = (r: Resource) => r.type === 'SIMULATION' && can('simulation.manage', { workspaceId: r.homeWorkspaceId ?? workspace.id, scope: r.pool, env: r.env });
-  const images = Object.values(state.images).filter((i) => i.vehicleModelId === workspace.vehicleModelId);
+  const images = catalogImages(state, workspace.vehicleModelId);
   return (
     <Card
       extra={
@@ -180,6 +186,11 @@ function WorkspaceVehicles() {
                   {L('预约', 'Reserve')}
                 </Button>
               ))}
+            {runsSim(r) && (
+              <Button type="link" size="small" onClick={() => setImageOf(r.id)}>
+                {L('运行镜像', 'Running image')}
+              </Button>
+            )}
             {can('clientReport.read', { workspaceId: workspace.id, env: r.env }) && (
               <Button type="link" size="small" onClick={() => setClientOf(r.id)}>
                 {L('客户端状态', 'Client state')}
@@ -194,6 +205,7 @@ function WorkspaceVehicles() {
         )}
       />
       <ClientReportDrawer resourceId={clientOf} workspaceId={workspace.id} onClose={() => setClientOf(null)} />
+      <SimSoftwareDrawer resourceId={imageOf} onClose={() => setImageOf(null)} />
       <Modal
         open={reserving !== null}
         title={`${L('预约车辆', 'Reserve vehicle')} · ${reserving?.id}`}
@@ -593,6 +605,7 @@ function Registry() {
   const [reporting, setReporting] = useState<Resource | null>(null);
   const [keying, setKeying] = useState<Resource | null>(null);
   const [clientOf, setClientOf] = useState<string | null>(null);
+  const [imageOf, setImageOf] = useState<string | null>(null);
   const [cf] = Form.useForm();
   const [kf] = Form.useForm();
   const [form] = Form.useForm();
@@ -625,6 +638,11 @@ function Registry() {
                 {L('域控状态', 'Controllers')}
               </Button>
             )}
+            {r.type === 'SIMULATION' && (
+              <Button type="link" size="small" onClick={() => setImageOf(r.id)}>
+                {L('运行镜像', 'Running image')}
+              </Button>
+            )}
             <Button type="link" size="small" onClick={() => (sf.setFieldsValue({ status: r.status, reason: '' }), setStatusOf(r))}>
               {L('状态', 'Status')}
             </Button>
@@ -641,6 +659,7 @@ function Registry() {
         )}
       />
       <ClientReportDrawer resourceId={clientOf} workspaceId={null} onClose={() => setClientOf(null)} />
+      <SimSoftwareDrawer resourceId={imageOf} onClose={() => setImageOf(null)} />
       <Modal
         open={keying !== null}
         title={L(`登记设备密钥 · ${keying?.id ?? ''}`, `Register device key · ${keying?.id ?? ''}`)}

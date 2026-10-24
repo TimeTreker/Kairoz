@@ -29,7 +29,9 @@ import { baseTarget, vehicleBase } from '../engine/validation.ts';
 import { useI18n } from '../i18n/i18n.tsx';
 import { issueLabel } from '../i18n/issues.ts';
 import { CLIENT_ITEM_STATUS_LABELS, setName } from '../i18n/vocab.ts';
+import { catalogImages } from '../engine/sim-software.ts';
 import { Hint, Mono, configName, when } from './common.tsx';
+import { SimSoftware } from './sim-software.tsx';
 
 const RESULT_COLORS: Record<string, string> = { PASS: 'green', FAIL: 'red' };
 
@@ -61,7 +63,7 @@ export function PersonalSims({ workspaceId }: { workspaceId: string }) {
   const all = personalSimsOf(state, actor.username, workspaceId);
   const mine = showReleased ? all : all.filter((r) => r.status !== 'RETIRED');
   const active = activePersonalCount(state, actor.username, workspaceId);
-  const images = Object.values(state.images).filter((i) => i.vehicleModelId === ws.vehicleModelId);
+  const images = catalogImages(state, ws.vehicleModelId);
   const [form] = Form.useForm<{ groupId: string; imageId: string; displayName?: string }>();
   useEffect(() => {
     if (creating) form.setFieldsValue({ groupId: groups[0]?.id, imageId: undefined, displayName: '' });
@@ -291,6 +293,8 @@ function PersonalSimDrawer({ id, onClose }: { id: string | null; onClose: () => 
           )}
         </Card>
 
+        <SimSoftware resourceId={r.id} />
+
         <Card size="small" title={L('试触发（仅本人可见）', 'Trial captures (yours only)')}>
           <Hint>
             {L(
@@ -333,6 +337,7 @@ function PersonalSimDrawer({ id, onClose }: { id: string | null; onClose: () => 
               { title: L('结果', 'Result'), render: (_, t) => <Tag color={RESULT_COLORS[t.result]}>{t.result}</Tag> },
               { title: L('说明', 'Note'), dataIndex: 'note' },
               { title: L('试触发', 'Trials'), render: (_, t) => t.captureIds.length },
+              { title: L('镜像', 'Image'), render: (_, t) => (t.imageId === r.imageId ? <Mono>{t.imageId}</Mono> : <Tag>{L('镜像已变化', 'Image changed since')}</Tag>) },
             ]}
           />
         </Card>
@@ -373,6 +378,7 @@ export function PersonalTestsCard({ feature }: { feature: Feature }) {
             render: (_, t) => (
               <Space size={4} wrap>
                 {t.draftCurrent ? <Tag color="green">{L('与当前草稿一致', 'Matches the draft')}</Tag> : <Tag>{L('草稿已变化', 'Draft changed since')}</Tag>}
+                {!t.imageCurrent && <Tag>{L('镜像已变化', 'Image changed since')}</Tag>}
                 {t.matchingCommitId && (
                   <Tag color="blue">
                     {L('与提交一致', 'Matches commit')} r{String(state.commits[t.matchingCommitId]!.sequence).padStart(3, '0')}

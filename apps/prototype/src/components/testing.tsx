@@ -41,6 +41,14 @@ export function TargetsTable({ status, action }: { status: TargetStatus[]; actio
                   {t.latest.summary} · {state.accounts[t.latest.tester]?.displayName} · {when(t.latest.createdAt)}
                 </Typography.Text>
               </Space>
+            ) : t.stale ? (
+              // A result from an earlier image is history: the vehicle runs another image now.
+              <Space orientation="vertical" size={0}>
+                <Tag color="gold">{L('镜像已变化，需重新测试', 'Image changed; test again')}</Tag>
+                <Typography.Text type="secondary">
+                  {L('之前', 'Earlier')}: {t.stale.result} · {t.stale.imageId} · {when(t.stale.createdAt)}
+                </Typography.Text>
+              </Space>
             ) : (
               '—'
             ),

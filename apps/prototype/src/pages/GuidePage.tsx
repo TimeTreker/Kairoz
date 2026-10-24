@@ -51,6 +51,18 @@ export const SCENARIOS: Scenario[] = [
     ],
   },
   {
+    key: 'sim-software',
+    titleZh: '仿真车软件：构建、部署与回滚',
+    titleEn: 'Simulation software: build, deploy, roll back',
+    steps: [
+      { account: 'business', workspace: 'team-brake', page: 'fleet', zh: '在“我的研发仿真”打开一个个人仿真，在“运行镜像”构建制动模块：https://github.com/example/brake，main', en: 'Open a personal simulation under My simulations; under Running image build the brake module from https://github.com/example/brake, main', expectZh: '构建待处理；运行镜像不变', expectEn: 'The build waits; the running image is unchanged' },
+      { account: 'business', page: 'simulator', zh: '在原型工具 → 车辆模拟器“构建成功”', en: 'In Prototype → Vehicle simulator, Build succeeds', expectZh: '生成派生镜像与 mock-commit', expectEn: 'A derived image with a mock commit' },
+      { account: 'business', workspace: 'team-brake', page: 'fleet', zh: '停止实例，部署该构建；在模拟器“部署成功”', en: 'Stop the instance, deploy the build; in the simulator, Deployment succeeds', expectZh: '运行派生镜像，来源整车版本不变；DCL 已生效配置清空，需重新下发草稿', expectEn: 'It runs the derived image with the same source version; the applied DCL configuration is cleared, so send the draft again' },
+      { account: 'business', workspace: 'team-brake', page: 'fleet', zh: '停止实例，回滚；在模拟器“部署成功”', en: 'Stop the instance, roll back; in the simulator, Deployment succeeds', expectZh: '回到之前的镜像；再次回滚被拒绝', expectEn: 'The previous image is back; a second rollback is refused' },
+      { account: 'workspace_manager', workspace: 'team-brake', page: 'fleet', zh: '在“工作区车辆”对 SIM-021 打开“运行镜像”，停止后切换到 x89-1.1-sim', en: 'Under Workspace vehicles open Running image on SIM-021; stop it and switch to x89-1.1-sim', expectZh: '仿真服务确认后软件为 1.1；车辆组需按新软件版本重新下发', expectEn: 'Once the provider confirms, it runs 1.1; the group must publish again for the new software' },
+    ],
+  },
+  {
     key: 'intake',
     titleZh: 'DCL 接入 · 敏感文件审核',
     titleEn: 'DCL intake · sensitive review',

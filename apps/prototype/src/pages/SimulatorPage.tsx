@@ -10,13 +10,92 @@ import { CompanyDirectoryCard } from '../components/company-directory.tsx';
 import type { Ctx } from '../engine/engine.ts';
 import { advanceEvent, assessEvent, capturablePolicies, captureEvent, deliverCallback, receiveChunk, setFailParse } from '../engine/events.ts';
 import { personalCapturablePolicies, trialCapture } from '../engine/personal-sim.ts';
+import { answerImageChange, completeBuild } from '../engine/sim-software.ts';
 import type { Quality, TrainingUse } from '../engine/types.ts';
 import { deviceSummary, flushOutbox, pendingForVehicles, reportNow, restartClient, sendFault, sendReceipt, setAgent, tick, upgradeClient } from '../engine/simulator.ts';
 import type { ReportFault } from '../engine/simulator.ts';
 import { useI18n } from '../i18n/i18n.tsx';
-import { ERROR_LABELS, EVENT_STATUS_COLORS, EVENT_STATUS_LABELS, QUALITY_LABELS, REPORT_RESULT_LABELS, RESOURCE_TYPE_LABELS, TRAINING_USE_LABELS } from '../i18n/vocab.ts';
+import { ERROR_LABELS, EVENT_STATUS_COLORS, IMAGE_CHANGE_KIND_LABELS, EVENT_STATUS_LABELS, QUALITY_LABELS, REPORT_RESULT_LABELS, RESOURCE_TYPE_LABELS, TRAINING_USE_LABELS } from '../i18n/vocab.ts';
 
 let autoTimer: ReturnType<typeof setInterval> | undefined;
+
+/** The mock CI and simulation provider: answers module builds and image changes. */
+function SoftwareProviderCard({ system }: { system: <R>(op: (c: Ctx) => R, ok?: string) => R | undefined }) {
+  const state = useEngineState();
+  const { L, B } = useI18n();
+  const builds = Object.values(state.softwareBuilds)
+    .filter((b) => b.status === 'REQUESTED')
+    .sort((a, b) => a.seq - b.seq);
+  const changes = Object.values(state.imageChanges)
+    .filter((c) => c.status === 'PENDING')
+    .sort((a, b) => a.seq - b.seq);
+  return (
+    <Card title={`${L('仿真软件：构建与部署（模拟 CI / 仿真服务）', 'Simulation software: builds and deployments (mock CI / simulation provider)')} · ${builds.length + changes.length}`}>
+      <Typography.Paragraph type="secondary">
+        {L(
+          '这里扮演构建服务与仿真服务：不下载源码、不执行命令。构建成功生成派生镜像；部署、切换与回滚由仿真服务确认（健康检查），失败时仿真保留原镜像和原配置。',
+          'This plays the build provider and the simulation provider: no source is downloaded and no command runs. A successful build produces a derived image; deployments, switches and rollbacks are confirmed by the simulation provider (health check), and a failure keeps the previous image and configuration.',
+        )}
+      </Typography.Paragraph>
+      {builds.length === 0 && changes.length === 0 && <Alert type="info" showIcon title={L('没有待处理的构建或镜像变更。', 'No builds or image changes are waiting.')} />}
+      {builds.length > 0 && (
+        <Table
+          rowKey="id"
+          size="small"
+          pagination={false}
+          dataSource={builds}
+          scroll={{ x: 'max-content' }}
+          columns={[
+            { title: L('仿真', 'Simulation'), render: (_, b) => <Mono>{b.resourceId}</Mono> },
+            { title: L('构建', 'Build'), render: (_, b) => <Mono>{`${b.module} · ${b.repository.replace('https://github.com/', '')} @ ${b.requestedRef}`}</Mono> },
+            { title: L('基础镜像', 'Base image'), render: (_, b) => <Mono>{b.baseImageId}</Mono> },
+            {
+              title: '',
+              render: (_, b) => (
+                <Space size={0}>
+                  <Button type="link" size="small" onClick={() => system((c) => completeBuild(c, b.id, 'PASS'), L('构建成功，已生成派生镜像', 'Built; derived image created'))}>
+                    {L('构建成功', 'Build succeeds')}
+                  </Button>
+                  <Button type="link" size="small" danger onClick={() => system((c) => completeBuild(c, b.id, 'FAIL'), L('构建失败', 'Build failed'))}>
+                    {L('构建失败', 'Build fails')}
+                  </Button>
+                </Space>
+              ),
+            },
+          ]}
+        />
+      )}
+      {changes.length > 0 && (
+        <Table
+          rowKey="id"
+          size="small"
+          pagination={false}
+          dataSource={changes}
+          scroll={{ x: 'max-content' }}
+          style={{ marginTop: builds.length ? 12 : 0 }}
+          columns={[
+            { title: L('仿真', 'Simulation'), render: (_, c) => <Mono>{c.resourceId}</Mono> },
+            { title: L('变更', 'Change'), render: (_, c) => B(IMAGE_CHANGE_KIND_LABELS[c.kind]) },
+            { title: L('镜像', 'Image'), render: (_, c) => <Mono>{`${c.fromImageId ?? '—'} → ${c.toImageId}`}</Mono> },
+            {
+              title: '',
+              render: (_, c) => (
+                <Space size={0}>
+                  <Button type="link" size="small" onClick={() => system((x) => answerImageChange(x, c.id, 'APPLIED'), L('部署成功，镜像已生效', 'Deployed; the image is running'))}>
+                    {L('部署成功', 'Deployment succeeds')}
+                  </Button>
+                  <Button type="link" size="small" danger onClick={() => system((x) => answerImageChange(x, c.id, 'FAILED'), L('部署失败，保留原镜像', 'Deployment failed; the previous image stays'))}>
+                    {L('部署失败', 'Deployment fails')}
+                  </Button>
+                </Space>
+              ),
+            },
+          ]}
+        />
+      )}
+    </Card>
+  );
+}
 
 export function SimulatorPage() {
   const state = useEngineState();
@@ -120,6 +199,7 @@ export function SimulatorPage() {
             />
           )}
         </Card>
+        <SoftwareProviderCard system={system} />
         <Card title={L('车端 Agent', 'On-vehicle agents')}>
           <Table
             rowKey="id"

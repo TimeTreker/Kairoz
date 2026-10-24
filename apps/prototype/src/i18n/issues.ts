@@ -19,6 +19,7 @@ const PROBLEMS: Pattern[] = [
   [/a partial software update left controllers inconsistent \((.*)\); finish or roll back the software OTA first/, ([c]) => `软件部分升级使域控状态不一致（${c}），请先完成或回滚软件 OTA`],
   [/runs another image since its test; test it again/, () => '测试后已更换镜像，需重新测试'],
   [/waiting for an image change/, () => '正在等待镜像变更'],
+  [/simulated health check failure/, () => '模拟的健康检查失败'],
   [/runs a derived development image/, () => '运行研发派生镜像'],
   [/personal simulation of (\S+); only its owner uses it/, ([u]) => `${u} 的个人仿真，只能由本人使用`],
   [/no policy set applies to software (\S+); choose an explicit base/, ([v]) => `没有适用于软件 ${v} 的策略集；请指定显式基线`],
