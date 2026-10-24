@@ -16,6 +16,7 @@ import * as orgDirectory from './org-directory.ts';
 import * as personalSim from './personal-sim.ts';
 import * as simSoftware from './sim-software.ts';
 import * as softwareChange from './software-change.ts';
+import * as notifications from './notifications.ts';
 import * as policySets from './policy-sets.ts';
 import * as startup from './startup.ts';
 import { GapError, NotApplicableError, World } from './world.ts';
@@ -56,6 +57,7 @@ const suites = [
   { id: 'personal-simulation', mod: personalSim },
   { id: 'sim-software', mod: simSoftware },
   { id: 'software-change', mod: softwareChange },
+  { id: 'notifications', mod: notifications },
 ] as const;
 
 const report: { script: string; name: string; rows: Row[] }[] = [];

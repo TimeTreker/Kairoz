@@ -1,10 +1,10 @@
 # 验收结果（引擎层逐幕回放）
 
-运行时间：2026-10-24T07:34:08.939Z。由 `npm run acceptance` 生成；每次重新执行，不沿用历史结果。
+运行时间：2026-10-24T08:21:58.491Z。由 `npm run acceptance` 生成；每次重新执行，不沿用历史结果。
 
 状态：PASS 通过；FAIL 失败；GAP 设计要求尚未实现；BLOCKED 前置幕未通过；NOT_APPLICABLE 浏览器原型不适用（如服务端部署）。
 
-合计：PASS 144 · FAIL 0 · GAP 0 · BLOCKED 0 · NOT_APPLICABLE 3 · NOT_WRITTEN 0
+合计：PASS 150 · FAIL 0 · GAP 0 · BLOCKED 0 · NOT_APPLICABLE 3 · NOT_WRITTEN 0
 
 ## 从零启动 · 角色协作
 
@@ -178,6 +178,17 @@
 | VC05 C：新软件对应另一个策略集，本组内容未变——重新下发 | dcl、release；workspace_manager；车辆模拟器；brake_tester | PASS |  |
 | VC06 D：新基线改了本组内容——在新基线上新建 Feature | 车辆模拟器；steering / 吴泽宇 | PASS |  |
 | N01 谁会收到、谁不会 | steering；release；车辆模拟器 | PASS |  |
+
+## 通知中心 · 授权投影、已读与失效
+
+| 幕 | 执行人 | 状态 | 说明 |
+|---|---|---|---|
+| NC01 通知只来自授权工作区与本组 | business、steering、brake_tester | PASS |  |
+| NC02 状态变化产生新的提醒 | brake_tester；business | PASS |  |
+| NC03 单条已读：按账号和工作区隔离，不改变任何事务 | business；brake_tester | PASS |  |
+| NC04 全部已读与未读筛选 | business | PASS |  |
+| NC05 警告类事项排在前面 | dcl；adc_parking；workspace_manager；brake_tester | PASS |  |
+| NC06 失效通知不能打开 | workspace_manager；brake_tester | PASS |  |
 
 ## 反向用例 T-N01–T-N24
 

@@ -2559,6 +2559,125 @@ export const SCRIPTS: Script[] = [
         "fail": "仿真换软件请使用“运行镜像”。"
       }
     ]
+  },
+  {
+    "id": "notifications",
+    "name": "通知中心 · 授权投影、已读与失效",
+    "start": "demo",
+    "scenes": [
+      {
+        "id": "NC01",
+        "title": "通知只来自授权工作区与本组",
+        "actor": "business、steering、brake_tester",
+        "accounts": [
+          "business",
+          "steering",
+          "brake_tester"
+        ],
+        "workspace": "team-brake",
+        "page": "顶栏 → 通知中心",
+        "pre": "演示数据。",
+        "steps": [
+          "以 business 登录（制动团队工作区）：顶栏铃铛显示未读 3；展开只有制动的事项：guided_brake · DCL Ready、brake_monitor · 已验证、chassis.steering 申请引用本组文件。",
+          "以 steering 登录（转向团队工作区）：只有 steering_return_rate · 已验证，看不到制动组的事项。",
+          "以 brake_tester 登录：只有“guided_brake 可下发验证”。"
+        ],
+        "done": "每个账号只看到本工作区、本组授权范围内的当前事项。",
+        "fail": "没有事项时显示“当前没有事项”，不生成虚构通知。"
+      },
+      {
+        "id": "NC02",
+        "title": "状态变化产生新的提醒",
+        "actor": "brake_tester；business",
+        "accounts": [
+          "brake_tester",
+          "business"
+        ],
+        "workspace": "team-brake",
+        "page": "研发 Feature → 下发与测试；通知中心",
+        "pre": "NC01 完成。",
+        "steps": [
+          "brake_tester 把 guided_brake 按车辆组下发到制动研发车组，模拟器回执。",
+          "business 的通知中心：原“guided_brake · DCL Ready”消失，出现未读的“guided_brake · 测试中”。"
+        ],
+        "done": "事项标识包含对象与状态：状态一变，就是一条新的未读提醒。",
+        "fail": "通知不是历史记录；过去的状态在 Feature 历史中追溯。"
+      },
+      {
+        "id": "NC03",
+        "title": "单条已读：按账号和工作区隔离，不改变任何事务",
+        "actor": "business；brake_tester",
+        "accounts": [
+          "business",
+          "brake_tester"
+        ],
+        "workspace": "team-brake",
+        "page": "通知中心",
+        "pre": "NC02 完成。",
+        "steps": [
+          "business 在“chassis.steering 申请引用本组文件”上点“标记已读”：未读数减一；刷新页面后仍为已读。",
+          "以 brake_tester 登录：其未读数不变。",
+          "引用申请仍待本组决定；guided_brake 阶段不变。"
+        ],
+        "done": "已读只是本账号在本工作区的标记。",
+        "fail": "已读不等于已处理，仍需到对应页面完成事务。"
+      },
+      {
+        "id": "NC04",
+        "title": "全部已读与未读筛选",
+        "actor": "business",
+        "accounts": [
+          "business"
+        ],
+        "workspace": "team-brake",
+        "page": "通知中心 → 查看全部",
+        "pre": "NC03 完成。",
+        "steps": [
+          "展开铃铛点“全部已读”：未读数为 0。",
+          "“查看全部”进入通知中心页面：“未读”筛选显示“没有未读事项”；“全部”仍列出各项并标注已读。"
+        ],
+        "done": "全部已读与筛选只改变本账号的标记。",
+        "fail": "类别筛选只影响显示。"
+      },
+      {
+        "id": "NC05",
+        "title": "警告类事项排在前面",
+        "actor": "dcl；adc_parking；workspace_manager；brake_tester",
+        "accounts": [
+          "dcl",
+          "adc_parking",
+          "workspace_manager",
+          "brake_tester"
+        ],
+        "workspace": null,
+        "page": "DCL 接入队列；通知中心；研发 Feature → 下发与测试",
+        "pre": "NC04 完成。",
+        "steps": [
+          "dcl 退回 parking_camera，原因“视频分辨率说明不完整”：adc_parking 通知中心第一条为“parking_camera 需要修改”及原因。",
+          "workspace_manager 把制动研发车组设为需审批；brake_tester 为 guided_brake 申请团队测试：workspace_manager 收到“guided_brake 的团队测试申请待审批”（警告），点击打开车辆组页面。"
+        ],
+        "done": "需要动作的事项以警告排在前面，点击直达对象。",
+        "fail": "只有能处理的人收到对应事项。"
+      },
+      {
+        "id": "NC06",
+        "title": "失效通知不能打开",
+        "actor": "workspace_manager；brake_tester",
+        "accounts": [
+          "workspace_manager",
+          "brake_tester"
+        ],
+        "workspace": "team-brake",
+        "page": "通知中心；车辆与车辆组",
+        "pre": "NC05 完成。",
+        "steps": [
+          "workspace_manager 批准该申请：待审批事项随即消失，其他标签页的通知列表也同步更新。点击时会重新计算可见事项，已失效的通知提示“该通知已失效：状态已变化或已无权限，不能打开”而不跳转（由引擎回放核对）。",
+          "brake_tester 收到“guided_brake 的团队测试申请已批准”。"
+        ],
+        "done": "点击时重新计算可见事项，过期或无权的通知不能跳转。",
+        "fail": "按通知操作前以对象页面的当前状态为准。"
+      }
+    ]
   }
 ];
 

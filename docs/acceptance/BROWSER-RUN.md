@@ -2,7 +2,7 @@
 
 记录号 KZ-ACC-20261021045306，2026-10-21 在浏览器原型（`npm run dev`）中按剧本逐幕操作，每幕以剧本中的账号登录、只用页面完成动作，结果记在“原型工具 → 流程验收（逐幕）”面板。车辆回执、事件和外部服务由“车辆模拟器”扮演，剧本里的终端命令（mock_receipt.mjs、curl）也由它代替。面板记录是执行人的陈述，没有签名；引擎层的自动重放见 [RESULTS.md](RESULTS.md)。
 
-范围：首次 OTA 全部 18 幕与 X01–X03 三条支线（从干净安装开始），数据使用 U01–U02（演示数据）；2026-10-21 至 22 日补做从零启动 41 幕（另一次干净安装）与反向用例 T-N01–T-N24（在从零启动结束后的数据上）。这两部分的结果只记在本文件和操作手册中，没有录入“流程验收（逐幕）”面板。2026-10-23 新增两套剧本并在浏览器中逐幕操作（演示数据）：客户端状态上报 R01–R05 与子系统集成 S01–S08、N01–N04。2026-10-24 又新增两套剧本并逐幕操作（演示数据）：DCL 策略集与整车软件版本 P01–P09、N01，公司目录与组织授权 O01–O06；随后新增个人研发仿真 PS01–PS09、N01，并在子系统集成 S01 补上个人仿真自测；再新增仿真车软件 SW01–SW08、N01（模块构建、部署、切换与回滚），以及整车软件版本变化 VC01–VC06、N01（通知、两层检查与四种处理）。
+范围：首次 OTA 全部 18 幕与 X01–X03 三条支线（从干净安装开始），数据使用 U01–U02（演示数据）；2026-10-21 至 22 日补做从零启动 41 幕（另一次干净安装）与反向用例 T-N01–T-N24（在从零启动结束后的数据上）。这两部分的结果只记在本文件和操作手册中，没有录入“流程验收（逐幕）”面板。2026-10-23 新增两套剧本并在浏览器中逐幕操作（演示数据）：客户端状态上报 R01–R05 与子系统集成 S01–S08、N01–N04。2026-10-24 又新增两套剧本并逐幕操作（演示数据）：DCL 策略集与整车软件版本 P01–P09、N01，公司目录与组织授权 O01–O06；随后新增个人研发仿真 PS01–PS09、N01，并在子系统集成 S01 补上个人仿真自测；再新增仿真车软件 SW01–SW08、N01（模块构建、部署、切换与回滚），以及整车软件版本变化 VC01–VC06、N01（通知、两层检查与四种处理），通知中心 NC01–NC06。
 
 | 剧本 | 幕 | PASS | FAIL | 不适用 |
 |---|---|---|---|---|
@@ -17,6 +17,7 @@
 | 个人研发仿真 | PS01–PS09、N01 | 10 | 0 | 0 |
 | 仿真车软件 | SW01–SW08、N01 | 9 | 0 | 0 |
 | 整车软件版本变化 | VC01–VC06、N01 | 7 | 0 | 0 |
+| 通知中心 | NC01–NC06 | 6 | 0 | 0 |
 
 U02 首次重放为 FAIL（导出清单没有 MOCK 标识、训练查询没有车型筛选），修复后重放通过；两次结果都留在面板历史中。
 
@@ -225,6 +226,17 @@ U02 首次重放为 FAIL（导出清单没有 MOCK 标识、训练查询没有�
 | VC05 C：重新下发 | dcl、release；workspace_manager；brake_tester | PASS | dcl 在 1.0.0 的 angle_jump 上“紧急停用”：“已提交，等待另一名配置发布批准”；release“批准”：“已发布紧急策略集；用配置 OTA 下发到量产车”，出现 1.0.1。车辆组改回“跟随每辆车的软件版本”：“已恢复按车辆软件取基线”。VEH-001 刷写 1.1 并上报：抽屉“1.3 → 1.1 · 基线已变化，需重新下发”，“车上配置的基线：策略集 1.0.0 → 新软件对应的基线：策略集 1.0.1”，“有变化的业务分组：chassis.steering”，文件与策略都可用。重新下发 r002、回执 2：“无需修改”，基线 1.0.1 → 1.0.1；brake_tester“确认”。 |
 | VC06 D：在新基线上新建 Feature | steering | PASS | VEH-003 刷写 1.1 并上报：抽屉“基线改了本组内容，需在新基线上新建 Feature”，基线 1.0.0 → 1.0.1，变化分组 chassis.steering；“本 Feature 相对基线的修改”：+ chassis.steering.return_rate、~ chassis.steering.angle_jump: postSeconds。“在新基线上新建 Feature”对话框“基线：策略集 1.0.1”，名称预填 steering_return_rate_v2：“已在新基线上新建 Feature”，跳到新 Feature；其草稿没有策略（angle_jump 已停用）。“确认”。 |
 | N01 谁会收到 | release、steering；车辆模拟器 | PASS | VEH-201（量产）刷写 1.1 并上报：记录“1.0 → 1.1”，release 与 steering 的工作台都没有“车辆软件已变化”。SIM-021 的“更多”菜单没有“模拟整车软件 OTA”。steering 确认制动车辆变化的拒绝由引擎重放执行。 |
+
+## 通知中心 · 授权投影、已读与失效（演示数据）
+
+| 幕 | 执行人 | 结果 | 证据与说明 |
+|---|---|---|---|
+| NC01 只来自授权工作区与本组 | business、steering、brake_tester | PASS | business（制动团队工作区）铃铛未读 3：“chassis.steering 申请引用本组文件”“brake_monitor · 已验证”“guided_brake · DCL Ready”。steering（转向团队工作区）未读 1：“steering_return_rate · 已验证”。brake_tester 未读 1：“guided_brake 可下发验证”。 |
+| NC02 状态变化产生新提醒 | brake_tester；business | PASS | brake_tester 按车辆组下发 guided_brake 并回执 2；business 列表：“guided_brake · 测试中”在前，原“DCL Ready”一条消失，未读 3。 |
+| NC03 单条已读与隔离 | business；brake_tester | PASS | “chassis.steering 申请引用本组文件”点“标记已读”：未读 2；刷新页面后仍为 2。平台状态中只有 business · team-brake 一条已读记录；引用申请仍为待决定；brake_tester 未读仍为 1。 |
+| NC04 全部已读与未读筛选 | business | PASS | 铃铛“全部已读”后徽标消失；“查看全部”进入 #/notifications：“共 3 项，未读 0 项”，“未读”筛选显示“没有未读事项”，“全部”列出三条并标注“已读”。 |
+| NC05 警告排在前面 | dcl；adc_parking；workspace_manager；brake_tester | PASS | dcl 在 parking_camera“退回业务方”（原因“视频分辨率说明不完整”）：“已退回”；adc_parking 铃铛第一条“parking_camera 需要修改 · 视频分辨率说明不完整”。制动研发车组改为需审批（“已要求审批”），brake_tester“申请团队测试”：“已提交申请，等待工作区管理员审批”；workspace_manager 铃铛“guided_brake 的团队测试申请待审批”，点击跳到 #/fleet/groups。 |
+| NC06 失效与结果通知 | workspace_manager；brake_tester | PASS | “团队测试申请”中批准：“已处理”；workspace_manager 铃铛为空。brake_tester 铃铛：“guided_brake 的团队测试申请已批准”“guided_brake 等待验证结果”。页面中失效事项随状态立即消失（包括其他标签页）；打开失效通知被拒绝由引擎回放核对。英文界面标题、正文、类别与按钮核对无误。 |
 
 ## 重放发现与处理
 

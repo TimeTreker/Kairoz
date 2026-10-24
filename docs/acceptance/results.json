@@ -1,8 +1,8 @@
 {
-  "runAt": "2026-10-24T07:34:08.939Z",
+  "runAt": "2026-10-24T08:21:58.491Z",
   "layer": "engine",
   "counts": {
-    "PASS": 144,
+    "PASS": 150,
     "FAIL": 0,
     "GAP": 0,
     "BLOCKED": 0,
@@ -1170,6 +1170,66 @@
           "id": "N01",
           "title": "谁会收到、谁不会",
           "actor": "steering；release；车辆模拟器",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        }
+      ]
+    },
+    {
+      "script": "notifications",
+      "name": "通知中心 · 授权投影、已读与失效",
+      "rows": [
+        {
+          "id": "NC01",
+          "title": "通知只来自授权工作区与本组",
+          "actor": "business、steering、brake_tester",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "NC02",
+          "title": "状态变化产生新的提醒",
+          "actor": "brake_tester；business",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "NC03",
+          "title": "单条已读：按账号和工作区隔离，不改变任何事务",
+          "actor": "business；brake_tester",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "NC04",
+          "title": "全部已读与未读筛选",
+          "actor": "business",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "NC05",
+          "title": "警告类事项排在前面",
+          "actor": "dcl；adc_parking；workspace_manager；brake_tester",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "NC06",
+          "title": "失效通知不能打开",
+          "actor": "workspace_manager；brake_tester",
           "adaptation": null,
           "status": "PASS",
           "detail": null,
