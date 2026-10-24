@@ -2,12 +2,13 @@
 // three-way merge, have DCL confirm the final processing set, freeze a candidate, and test the
 // candidate independently in the integration workspace.
 
-import { Alert, Button, Card, Descriptions, Empty, Flex, Input, Modal, Segmented, Space, Steps, Table, Tabs, Tag, Typography } from 'antd';
+import { Alert, Badge, Button, Card, Descriptions, Empty, Flex, Input, Modal, Segmented, Space, Steps, Table, Tabs, Tag, Typography } from 'antd';
 import { useState } from 'react';
 import { useCan, useRun, useWorkspace } from '../app/hooks.ts';
 import { navigate } from '../app/router.ts';
 import { setSession, useEngineState } from '../app/store.ts';
 import { DiffView } from '../components/DiffView.tsx';
+import { ApplicabilityChecks } from '../components/applicability.tsx';
 import { Hint, LabelTag, Mono, PageHeader, ShortId, StageTag, when } from '../components/common.tsx';
 import { DeploymentsTable, DispatchModal, RecordTestModal, TargetsTable } from '../components/testing.tsx';
 import { WILDCARD } from '../domain/vocabulary.ts';
@@ -47,6 +48,7 @@ import {
   PLAN_STATUS_LABELS,
   REVIEW_STATUS_LABELS,
   SUBSYSTEM_STATUS_LABELS,
+  setName,
 } from '../i18n/vocab.ts';
 
 /** The project workspace integration works on, from the current project or integration workspace. */
@@ -112,7 +114,7 @@ function subsystemReleasesOf(s: State, workspaceId: string): SubsystemRelease[] 
 
 export function IntegrationPage({ candidateId }: { candidateId?: string }) {
   const state = useEngineState();
-  const { L } = useI18n();
+  const { L, B } = useI18n();
   const { workspace, access } = useWorkspace();
   const can = useCan();
   const projectId = projectOf(state, workspace?.id);
@@ -153,11 +155,12 @@ export function IntegrationPage({ candidateId }: { candidateId?: string }) {
   const release = latestRelease(state, project.vehicleModelId);
   const domainOnly = !project.scopes.includes('Vehicle');
   const subsystems = subsystemReleasesOf(state, projectId);
+  const openChecks = Object.values(state.applicabilityChecks).filter((c) => c.testWorkspaceId === workspace?.id && ['OPEN', 'TESTING'].includes(c.status)).length;
   return (
     <div className="kz-page">
       <PageHeader
         title={L('配置集成', 'Integration')}
-        subtitle={`${project.name} · ${project.vehicleModelId}${domainOnly ? ` · ${L('子系统集成', 'Subsystem integration')} ${project.scopes.join(', ')}` : ''} · ${L('目标版本', 'Target')}: ${release ? `${release.dclVersion}` : L('无（首次集成）', 'none (first integration)')}`}
+        subtitle={`${project.name} · ${project.vehicleModelId}${domainOnly ? ` · ${L('子系统集成', 'Subsystem integration')} ${project.scopes.join(', ')}` : ''} · ${L('目标策略集', 'Target set')}: ${release ? B(setName(release.dclVersion)) : L('无（首次集成）', 'none (first integration)')}`}
       />
       <Tabs
         activeKey={tab}
@@ -171,6 +174,30 @@ export function IntegrationPage({ candidateId }: { candidateId?: string }) {
           ...(domainOnly || subsystems.length
             ? [{ key: 'subsystems', label: `${L('子系统发布', 'Subsystem releases')} · ${subsystems.length}`, children: <SubsystemsTab releases={subsystems} /> }]
             : []),
+          // The whole-vehicle integration workspace also tests unchanged sets on new software.
+          ...(workspace?.kind === 'INTEGRATION' && workspace.scopes.includes('Vehicle')
+            ? [
+                {
+                  key: 'applicability',
+                  label: (
+                    <Badge count={openChecks} size="small" offset={[8, 0]}>
+                      {L('适用性测试', 'Applicability tests')}
+                    </Badge>
+                  ),
+                  children: (
+                    <Card title={L('策略集在新软件版本上的适用性测试', 'Testing unchanged policy sets on new software versions')}>
+                      <Hint>
+                        {L(
+                          '策略集内容不变，只验证它能否在新的整车软件版本上运行：向运行该软件的测试车下发、先仿真后实车登记结果并确认验证，再由配置发布确认适用。',
+                          'The set’s content is unchanged; the test shows whether it runs on a new whole-vehicle software version: send it to testing vehicles running that software, record results (simulation first) and verify; configuration release then confirms applicability.',
+                        )}
+                      </Hint>
+                      <ApplicabilityChecks modelId={project.vehicleModelId} testWorkspaceId={workspace.id} />
+                    </Card>
+                  ),
+                },
+              ]
+            : []),
         ]}
       />
     </div>
@@ -183,7 +210,7 @@ export function IntegrationPage({ candidateId }: { candidateId?: string }) {
 
 function MergeTab({ projectId, onCandidate }: { projectId: string; onCandidate: (id: string) => void }) {
   const state = useEngineState();
-  const { L } = useI18n();
+  const { L, B } = useI18n();
   const can = useCan();
   const run = useRun();
   const ws = state.workspaces[projectId]!;
@@ -259,7 +286,7 @@ function MergeTab({ projectId, onCandidate }: { projectId: string; onCandidate: 
             { title: L('业务分组', 'Group'), render: (_, f) => <Mono>{state.groups[f.groupId]?.code}</Mono> },
             { title: L('工作区', 'Workspace'), render: (_, f) => state.workspaces[f.workspaceId]?.name },
             { title: L('提交', 'Commit'), render: (_, f) => <Mono>{displayName(state, f.headCommitId!)}</Mono> },
-            { title: L('基线', 'Base'), render: (_, f) => (f.baseReleaseId ? state.releases[f.baseReleaseId]?.dclVersion : L('无', 'none')) },
+            { title: L('基线', 'Base'), render: (_, f) => (f.baseReleaseId ? B(setName(state.releases[f.baseReleaseId]!.dclVersion)) : L('无', 'none')) },
           ]}
         />
       </Card>
@@ -283,7 +310,7 @@ function MergeTab({ projectId, onCandidate }: { projectId: string; onCandidate: 
               { title: L('域', 'Domain'), dataIndex: 'domain' },
               { title: L('变更分组', 'Changed groups'), render: (_, r) => <Mono>{Object.keys(r.groups).map((g) => state.groups[g]?.code ?? g).join(', ')}</Mono> },
               { title: L('包含 Feature', 'Features'), render: (_, r) => r.features.map((f) => state.features[f.featureId]?.name).join(', ') },
-              { title: L('基线', 'Base'), render: (_, r) => (r.baseReleaseId ? state.releases[r.baseReleaseId]?.dclVersion : L('无', 'none')) },
+              { title: L('基线', 'Base'), render: (_, r) => (r.baseReleaseId ? B(setName(state.releases[r.baseReleaseId]!.dclVersion)) : L('无', 'none')) },
               { title: L('发布', 'Published'), render: (_, r) => `${state.accounts[r.publishedBy]?.displayName} · ${when(r.publishedAt)}` },
             ]}
           />
@@ -379,7 +406,7 @@ function PlanCard({ plan, onCandidate }: { plan: MergePlan; onCandidate: (id: st
         ]}
       />
       <Descriptions size="small" column={{ xs: 1, md: 2 }} style={{ marginBottom: 12 }}>
-        <Descriptions.Item label={L('目标版本', 'Target release')}>{release ? release.dclVersion : L('无（首次集成）', 'none (first integration)')}</Descriptions.Item>
+        <Descriptions.Item label={L('目标策略集', 'Target set')}>{release ? B(setName(release.dclVersion)) : L('无（首次集成）', 'none (first integration)')}</Descriptions.Item>
         <Descriptions.Item label={L('预览摘要', 'Digest')}><ShortId value={plan.digest} /></Descriptions.Item>
         <Descriptions.Item label={L('预览人', 'By')}>{`${state.accounts[plan.createdBy]?.displayName} · ${when(plan.createdAt)}`}</Descriptions.Item>
         <Descriptions.Item label={L('DCL 确认', 'DCL confirmation')}>
@@ -682,7 +709,7 @@ function CandidateDetail({ candidate: c }: { candidate: Candidate }) {
         }
       >
         <Descriptions size="small" column={{ xs: 1, md: 2 }}>
-          <Descriptions.Item label={L('目标版本', 'Target release')}>{release ? release.dclVersion : L('无（首次集成）', 'none (first integration)')}</Descriptions.Item>
+          <Descriptions.Item label={L('目标策略集', 'Target set')}>{release ? B(setName(release.dclVersion)) : L('无（首次集成）', 'none (first integration)')}</Descriptions.Item>
           <Descriptions.Item label={L('集成测试工作区', 'Integration workspace')}>{state.workspaces[c.testWorkspaceId]?.name}</Descriptions.Item>
           <Descriptions.Item label={L('完整车辆配置', 'Vehicle configuration')}>
             <Space size={4}>
@@ -826,8 +853,8 @@ function CandidateDetail({ candidate: c }: { candidate: Candidate }) {
       >
         <Hint>
           {L(
-            '子系统发布是整车集成的输入：它不是 DCL 正式版本，不列适用整车软件版本，也不会下发给量产车。本域之前未纳入正式版本的子系统发布会被它替代，它包含其全部内容。',
-            'A subsystem release is an input to whole-vehicle integration: not a DCL release, no software versions, never sent to production vehicles. It replaces the domain’s earlier subsystem release not yet in a formal release, and contains all of it.',
+            '子系统发布是整车集成的输入：它不是 DCL 策略集版本，不列适用整车软件版本，也不会下发给量产车。本域之前未纳入正式版本的子系统发布会被它替代，它包含其全部内容。',
+            'A subsystem release is an input to whole-vehicle integration: not a DCL policy set version, no software versions, never sent to production vehicles. It replaces the domain’s earlier subsystem release not yet in a formal release, and contains all of it.',
           )}
         </Hint>
         <Input.TextArea rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder={L('发布说明（可选）', 'Notes (optional)')} />
@@ -854,7 +881,7 @@ function CandidateDetail({ candidate: c }: { candidate: Candidate }) {
 
 function SubsystemsTab({ releases }: { releases: SubsystemRelease[] }) {
   const state = useEngineState();
-  const { L } = useI18n();
+  const { L, B } = useI18n();
   return (
     <Card title={L('子系统发布', 'Subsystem releases')}>
       <Hint>
@@ -874,7 +901,7 @@ function SubsystemsTab({ releases }: { releases: SubsystemRelease[] }) {
           { title: L('状态', 'Status'), render: (_, r) => <LabelTag map={SUBSYSTEM_STATUS_LABELS} value={r.status} color={r.status === 'ACTIVE' ? 'green' : r.status === 'INTEGRATING' ? 'processing' : undefined} /> },
           { title: L('变更分组', 'Changed groups'), render: (_, r) => <Mono>{Object.keys(r.groups).map((g) => state.groups[g]?.code ?? g).join(', ')}</Mono> },
           { title: L('包含 Feature', 'Features'), render: (_, r) => r.features.map((f) => state.features[f.featureId]?.name).join(', ') },
-          { title: L('基线', 'Base'), render: (_, r) => (r.baseReleaseId ? state.releases[r.baseReleaseId]?.dclVersion : L('无', 'none')) },
+          { title: L('基线', 'Base'), render: (_, r) => (r.baseReleaseId ? B(setName(state.releases[r.baseReleaseId]!.dclVersion)) : L('无', 'none')) },
           { title: L('替代', 'Replaces'), render: (_, r) => (r.supersedesId ? state.subsystemReleases[r.supersedesId]?.label : '—') },
           { title: L('候选', 'Candidate'), render: (_, r) => <a onClick={() => navigate(`integration/${r.candidateId}`)}><Mono>{state.candidates[r.candidateId]?.label}</Mono></a> },
           { title: L('发布', 'Published'), render: (_, r) => `${state.accounts[r.publishedBy]?.displayName} · ${when(r.publishedAt)}${r.notes ? ` · ${r.notes}` : ''}` },

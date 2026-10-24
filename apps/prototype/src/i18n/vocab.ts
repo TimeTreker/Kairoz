@@ -267,13 +267,13 @@ Object.assign(ERROR_LABELS, {
 
 Object.assign(ERROR_LABELS, {
   CANDIDATE_NOT_VERIFIED: b('只有通过集成测试的候选才能发布', 'Only a candidate verified by integration testing can be released'),
-  INVALID_DCL_VERSION: b('DCL 版本格式为 major.minor.patch，例如 1.0.1', 'A DCL version is major.minor.patch, e.g. 1.0.1'),
-  DCL_VERSION_TAKEN: b('该 DCL 版本已存在', 'That DCL version already exists'),
-  DCL_VERSION_NOT_NEWER: b('新版本必须高于已发布的最新版本', 'The version must be newer than the latest release'),
+  INVALID_DCL_VERSION: b('策略集版本格式为 major.minor.patch，例如 1.0.1', 'A policy set version is major.minor.patch, e.g. 1.0.1'),
+  DCL_VERSION_TAKEN: b('该策略集版本已存在', 'That policy set version already exists'),
+  DCL_VERSION_NOT_NEWER: b('新版本必须高于已发布的最新策略集版本', 'The version must be newer than the latest policy set'),
   NO_VEHICLE_VERSIONS: b('请选择适用的整车软件版本', 'Choose the whole-vehicle software versions it applies to'),
   VERSION_NOT_TESTED: b('部分适用版本没有通过的集成测试', 'Some listed software versions have no passing integration test'),
   OTA_BLOCKED: b('OTA 被拒绝：并非所有车辆都满足条件', 'OTA blocked: not every vehicle qualifies'),
-  NOTHING_TO_ROLL_OUT: b('所有车辆都已运行该版本', 'Every vehicle already runs this release'),
+  NOTHING_TO_ROLL_OUT: b('所有车辆都已运行该策略集', 'Every vehicle already runs this policy set'),
   OTA_PAUSED: b('OTA 已暂停，请先恢复', 'The rollout is paused; resume it first'),
   OTA_CLOSED: b('OTA 已结束', 'The rollout is finished'),
   OTA_NOT_RUNNING: b('只有进行中的 OTA 可以暂停', 'Only a running rollout can be paused'),
@@ -433,7 +433,7 @@ Object.assign(ERROR_LABELS, {
 export const CONFIG_ANSWER_LABELS: Record<string, Bilingual> = {
   HELD: b('保持已确认（同步暂停）', 'Held (sync paused)'),
   TASK: b('当前任务目标', 'Rollout target'),
-  LATEST_RELEASE: b('最新匹配正式版本', 'Newest matching release'),
+  LATEST_RELEASE: b('软件版本当前适用的策略集', 'Policy set in effect for its software'),
   GROUP_TARGET: b('车辆组固定目标', 'Group target'),
   APPLIED: b('已生效配置', 'Applied configuration'),
   INITIAL: b('初始研发配置', 'Initial configuration'),
@@ -478,8 +478,8 @@ Object.assign(ERROR_LABELS, {
   CROSS_DOMAIN_SOURCE: b('该 Feature 属于其他域，不能纳入本域的子系统集成', 'The Feature belongs to another domain; a subsystem merge takes only its own domain'),
   SCOPE_OUTSIDE_WORKSPACE: b('该工作区不负责这个集成范围', 'This workspace does not integrate that scope'),
   SUBSYSTEM_NOT_ALLOWED: b('子系统集成只收集本域 Feature，会自动包含本域当前的子系统发布', 'A subsystem merge takes Features only; it includes the domain’s current subsystem release by itself'),
-  SUBSYSTEM_CANDIDATE: b('子系统候选由本域发布为子系统，不能正式发布为 DCL 版本', 'A subsystem candidate is published by its domain as a subsystem release, not promoted to a DCL release'),
-  NOT_A_SUBSYSTEM_CANDIDATE: b('整车候选应正式发布为 DCL 版本，而不是子系统发布', 'A whole-vehicle candidate is promoted to a DCL release, not published as a subsystem'),
+  SUBSYSTEM_CANDIDATE: b('子系统候选由本域发布为子系统，不能发布为 DCL 策略集版本', 'A subsystem candidate is published by its domain as a subsystem release, not promoted to a DCL policy set'),
+  NOT_A_SUBSYSTEM_CANDIDATE: b('整车候选应发布为 DCL 策略集版本，而不是子系统发布', 'A whole-vehicle candidate is promoted to a DCL policy set, not published as a subsystem'),
 });
 
 export const SUBSYSTEM_STATUS_LABELS: Record<string, Bilingual> = {
@@ -492,4 +492,33 @@ export const SUBSYSTEM_STATUS_LABELS: Record<string, Bilingual> = {
 // DCL policy sets and software versions
 Object.assign(ERROR_LABELS, {
   INVALID_MANIFEST: b('软件清单格式不对：信号为点分标识符，数据源为 单元:/绝对目录', 'The software manifest is malformed: signals are dotted identifiers, sources UNIT:/absolute/directory'),
+  MANIFEST_RECORDED: b('该软件版本已有软件清单，不能替换', 'This software version already has a manifest; it is never replaced'),
+  MANIFEST_MISSING: b('该软件版本还没有软件清单，无法逐条检查策略；请车辆资源先登记清单', 'The software version has no manifest, so policies cannot be checked; vehicle resources record it first'),
+  ALREADY_APPLIES: b('该策略集已适用于这个软件版本', 'The policy set already applies to this software version'),
+  APPLICABILITY_SHADOWED: b('已有更新的策略集适用于这个软件版本，确认旧策略集不会生效', 'A newer policy set already applies to this software version; confirming an older one would change nothing'),
+  CHECK_OPEN: b('该策略集与软件版本已有进行中的适用性确认单', 'An applicability check for this set and version is already open'),
+  CHECK_CLOSED: b('适用性确认单已关闭', 'The applicability check is closed'),
+  CHECK_NOT_VERIFIED: b('集成测试尚未确认该策略集在此软件上通过', 'Integration testing has not verified the set on this software'),
+  INCOMPATIBLE_POLICIES: b('部分策略需要的信号或数据源在该软件中不存在，需发布修改后的策略集', 'Some policies need signals or sources the software lacks; publish a changed policy set instead'),
+  NOT_APPLICABLE: b('该策略集并不适用于这个软件版本', 'The policy set does not apply to this software version'),
 });
+
+/** How a DCL policy set version reads: 策略集 1.0.0 / Policy set 1.0.0. */
+export const setName = (version: string): Bilingual => b(`策略集 ${version}`, `Policy set ${version}`);
+
+export const CHECK_STATUS_LABELS: Record<string, Bilingual> = {
+  OPEN: b('待测试', 'Open'),
+  TESTING: b('测试中', 'Testing'),
+  VERIFIED: b('集成测试已确认', 'Verified'),
+  CONFIRMED: b('已确认适用', 'Confirmed'),
+  SUPERSEDED: b('已被替代', 'Superseded'),
+  CANCELLED: b('已取消', 'Cancelled'),
+};
+
+export const CHECK_STATUS_COLORS: Record<string, string> = { OPEN: 'gold', TESTING: 'processing', VERIFIED: 'cyan', CONFIRMED: 'green', SUPERSEDED: 'default', CANCELLED: 'default' };
+
+export const COMPATIBILITY_LABELS: Record<string, Bilingual> = {
+  OK: b('可运行', 'Runs'),
+  MISSING: b('缺少信号或数据源', 'Missing signals or sources'),
+  UNKNOWN: b('无软件清单，无法检查', 'No manifest, cannot check'),
+};

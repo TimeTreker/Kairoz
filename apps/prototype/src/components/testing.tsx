@@ -11,7 +11,7 @@ import type { TargetStatus } from '../engine/validation.ts';
 import { useI18n } from '../i18n/i18n.tsx';
 import { issueLabel } from '../i18n/issues.ts';
 import { DEPLOYMENT_STATUS_LABELS, RESOURCE_TYPE_LABELS, TARGET_STATUS_COLORS, TARGET_STATUS_LABELS } from '../i18n/vocab.ts';
-import { EnvTag, Hint, LabelTag, Mono, when } from './common.tsx';
+import { EnvTag, Hint, LabelTag, Mono, configName, when } from './common.tsx';
 
 /** Test targets of one version with their apply state and latest result. */
 export function TargetsTable({ status, action }: { status: TargetStatus[]; action: (t: TargetStatus) => ReactNode }) {
@@ -82,7 +82,7 @@ export function DeploymentsTable({ deployments, canCancel, onCancel }: { deploym
       }}
       columns={[
         { title: L('下发', 'Dispatch'), render: (_, d) => <Mono>{d.id}</Mono> },
-        { title: L('配置', 'Configuration'), render: (_, d) => <Mono>{state.resolvedConfigs[d.resolvedConfigId]?.label}</Mono> },
+        { title: L('配置', 'Configuration'), render: (_, d) => <Mono>{B(configName(state, d.resolvedConfigId))}</Mono> },
         { title: L('环境', 'Env'), render: (_, d) => <EnvTag env={d.env} /> },
         { title: L('状态', 'Status'), render: (_, d) => <LabelTag map={DEPLOYMENT_STATUS_LABELS} value={d.status} /> },
         { title: L('下发人', 'By'), render: (_, d) => `${state.accounts[d.dispatchedBy]?.displayName} · ${when(d.createdAt)}` },

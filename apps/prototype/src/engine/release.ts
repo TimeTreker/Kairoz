@@ -1,7 +1,11 @@
 // Formal release (正式发布): configuration release promotes a Verified candidate to an immutable
-// DCL version for listed whole-vehicle software versions. Publishing changes no vehicle: vehicles
-// resolve to the newest matching release and only receipts change what they run.
+// DCL policy set version for listed whole-vehicle software versions. Sets and software versions
+// are many-to-many: later applicability records add or withdraw software versions without a new
+// set version. Publishing changes no vehicle: a vehicle resolves to the newest set that applies to
+// its software, and only receipts change what it runs.
 
+import { diffConfig, emptyConfig } from '../domain/config.ts';
+import type { ConfigDiff } from '../domain/config.ts';
 import { conflict, notFound, rule } from '../domain/errors.ts';
 import { newId } from '../domain/ids.ts';
 import { latestRelease } from './config.ts';
@@ -33,6 +37,32 @@ export function releasesOf(s: State, vehicleModelId: string): Release[] {
   return Object.values(s.releases)
     .filter((r) => r.vehicleModelId === vehicleModelId)
     .sort((a, b) => b.sequence - a.sequence);
+}
+
+/** Whether a set applies to a software version: its publish list, then appended records (the newest wins). */
+export function appliesTo(s: State, release: Release, version: string): boolean {
+  const last = s.applicability.filter((a) => a.releaseId === release.id && a.version === version).sort((a, b) => b.seq - a.seq)[0];
+  return last ? last.action === 'ADD' : release.vehicleIntegrationVersions.includes(version);
+}
+
+/** Every software version a set applies to now. */
+export function applicableVersions(s: State, release: Release): string[] {
+  const versions = new Set(release.vehicleIntegrationVersions);
+  for (const a of s.applicability.filter((x) => x.releaseId === release.id).sort((x, y) => x.seq - y.seq)) {
+    if (a.action === 'ADD') versions.add(a.version);
+    else versions.delete(a.version);
+  }
+  return [...versions].sort(compareVersions);
+}
+
+/** The set in effect for a software version: the newest that applies to it. */
+export function setInEffect(s: State, vehicleModelId: string, version: string): Release | null {
+  return releasesOf(s, vehicleModelId).find((r) => appliesTo(s, r, version)) ?? null;
+}
+
+/** The software versions a set is the one in effect for. */
+export function versionsInEffect(s: State, release: Release): string[] {
+  return applicableVersions(s, release).filter((v) => setInEffect(s, release.vehicleModelId, v)?.id === release.id);
 }
 
 /** Whole-vehicle software versions the candidate passed its integration tests on. */
@@ -69,9 +99,9 @@ export function promoteCandidate(ctx: Ctx, candidateId: string, input: { dclVers
   const version = input.dclVersion.trim();
   if (!DCL_VERSION.test(version)) throw rule('INVALID_DCL_VERSION', 'a DCL version is major.minor.patch, e.g. 1.0.1');
   const existing = releasesOf(ctx.s, c.vehicleModelId);
-  if (existing.some((r) => r.dclVersion === version)) throw conflict('DCL_VERSION_TAKEN', `DCL ${version} already exists`);
+  if (existing.some((r) => r.dclVersion === version)) throw conflict('DCL_VERSION_TAKEN', `policy set ${version} already exists`);
   const newest = existing[0];
-  if (newest && compareVersions(version, newest.dclVersion) <= 0) throw rule('DCL_VERSION_NOT_NEWER', `the version must be newer than DCL ${newest.dclVersion}`);
+  if (newest && compareVersions(version, newest.dclVersion) <= 0) throw rule('DCL_VERSION_NOT_NEWER', `the version must be newer than policy set ${newest.dclVersion}`);
 
   const versions = [...new Set(input.vehicleIntegrationVersions.map((v) => v.trim()).filter(Boolean))].sort(compareVersions);
   if (versions.length === 0) throw rule('NO_VEHICLE_VERSIONS', 'list the whole-vehicle software versions this release applies to');
@@ -105,6 +135,13 @@ export function promoteCandidate(ctx: Ctx, candidateId: string, input: { dclVers
     publishedAt: ctx.now,
   };
   ctx.s.candidates[c.id]!.status = 'RELEASED';
+  // Open applicability checks for versions the new set lists are answered by it.
+  for (const check of Object.values(ctx.s.applicabilityChecks)) {
+    if (check.vehicleModelId === c.vehicleModelId && versions.includes(check.version) && ['OPEN', 'TESTING', 'VERIFIED'].includes(check.status)) {
+      check.status = 'SUPERSEDED';
+      check.note = `policy set ${version} lists ${check.version}`;
+    }
+  }
   // The participating Features are closed; later changes start new Features on this release.
   // Subsystem releases it included are now part of a formal release, and so are their Features.
   const included = c.subsystems.flatMap((ref) => {
@@ -184,7 +221,51 @@ export function releaseFor(s: State, r: Resource): Resolution {
     return { release: null, problem: `a partial software update left controllers inconsistent (${failed.join(', ') || 'mixed versions'}); finish or roll back the software OTA first` };
   }
   if (!r.integrationVersion) return { release: null, problem: 'the whole-vehicle software version is unknown' };
-  const release = releasesOf(s, r.vehicleModelId).find((x) => x.vehicleIntegrationVersions.includes(r.integrationVersion!));
-  if (!release) return { release: null, problem: `no release applies to ${r.vehicleModelId} ${r.integrationVersion}` };
+  const release = setInEffect(s, r.vehicleModelId, r.integrationVersion);
+  if (!release) return { release: null, problem: `no policy set applies to ${r.vehicleModelId} ${r.integrationVersion}` };
   return { release, problem: null };
+}
+
+export interface GroupChange {
+  groupId: string;
+  status: 'ADDED' | 'REMOVED' | 'CHANGED' | 'SAME';
+  diff: ConfigDiff;
+}
+
+export interface PolicyChange {
+  policyId: string;
+  groupId: string;
+  /** Policy version numbers; null when the policy is not in that set. */
+  from: number | null;
+  to: number | null;
+}
+
+/** What changed from one set version to another, business group by business group and policy by policy. */
+export function releaseDiff(s: State, fromId: string | null, toId: string): { groups: GroupChange[]; policies: PolicyChange[] } {
+  const to = getRelease(s, toId);
+  const from = fromId ? getRelease(s, fromId) : null;
+  const groupIds = [...new Set([...Object.keys(from?.groups ?? {}), ...Object.keys(to.groups)])].sort();
+  const groups: GroupChange[] = groupIds.map((groupId) => {
+    const a = from?.groups[groupId];
+    const b = to.groups[groupId];
+    const diff = diffConfig(a ? commitSnapshot(s, a) : emptyConfig(), b ? commitSnapshot(s, b) : emptyConfig());
+    const status = !a ? 'ADDED' : !b ? 'REMOVED' : diff.empty ? 'SAME' : 'CHANGED';
+    return { groupId, status, diff };
+  });
+  const policies: PolicyChange[] = [];
+  for (const groupId of groupIds) {
+    const a = from?.groups[groupId] ? s.commits[from.groups[groupId]!]!.policies : {};
+    const b = to.groups[groupId] ? s.commits[to.groups[groupId]!]!.policies : {};
+    for (const policyId of [...new Set([...Object.keys(a), ...Object.keys(b)])].sort()) {
+      const before = a[policyId] ? s.policyVersions[a[policyId]!]!.version : null;
+      const after = b[policyId] ? s.policyVersions[b[policyId]!]!.version : null;
+      if (before !== after) policies.push({ policyId, groupId, from: before, to: after });
+    }
+  }
+  return { groups, policies };
+}
+
+/** The set published just before this one for the same vehicle model. */
+export function previousRelease(s: State, release: Release): Release | null {
+  return releasesOf(s, release.vehicleModelId).find((r) => r.sequence < release.sequence) ?? null;
 }

@@ -62,6 +62,10 @@ export const ACTIONS = {
   'candidate.dispatch': { roles: ['INTEGRATION_TEST', 'CONFIG_INTEGRATOR'], env: 'testing' },
   'candidate.recordTest': { roles: ['INTEGRATION_TEST'], env: 'testing', excludeDispatchOnly: true },
   'candidate.verify': { roles: ['INTEGRATION_TEST'], env: 'testing', excludeDispatchOnly: true },
+  /** Testing an unchanged policy set on another software version (适用性确认). */
+  'applicability.dispatch': { roles: ['INTEGRATION_TEST', 'CONFIG_INTEGRATOR'], env: 'testing' },
+  'applicability.recordTest': { roles: ['INTEGRATION_TEST'], env: 'testing', excludeDispatchOnly: true },
+  'applicability.verify': { roles: ['INTEGRATION_TEST'], env: 'testing', excludeDispatchOnly: true },
   // Vehicles (车辆资源 / 工作区管理员)
   'softwareVersion.record': { roles: ['VEHICLE_RESOURCE'], env: 'all' },
   'resource.manage': { roles: ['VEHICLE_RESOURCE'], env: 'target' },
@@ -77,6 +81,8 @@ export const ACTIONS = {
   // Integration (配置集成) and release (配置发布)
   'merge.manage': { roles: ['CONFIG_INTEGRATOR'], env: 'testing' },
   'release.promote': { roles: ['CONFIG_RELEASE'], env: 'production' },
+  /** Opening, confirming and withdrawing a set's applicability to software versions. */
+  'applicability.confirm': { roles: ['CONFIG_RELEASE'], env: 'production' },
   /** A domain's subsystem release: an integration input, never a production release. */
   'subsystem.publish': { roles: ['CONFIG_RELEASE'], env: 'testing' },
   'ota.manage': { roles: ['CONFIG_RELEASE'], env: 'production' },

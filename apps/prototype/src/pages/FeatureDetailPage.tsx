@@ -9,7 +9,7 @@ import { canReadFeature, displayName, draftReviewRequired, EDITABLE_STAGES, feat
 import { returnFeature } from '../engine/intake.ts';
 import { isCollectible } from '../engine/integration.ts';
 import { useI18n } from '../i18n/i18n.tsx';
-import { CANDIDATE_STATUS_LABELS, FEEDBACK_LABELS, STAGE_LABELS } from '../i18n/vocab.ts';
+import { CANDIDATE_STATUS_LABELS, FEEDBACK_LABELS, STAGE_LABELS, setName } from '../i18n/vocab.ts';
 import { FilesTab } from './feature/FilesTab.tsx';
 import { ChangesTab, CommitsTab, FeedbackTimeline } from './feature/HistoryTab.tsx';
 import { IntakeTab } from './feature/IntakeTab.tsx';
@@ -73,7 +73,7 @@ export function FeatureDetailPage({ featureId }: { featureId: string }) {
             </Descriptions.Item>
             <Descriptions.Item label={L('工作区', 'Workspace')}>{state.workspaces[feature.workspaceId]?.name}</Descriptions.Item>
             <Descriptions.Item label={L('基线', 'Base')}>
-              {feature.baseReleaseId ? <Mono>{state.releases[feature.baseReleaseId]?.dclVersion}</Mono> : L('初始研发配置', 'Initial development config')}
+              {feature.baseReleaseId ? <Mono>{B(setName(state.releases[feature.baseReleaseId]!.dclVersion))}</Mono> : L('初始研发配置', 'Initial development config')}
             </Descriptions.Item>
             <Descriptions.Item label={L('最新提交', 'Head commit')}>{feature.headCommitId ? <Mono>{displayName(state, feature.headCommitId)}</Mono> : '—'}</Descriptions.Item>
             <Descriptions.Item label={L('车型', 'Vehicle model')}>{feature.vehicleModelId}</Descriptions.Item>
@@ -86,7 +86,7 @@ export function FeatureDetailPage({ featureId }: { featureId: string }) {
                     return (
                       <Tag key={c.id} style={{ cursor: 'pointer' }} onClick={() => navigate(`integration/${c.id}`)}>
                         {c.label}
-                        {release ? ` → DCL ${release.dclVersion}` : ` · ${B(CANDIDATE_STATUS_LABELS[c.status])}`}
+                        {release ? ` → ${B(setName(release.dclVersion))}` : ` · ${B(CANDIDATE_STATUS_LABELS[c.status])}`}
                       </Tag>
                     );
                   })}

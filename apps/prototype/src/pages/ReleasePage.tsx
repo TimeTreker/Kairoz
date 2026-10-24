@@ -1,22 +1,25 @@
-// Release and configuration OTA (发布与配置 OTA): promote Verified candidates to formal DCL
-// versions, see which release each production vehicle should run, and roll releases out in waves.
+// Release and configuration OTA (发布与配置 OTA): promote Verified candidates to DCL policy set
+// versions, decide which software versions each set applies to, see which set each production
+// vehicle should run, and roll sets out in waves.
 
-import { Alert, Button, Card, Checkbox, Descriptions, Empty, Flex, Form, Input, Modal, Select, Space, Table, Tabs, Tag, Tooltip, Typography } from 'antd';
+import { Alert, Badge, Button, Card, Checkbox, Descriptions, Empty, Flex, Form, Input, Modal, Select, Space, Table, Tabs, Tag, Tooltip, Typography } from 'antd';
 import { useState } from 'react';
 import { useCan, useRun, useWorkspace } from '../app/hooks.ts';
 import { navigate } from '../app/router.ts';
 import { useEngineState } from '../app/store.ts';
-import { EnvTag, Hint, LabelTag, Mono, PageHeader, ShortId, when } from '../components/common.tsx';
+import { ApplicabilityChecks, ReleaseDiffDrawer, SoftwareVersionsCard } from '../components/applicability.tsx';
+import { EnvTag, Hint, LabelTag, Mono, PageHeader, ShortId, configName, when } from '../components/common.tsx';
 import { JsonExportModal, downloadJson } from '../components/JsonExport.tsx';
 import type { JsonFile } from '../components/JsonExport.tsx';
 import { displayName } from '../engine/config.ts';
 import { membersOf, ungroupedVehicles, vehicleGroupsOf } from '../engine/fleet.ts';
 import { answerConfigRequest, cancelOta, createOta, expandOta, otaProblems, otaRollouts, pauseOta, resumeOta, rollbackOta, rollbackProblems } from '../engine/ota.ts';
-import { compareVersions, nextDclVersion, promoteCandidate, releaseConfiguration, releaseFor, releasesOf, testedVersions } from '../engine/release.ts';
+import { isOpenCheck } from '../engine/applicability.ts';
+import { applicableVersions, compareVersions, nextDclVersion, previousRelease, promoteCandidate, releaseConfiguration, releaseFor, releasesOf, testedVersions } from '../engine/release.ts';
 import type { Candidate, Deployment, Release, State, VehicleGroup } from '../engine/types.ts';
 import { useI18n } from '../i18n/i18n.tsx';
 import { issueLabel } from '../i18n/issues.ts';
-import { CONFIG_ANSWER_LABELS, DEPLOYMENT_STATUS_LABELS, TARGET_STATUS_COLORS, TARGET_STATUS_LABELS } from '../i18n/vocab.ts';
+import { CONFIG_ANSWER_LABELS, DEPLOYMENT_STATUS_LABELS, TARGET_STATUS_COLORS, TARGET_STATUS_LABELS, setName } from '../i18n/vocab.ts';
 
 /** The project workspace holding production vehicle groups for the current workspace. */
 function projectOf(s: State, workspaceId: string | undefined): string | undefined {
@@ -26,18 +29,17 @@ function projectOf(s: State, workspaceId: string | undefined): string | undefine
   return Object.values(s.workspaces).find((w) => w.kind !== 'TEAM' && w.status === 'ACTIVE' && w.vehicleModelId === ws.vehicleModelId && Object.values(s.vehicleGroups).some((g) => g.workspaceId === w.id && g.purpose === 'PRODUCTION'))?.id;
 }
 
-const releaseLabel = (s: State, configId: string | null) => (configId ? (s.resolvedConfigs[configId]?.label ?? configId) : '—');
-
 const ANSWER_COLORS: Record<string, string> = { HELD: 'purple', TASK: 'processing', LATEST_RELEASE: 'green', GROUP_TARGET: 'blue', APPLIED: 'default', INITIAL: 'default', BLOCKED: 'red' };
 
 export function ReleasePage({ tab = 'releases' }: { tab?: string }) {
   const state = useEngineState();
-  const { L } = useI18n();
+  const { L, B } = useI18n();
   const { workspace } = useWorkspace();
   if (!workspace) return <div className="kz-page"><Empty /></div>;
   const modelId = workspace.vehicleModelId;
   const projectId = projectOf(state, workspace.id);
   const latest = releasesOf(state, modelId)[0];
+  const openChecks = Object.values(state.applicabilityChecks).filter((c) => c.vehicleModelId === modelId && isOpenCheck(c)).length;
   if (!workspace.scopes.includes('Vehicle')) {
     // A domain workspace publishes subsystem releases; formal releases and OTA are whole-vehicle.
     return (
@@ -55,12 +57,28 @@ export function ReleasePage({ tab = 'releases' }: { tab?: string }) {
   }
   return (
     <div className="kz-page">
-      <PageHeader title={L('发布与配置 OTA', 'Release & OTA')} subtitle={`${modelId} · ${L('最新正式版本', 'Latest release')}: ${latest ? `DCL ${latest.dclVersion}` : L('无', 'none')}`} />
+      <PageHeader title={L('发布与配置 OTA', 'Release & OTA')} subtitle={`${modelId} · ${L('最新策略集', 'Latest policy set')}: ${latest ? B(setName(latest.dclVersion)) : L('无', 'none')}`} />
       <Tabs
         activeKey={tab}
         onChange={(k) => navigate(`release/${k}`)}
         items={[
-          { key: 'releases', label: L('正式发布', 'Releases'), children: <ReleasesTab modelId={modelId} workspaceId={workspace.id} /> },
+          { key: 'releases', label: L('策略集发布', 'Policy sets'), children: <ReleasesTab modelId={modelId} workspaceId={workspace.id} /> },
+          {
+            key: 'applicability',
+            label: (
+              <Badge count={openChecks} size="small" offset={[8, 0]}>
+                {L('软件版本与适用性', 'Software & applicability')}
+              </Badge>
+            ),
+            children: (
+              <Space orientation="vertical" size={16} style={{ width: '100%' }}>
+                <SoftwareVersionsCard modelId={modelId} />
+                <Card title={L('适用性确认单', 'Applicability checks')}>
+                  <ApplicabilityChecks modelId={modelId} />
+                </Card>
+              </Space>
+            ),
+          },
           { key: 'ota', label: L('配置 OTA', 'Configuration OTA'), children: projectId ? <OtaTab projectId={projectId} /> : <Alert type="info" showIcon title={L('该车型没有项目工作区。', 'This vehicle model has no project workspace.')} /> },
         ]}
       />
@@ -74,9 +92,10 @@ export function ReleasePage({ tab = 'releases' }: { tab?: string }) {
 
 function ReleasesTab({ modelId, workspaceId }: { modelId: string; workspaceId: string }) {
   const state = useEngineState();
-  const { L } = useI18n();
+  const { L, B } = useI18n();
   const can = useCan();
   const [promoting, setPromoting] = useState<Candidate | null>(null);
+  const [comparing, setComparing] = useState<Release | null>(null);
   const [exported, setExported] = useState<JsonFile | null>(null);
   const exportConfiguration = (releaseId: string) => {
     const r = state.releases[releaseId]!;
@@ -94,8 +113,8 @@ function ReleasesTab({ modelId, workspaceId }: { modelId: string; workspaceId: s
       <Card title={`${L('待发布的集成候选', 'Candidates awaiting release')} · ${waiting.length}`}>
         <Hint>
           {L(
-            '发布复核 DCL 处理确认、集成测试与目标版本；发布者指定独立的 DCL 版本和适用的整车软件版本，每个适用版本都要有通过的集成测试。发布不刷写软件，也不改变车辆已生效的配置。',
-            'Promotion re-checks the DCL confirmation, integration tests and target; the publisher sets an independent DCL version and the whole-vehicle software versions it applies to, each backed by a passing integration test. Publishing flashes no software and changes no vehicle’s applied configuration.',
+            '发布复核 DCL 处理确认、集成测试与目标版本；发布者指定独立的 DCL 策略集版本和适用的整车软件版本，每个适用版本都要有通过的集成测试。之后的软件版本可以经适用性确认追加，不必重新发布。发布不刷写软件，也不改变车辆已生效的配置。',
+            'Promotion re-checks the DCL confirmation, integration tests and target; the publisher sets an independent DCL policy set version and the whole-vehicle software versions it applies to, each backed by a passing integration test. Later software versions are added by an applicability check, without a new release. Publishing flashes no software and changes no vehicle’s applied configuration.',
           )}
         </Hint>
         <Table
@@ -107,7 +126,7 @@ function ReleasesTab({ modelId, workspaceId }: { modelId: string; workspaceId: s
           columns={[
             { title: L('候选', 'Candidate'), render: (_, c) => <a onClick={() => navigate(`integration/${c.id}`)}><Mono>{c.label}</Mono></a> },
             { title: L('来源', 'Sources'), render: (_, c) => [...c.subsystems.map((x) => state.subsystemReleases[x.subsystemReleaseId]?.label), ...c.sources.map((x) => state.features[x.featureId]?.name)].join(', ') },
-            { title: L('目标版本', 'Target'), render: (_, c) => (c.targetReleaseId ? `DCL ${state.releases[c.targetReleaseId]?.dclVersion}` : L('无（首次）', 'none (first)')) },
+            { title: L('目标策略集', 'Target set'), render: (_, c) => (c.targetReleaseId ? B(setName(state.releases[c.targetReleaseId]!.dclVersion)) : L('无（首次）', 'none (first)')) },
             { title: L('已测试的整车版本', 'Tested software'), render: (_, c) => testedVersions(state, c).map((v) => <Tag key={v}>{v}</Tag>) },
             { title: L('集成验证', 'Verified'), render: (_, c) => `${state.accounts[c.verifiedBy ?? '']?.displayName ?? '—'} · ${c.verifiedAt ? when(c.verifiedAt) : ''}` },
             {
@@ -122,7 +141,7 @@ function ReleasesTab({ modelId, workspaceId }: { modelId: string; workspaceId: s
           ]}
         />
       </Card>
-      <Card title={L('发布记录', 'Releases')}>
+      <Card title={L('DCL 策略集版本', 'DCL policy set versions')}>
         <Table
           rowKey="id"
           pagination={false}
@@ -143,8 +162,28 @@ function ReleasesTab({ modelId, workspaceId }: { modelId: string; workspaceId: s
             ),
           }}
           columns={[
-            { title: 'DCL', render: (_, r) => <Mono>{r.dclVersion}</Mono> },
-            { title: L('适用整车版本', 'Applies to'), render: (_, r) => r.vehicleIntegrationVersions.map((v) => <Tag key={v}>{`${r.vehicleModelId} ${v}`}</Tag>) },
+            {
+              title: L('策略集版本', 'Policy set'),
+              render: (_, r) => (
+                <Space size={4}>
+                  <Mono>{r.dclVersion}</Mono>
+                  {r.emergency && (
+                    <Tooltip title={L(`紧急停用 ${r.emergency.policyId}（源自 ${state.releases[r.emergency.sourceReleaseId]?.dclVersion}）`, `Emergency stop of ${r.emergency.policyId} (from ${state.releases[r.emergency.sourceReleaseId]?.dclVersion})`)}>
+                      <Tag color="red">{L('紧急', 'emergency')}</Tag>
+                    </Tooltip>
+                  )}
+                </Space>
+              ),
+            },
+            {
+              title: L('适用整车版本（当前）', 'Applies to (now)'),
+              render: (_, r) =>
+                applicableVersions(state, r).map((v) => (
+                  <Tag key={v} color={r.vehicleIntegrationVersions.includes(v) ? undefined : 'blue'}>
+                    {`${r.vehicleModelId} ${v}`}
+                  </Tag>
+                )),
+            },
             { title: L('序号', 'Seq'), dataIndex: 'sequence' },
             { title: L('候选', 'Candidate'), render: (_, r) => <Mono>{r.candidateId ? state.candidates[r.candidateId]?.label : '—'}</Mono> },
             { title: L('配置摘要', 'Digest'), render: (_, r) => <ShortId value={state.resolvedConfigs[r.resolvedConfigId]?.digest} /> },
@@ -152,17 +191,24 @@ function ReleasesTab({ modelId, workspaceId }: { modelId: string; workspaceId: s
             { title: L('发布', 'Published'), render: (_, r) => `${state.accounts[r.publishedBy]?.displayName} · ${when(r.publishedAt)}` },
             {
               title: '',
-              render: (_, r) =>
-                canExport(r) && (
-                  <Button size="small" onClick={() => exportConfiguration(r.id)}>
-                    {L('导出配置集合', 'Export configuration')}
+              render: (_, r) => (
+                <Space size={0}>
+                  <Button type="link" size="small" onClick={() => setComparing(r)}>
+                    {L('与上一版比较', 'Compare with previous')}
                   </Button>
-                ),
+                  {canExport(r) && (
+                    <Button size="small" onClick={() => exportConfiguration(r.id)}>
+                      {L('导出配置集合', 'Export configuration')}
+                    </Button>
+                  )}
+                </Space>
+              ),
             },
           ]}
         />
       </Card>
       {promoting && <PromoteModal candidate={promoting} onClose={() => setPromoting(null)} />}
+      <ReleaseDiffDrawer fromId={comparing ? (previousRelease(state, comparing)?.id ?? null) : null} toId={comparing?.id ?? null} onClose={() => setComparing(null)} />
       <JsonExportModal title={L('导出配置集合', 'Export configuration')} file={exported} onClose={() => setExported(null)} />
     </Space>
   );
@@ -186,13 +232,13 @@ function PromoteModal({ candidate, onClose }: { candidate: Candidate; onClose: (
       onCancel={onClose}
       onOk={() =>
         form.validateFields().then((v) => {
-          const id = run((c) => promoteCandidate(c, candidate.id, { dclVersion: v.dclVersion, vehicleIntegrationVersions: v.versions ?? [], notes: v.notes }), L('已发布；车辆在 OTA 回执成功后才会运行新版本', 'Released; vehicles run it only after an OTA receipt'));
+          const id = run((c) => promoteCandidate(c, candidate.id, { dclVersion: v.dclVersion, vehicleIntegrationVersions: v.versions ?? [], notes: v.notes }), L('已发布；车辆在 OTA 回执成功后才会运行新策略集', 'Released; vehicles run the set only after an OTA receipt'));
           if (id !== undefined) onClose();
         })
       }
     >
       <Form form={form} name="promote" layout="vertical" initialValues={{ dclVersion: nextDclVersion(state, candidate.vehicleModelId), versions: [...tested], notes: '' }}>
-        <Form.Item name="dclVersion" label={L('DCL 版本', 'DCL version')} rules={[{ required: true }]} extra={L('独立于整车软件版本，major.minor.patch', 'Independent of vehicle software, major.minor.patch')}>
+        <Form.Item name="dclVersion" label={L('DCL 策略集版本', 'DCL policy set version')} rules={[{ required: true }]} extra={L('独立于整车软件版本，major.minor.patch', 'Independent of vehicle software, major.minor.patch')}>
           <Input />
         </Form.Item>
         <Form.Item name="versions" label={L('适用的整车软件版本', 'Applies to vehicle software')}>
@@ -257,8 +303,8 @@ function OtaTab({ projectId }: { projectId: string }) {
       >
         <Hint>
           {L(
-            '车辆上报车型与实际整车版本，平台在适用该版本的正式 DCL 中按发布序号选最新的一个；没有匹配时阻止量产下发，不会回退到研发配置。期望配置与已生效配置分开显示，只有成功回执才更新已生效配置。',
-            'Vehicles report their model and actual software; the platform picks the newest formal DCL that lists that version. Without a match production rollout is blocked and never falls back to a development configuration. Expected and applied configurations are shown separately; only a successful receipt changes what a vehicle runs.',
+            '车辆上报车型与实际整车版本，平台取该软件版本当前适用的策略集（适用它的最新策略集）；没有适用策略集时阻止量产下发，不会回退到研发配置。期望配置与已生效配置分开显示，只有成功回执才更新已生效配置。',
+            'Vehicles report their model and actual software; the platform takes the policy set in effect for that version (the newest set that applies to it). Without one, production delivery is blocked and never falls back to a development configuration. Expected and applied configurations are shown separately; only a successful receipt changes what a vehicle runs.',
           )}
         </Hint>
         <Table
@@ -286,10 +332,10 @@ function OtaTab({ projectId }: { projectId: string }) {
               title: L('应运行', 'Should run'),
               render: (_, x) => {
                 const r = releaseFor(state, x.vehicle);
-                return r.release ? <Mono>{`DCL ${r.release.dclVersion}`}</Mono> : <Tooltip title={r.problem ? B(issueLabel(r.problem), r.problem) : undefined}><Tag color="red">{L('无匹配，阻止下发', 'no match, blocked')}</Tag></Tooltip>;
+                return r.release ? <Mono>{B(setName(r.release.dclVersion))}</Mono> : <Tooltip title={r.problem ? B(issueLabel(r.problem), r.problem) : undefined}><Tag color="red">{L('无适用策略集，阻止下发', 'no set applies, blocked')}</Tag></Tooltip>;
               },
             },
-            { title: L('已生效', 'Applied'), render: (_, x) => <Mono>{releaseLabel(state, x.vehicle.appliedConfigId)}</Mono> },
+            { title: L('已生效', 'Applied'), render: (_, x) => <Mono>{B(configName(state, x.vehicle.appliedConfigId))}</Mono> },
             {
               title: L('车辆请求配置时返回', 'Answer to a config request'),
               render: (_, x) => {
@@ -298,7 +344,7 @@ function OtaTab({ projectId }: { projectId: string }) {
                   <Tooltip title={a.detail ? B(issueLabel(a.detail), a.detail) : undefined}>
                     <Space size={4}>
                       <Tag color={ANSWER_COLORS[a.reason]}>{B(CONFIG_ANSWER_LABELS[a.reason])}</Tag>
-                      <Mono>{releaseLabel(state, a.configId)}</Mono>
+                      <Mono>{B(configName(state, a.configId))}</Mono>
                     </Space>
                   </Tooltip>
                 );
@@ -365,7 +411,7 @@ function CreateOtaModal({ projectId, onClose }: { projectId: string; onClose: ()
         )}
       </Hint>
       <Space orientation="vertical" size={12} style={{ width: '100%' }}>
-        <Select style={{ width: '100%' }} value={releaseId} onChange={(v) => (setReleaseId(v), setWave(null))} options={releases.map((r) => ({ value: r.id, label: `DCL ${r.dclVersion} · ${r.vehicleIntegrationVersions.join(', ')}` }))} />
+        <Select style={{ width: '100%' }} value={releaseId} onChange={(v) => (setReleaseId(v), setWave(null))} options={releases.map((r) => ({ value: r.id, label: `${B(setName(r.dclVersion))} · ${applicableVersions(state, r).join(', ')}` }))} />
         <Checkbox.Group value={groupIds} onChange={(v) => (setGroupIds(v as string[]), setWave(null))}>
           <Space orientation="vertical">
             {groups.map((g) => (
@@ -404,9 +450,9 @@ function CreateOtaModal({ projectId, onClose }: { projectId: string; onClose: ()
                   <Mono>{r.id}</Mono>
                 </Checkbox>
                 <Typography.Text type="secondary">
-                  {r.integrationVersion ?? L('版本未知', 'software unknown')} · {releaseLabel(state, r.appliedConfigId)}
+                  {r.integrationVersion ?? L('版本未知', 'software unknown')} · {B(configName(state, r.appliedConfigId))}
                 </Typography.Text>
-                {done && <Tag color="green">{L('已运行该版本', 'already runs it')}</Tag>}
+                {done && <Tag color="green">{L('已运行该策略集', 'already runs it')}</Tag>}
                 {problems.map((p) => (
                   <Tag key={p} color="red">
                     {B(issueLabel(p), p)}
@@ -451,7 +497,7 @@ function RolloutCard({ deployment: d, canManage }: { deployment: Deployment; can
       size="small"
       title={
         <Space wrap>
-          <Mono>{releaseLabel(state, d.resolvedConfigId)}</Mono>
+          <Mono>{B(configName(state, d.resolvedConfigId))}</Mono>
           <LabelTag map={DEPLOYMENT_STATUS_LABELS} value={d.status} color={d.status === 'PAUSED' ? 'orange' : d.status === 'COMPLETED' ? 'green' : d.status === 'PENDING' ? 'processing' : undefined} />
           {d.rollbackOf && <Tag color="purple">{L('回滚', 'rollback')}</Tag>}
           <Typography.Text type="secondary">
@@ -536,7 +582,7 @@ function RolloutCard({ deployment: d, canManage }: { deployment: Deployment; can
           { title: L('车辆', 'Vehicle'), render: (_, t) => <Mono>{t.resourceId}</Mono> },
           { title: L('尝试', 'Attempt'), dataIndex: 'attempt' },
           { title: L('状态', 'Status'), render: (_, t) => <Tag color={TARGET_STATUS_COLORS[t.status]}>{B(TARGET_STATUS_LABELS[t.status])}</Tag> },
-          { title: L('之前生效', 'Previously'), render: (_, t) => <Mono>{releaseLabel(state, t.previousConfigId)}</Mono> },
+          { title: L('之前生效', 'Previously'), render: (_, t) => <Mono>{B(configName(state, t.previousConfigId))}</Mono> },
           { title: L('错误', 'Error'), render: (_, t) => (t.error ? B(issueLabel(t.error), t.error) : '—') },
           {
             title: L('历史尝试', 'Earlier attempts'),

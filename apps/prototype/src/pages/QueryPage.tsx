@@ -15,7 +15,7 @@ import type { AftersalesFilter, TrainingFilter } from '../engine/events.ts';
 import type { CollectionEvent, State } from '../engine/types.ts';
 import { useI18n } from '../i18n/i18n.tsx';
 import { issueLabel } from '../i18n/issues.ts';
-import { EVENT_ORIGIN_LABELS, EVENT_STATUS_COLORS, EVENT_STATUS_LABELS, FILE_PROCESS_LABELS, FILE_TYPE_LABELS, QUALITY_LABELS, TRAINING_BLOCKER_LABELS, TRAINING_USE_LABELS } from '../i18n/vocab.ts';
+import { EVENT_ORIGIN_LABELS, EVENT_STATUS_COLORS, EVENT_STATUS_LABELS, FILE_PROCESS_LABELS, FILE_TYPE_LABELS, QUALITY_LABELS, TRAINING_BLOCKER_LABELS, TRAINING_USE_LABELS, setName } from '../i18n/vocab.ts';
 
 const pipelineName = (s: State, id: string) => {
   const p = s.pipelines[id];
@@ -198,8 +198,8 @@ function EventDetail({ event: e }: { event: CollectionEvent }) {
             label: L('配置快照（事件发生时）', 'Configuration snapshot (at capture)'),
             children: (
               <Descriptions size="small" column={1}>
-                <Descriptions.Item label={L('车辆配置', 'Vehicle configuration')}><Mono>{e.configLabel}</Mono></Descriptions.Item>
-                <Descriptions.Item label={L('正式版本', 'Release')}>{release ? `DCL ${release.dclVersion}` : L('非正式配置（研发 / 候选）', 'not a formal release (development / candidate)')}</Descriptions.Item>
+                <Descriptions.Item label={L('车辆配置', 'Vehicle configuration')}><Mono>{release ? B(setName(release.dclVersion)) : e.configLabel}</Mono></Descriptions.Item>
+                <Descriptions.Item label={L('策略集', 'Policy set')}>{release ? B(setName(release.dclVersion)) : L('非策略集配置（研发 / 候选）', 'not a policy set (development / candidate)')}</Descriptions.Item>
                 <Descriptions.Item label={L('分组提交', 'Group commit')}><Mono>{displayName(state, e.commitId)}</Mono></Descriptions.Item>
                 <Descriptions.Item label={L('策略版本', 'Policy version')}><Mono>{`${e.policyId} v${policyVersion?.version ?? '?'}`}</Mono></Descriptions.Item>
                 {e.files.map((f) => (

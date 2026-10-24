@@ -78,8 +78,8 @@ export function FeaturesPage() {
       >
         <Hint>
           {base
-            ? L(`新 Feature 基于 ${workspace.vehicleModelId} 最新正式版本 DCL ${base.dclVersion}，继承其中本分组的文件与策略。`, `A new Feature builds on ${workspace.vehicleModelId}’s latest release, DCL ${base.dclVersion}, and inherits the group’s files and policies from it.`)
-            : L('新 Feature 从本车型的初始研发配置开始（尚无正式版本，为空）。', 'A new Feature starts from the vehicle model’s initial development configuration (no release yet, so it is empty).')}
+            ? L(`新 Feature 基于 ${workspace.vehicleModelId} 最新策略集 ${base.dclVersion}，继承其中本分组的文件与策略。`, `A new Feature builds on ${workspace.vehicleModelId}’s latest policy set, ${base.dclVersion}, and inherits the group’s files and policies from it.`)
+            : L('新 Feature 从本车型的初始研发配置开始（尚无策略集，为空）。', 'A new Feature starts from the vehicle model’s initial development configuration (no policy set yet, so it is empty).')}
         </Hint>
         <Form form={form} name="feature" layout="vertical" initialValues={{ groupId: creatable[0]?.id }}>
           <Form.Item name="groupId" label={L('业务分组', 'Business group')} rules={[{ required: true }]}>

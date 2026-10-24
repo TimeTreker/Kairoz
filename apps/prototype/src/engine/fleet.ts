@@ -4,10 +4,12 @@
 
 import type { Draft } from 'immer';
 import { authorize } from '../domain/authz.ts';
+import { normalizeManifest } from '../domain/compatibility.ts';
 import { conflict, notFound, rule } from '../domain/errors.ts';
 import { newId } from '../domain/ids.ts';
 import { WILDCARD } from '../domain/vocabulary.ts';
 import type { Env, Scope } from '../domain/vocabulary.ts';
+import { openCheckForNewSoftware } from './applicability.ts';
 import type { Actor, Ctx } from './engine.ts';
 import { getWorkspace } from './org.ts';
 import { displayName } from './config.ts';
@@ -16,6 +18,8 @@ import type { ControllerState, GroupPublication, Resource, State, VehicleGroup, 
 const RESOURCE_ID = /^[A-Z][A-Z0-9-]{2,40}$/;
 const VIN = /^[A-HJ-NPR-Z0-9]{17}$/;
 const VERSION = /^[0-9]+(\.[0-9]+){0,3}$/;
+
+type ManifestInput = { signals: string[]; sources: { unit: string; directory: string }[] };
 
 export const softwareKey = (vehicleModelId: string, version: string) => `${vehicleModelId}::${version}`;
 
@@ -58,15 +62,30 @@ function assertRemovable(s: State, resourceId: string): void {
 // Catalogs
 // ---------------------------------------------------------------------------
 
-export function recordSoftwareVersion(ctx: Ctx, input: { vehicleModelId: string; version: string; source: string }): string {
+/**
+ * Records a whole-vehicle software version from a trusted source, with what it provides when known.
+ * A version no policy set applies to opens an applicability check as a to-do for configuration release.
+ */
+export function recordSoftwareVersion(ctx: Ctx, input: { vehicleModelId: string; version: string; source: string; manifest?: ManifestInput | null }): string {
   ctx.allow('softwareVersion.record', { type: 'softwareVersion', id: input.version, scope: 'Vehicle' });
   if (!ctx.s.vehicleModels[input.vehicleModelId]) throw notFound('vehicle model', input.vehicleModelId);
   if (!VERSION.test(input.version)) throw rule('INVALID_VERSION', 'versions look like 1.0 or 1.2.3');
   if (!input.source.trim()) throw rule('SOURCE_REQUIRED', 'name the trusted source of this version');
   const key = softwareKey(input.vehicleModelId, input.version);
   if (ctx.s.softwareVersions[key]) throw conflict('VERSION_EXISTS', `version ${input.version} is already recorded`);
-  ctx.s.softwareVersions[key] = { vehicleModelId: input.vehicleModelId, version: input.version, source: input.source.trim(), manifest: null, recordedBy: ctx.user().username, createdAt: ctx.now };
+  const manifest = input.manifest ? normalizeManifest(input.manifest) : null;
+  ctx.s.softwareVersions[key] = { vehicleModelId: input.vehicleModelId, version: input.version, source: input.source.trim(), manifest, recordedBy: ctx.user().username, createdAt: ctx.now };
+  openCheckForNewSoftware(ctx, input.vehicleModelId, input.version);
   return key;
+}
+
+/** Adds the manifest of a version recorded without one. A recorded manifest is never replaced. */
+export function setSoftwareManifest(ctx: Ctx, input: { vehicleModelId: string; version: string; manifest: ManifestInput }): void {
+  ctx.allow('softwareVersion.record', { type: 'softwareVersion', id: input.version, scope: 'Vehicle' });
+  const v = ctx.s.softwareVersions[softwareKey(input.vehicleModelId, input.version)];
+  if (!v) throw notFound('software version', input.version);
+  if (v.manifest) throw conflict('MANIFEST_RECORDED', `software ${input.version} already has a manifest`);
+  v.manifest = normalizeManifest(input.manifest);
 }
 
 export function registerImage(

@@ -11,6 +11,7 @@ import { authorizeFeature, displayName } from './config.ts';
 import type { Ctx } from './engine.ts';
 import { directTargetProblems, getResource, membersOf, pendingDeploymentOf, recordGroupBinding } from './fleet.ts';
 import { getGroup } from './org.ts';
+import { appliesTo } from './release.ts';
 import type { Candidate, Deployment, DeploymentTarget, Feature, ResolvedConfig, State, TestRequest, TestRun } from './types.ts';
 
 /** Finds or creates the resolved configuration for a base plus group commits. */
@@ -93,7 +94,7 @@ function dispatchProblems(s: State, feature: Feature, vehicleGroupIds: string[],
       if (pending) fail(`vehicle is waiting for deployment ${pending}`);
       if (feature.baseReleaseId) {
         const release = s.releases[feature.baseReleaseId]!;
-        if (r.integrationVersion !== null && !release.vehicleIntegrationVersions.includes(r.integrationVersion)) {
+        if (r.integrationVersion !== null && !appliesTo(s, release, r.integrationVersion)) {
           fail(`vehicle software ${r.integrationVersion} is not compatible with base ${release.dclVersion}`);
         }
       }
@@ -277,6 +278,8 @@ export function cancelDeployment(ctx: Ctx, deploymentId: string, reason: string)
   if (d.kind === 'FEATURE') {
     const group = getGroup(ctx.s, d.groupId!);
     ctx.allow('feature.dispatch', { type: 'deployment', id: d.id, workspaceId: d.workspaceId, groupId: group.id, scope: group.domain, env: d.env });
+  } else if (d.kind === 'APPLICABILITY') {
+    ctx.allow('applicability.dispatch', { type: 'deployment', id: d.id, workspaceId: d.workspaceId, scope: 'Vehicle' });
   } else {
     ctx.allow('candidate.dispatch', { type: 'deployment', id: d.id, workspaceId: d.workspaceId, scope: ctx.s.candidates[d.subjectId]?.scope ?? 'Vehicle' });
   }
@@ -343,7 +346,7 @@ export interface TargetStatus {
   latest: TestRun | null;
 }
 
-function testStatusFor(s: State, subjectId: string, versionId: string): TargetStatus[] {
+export function testStatusFor(s: State, subjectId: string, versionId: string): TargetStatus[] {
   return s.testTargets
     .filter((t) => t.subjectId === subjectId && t.versionId === versionId)
     .map((t) => {
@@ -365,7 +368,7 @@ export function verifyBlockers(s: State, feature: Feature): string[] {
   return blockersFor(s, featureTestStatus(s, feature));
 }
 
-function blockersFor(s: State, status: TargetStatus[]): string[] {
+export function blockersFor(s: State, status: TargetStatus[]): string[] {
   const blockers: string[] = [];
   if (status.length === 0) blockers.push('no vehicles were dispatched for this commit');
   for (const t of status) if (t.latest?.result !== 'PASS') blockers.push(`${t.resourceId} has no passing test`);
@@ -375,7 +378,7 @@ function blockersFor(s: State, status: TargetStatus[]): string[] {
   return blockers;
 }
 
-function assertSimulationFirst(s: State, subjectId: string, versionId: string, resourceType: string, result: string): void {
+export function assertSimulationFirst(s: State, subjectId: string, versionId: string, resourceType: string, result: string): void {
   if (resourceType !== 'PHYSICAL' || result !== 'PASS') return;
   const simPass = s.testRuns.some((x) => x.subjectId === subjectId && x.versionId === versionId && x.resourceType === 'SIMULATION' && x.result === 'PASS');
   if (!simPass) throw rule('SIMULATION_FIRST', 'a simulation test must pass before a physical one');

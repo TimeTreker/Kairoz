@@ -63,6 +63,37 @@ const FILE_TYPE_FORMATS = [
   ['unknown', 'binary'],
 ] as const;
 
+/**
+ * What X89 software 1.0 and 1.1 provide (mock manifest, recorded with each version): the signals
+ * the demo and the drills' triggers read and the data sources their files come from.
+ */
+const X89_MANIFEST = {
+  signals: [
+    'apa.active',
+    'brake_fault_code',
+    'brake_pressure',
+    'cell_temp',
+    'lane_offset',
+    'min_obstacle_distance',
+    'soc_drop_rate',
+    'steering_angle_rate',
+    'steering_return_rate',
+    'torque_rate',
+    'vehicle_deceleration',
+    'vehicle_speed',
+    'yaw_rate',
+  ],
+  sources: [
+    { unit: 'ADC', directory: '/data' },
+    { unit: 'ADC', directory: '/var/log' },
+    { unit: 'BMS', directory: '/data/bms' },
+    { unit: 'CDC', directory: '/data' },
+    { unit: 'CDC', directory: '/var/log' },
+    { unit: 'CHASSIS', directory: '/var/log' },
+    { unit: 'VCU', directory: '/data/vcu' },
+  ],
+};
+
 /** Builds the demo on top of a clean installation and returns the resulting state. */
 export function demoState(): State {
   const engine = new Engine(cleanState());
@@ -237,8 +268,8 @@ export function demoState(): State {
   as('adc_parking', (c) => submitFeature(c, parking, { message: '环视视频首版' }));
 
   // Vehicles: recorded software versions, simulation images, physical vehicles, a brake simulation.
-  as('resource', (c) => recordSoftwareVersion(c, { vehicleModelId: 'X89', version: '1.0', source: '整车 OTA 发布记录 X89-1.0' }));
-  as('resource', (c) => recordSoftwareVersion(c, { vehicleModelId: 'X89', version: '1.1', source: '整车 OTA 发布记录 X89-1.1' }));
+  as('resource', (c) => recordSoftwareVersion(c, { vehicleModelId: 'X89', version: '1.0', source: '整车 OTA 发布记录 X89-1.0', manifest: X89_MANIFEST }));
+  as('resource', (c) => recordSoftwareVersion(c, { vehicleModelId: 'X89', version: '1.1', source: '整车 OTA 发布记录 X89-1.1', manifest: X89_MANIFEST }));
   const digest = (text: string) => `sha256:${sha256Hex(text)}`;
   as('dcl', (c) => registerImage(c, { id: 'x89-dev-sim', vehicleModelId: 'X89', integrationVersion: null, build: 'x89-dev-2026.10', digest: digest('x89-dev-sim'), simulator: 'SimOne 3' }));
   as('dcl', (c) => registerImage(c, { id: 'x89-1.0-sim', vehicleModelId: 'X89', integrationVersion: '1.0', build: 'x89-1.0.4', digest: digest('x89-1.0-sim'), simulator: 'SimOne 3' }));

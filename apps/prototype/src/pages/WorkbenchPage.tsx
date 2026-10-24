@@ -8,6 +8,7 @@ import { authorize } from '../domain/authz.ts';
 import { visibleFeatures } from '../engine/config.ts';
 import { intakeQueue } from '../engine/intake.ts';
 import { isConfirmed, isMergeWorkspace, verifiedSources } from '../engine/integration.ts';
+import { blockedProductionVehicles } from '../engine/applicability.ts';
 import { otaRollouts } from '../engine/ota.ts';
 import { releaseFor, releasesOf } from '../engine/release.ts';
 import { managedResources, pendingDeploymentOf, vehicleGroupsOf, workspaceVehicles } from '../engine/fleet.ts';
@@ -15,7 +16,7 @@ import { referenceRequestsFor } from '../engine/references.ts';
 import { candidateTestStatus, featureTestStatus, testRequestsOf } from '../engine/validation.ts';
 import type { Feature } from '../engine/types.ts';
 import { useI18n } from '../i18n/i18n.tsx';
-import { CANDIDATE_STATUS_COLORS, CANDIDATE_STATUS_LABELS, FEEDBACK_LABELS } from '../i18n/vocab.ts';
+import { CANDIDATE_STATUS_COLORS, CANDIDATE_STATUS_LABELS, CHECK_STATUS_COLORS, CHECK_STATUS_LABELS, FEEDBACK_LABELS, setName } from '../i18n/vocab.ts';
 
 function Row2({ onClick, children }: { onClick: () => void; children: ReactNode }) {
   return (
@@ -144,13 +145,24 @@ export function WorkbenchPage() {
   }
   if (roles.includes('INTEGRATION_TEST') && workspace?.kind === 'INTEGRATION') {
     const mine = Object.values(state.candidates).filter((c) => c.testWorkspaceId === workspace.id && ['CANDIDATE', 'TESTING'].includes(c.status));
+    const checks = Object.values(state.applicabilityChecks).filter((c) => c.testWorkspaceId === workspace.id && ['OPEN', 'TESTING'].includes(c.status));
     cards.push(
       <Card key="it" title={<RoleTag role="INTEGRATION_TEST" />} extra={<Button size="small" onClick={() => navigate('integration')}>{L('集成候选', 'Candidates')}</Button>}>
         <Row gutter={16} style={{ marginBottom: 12 }}>
-          <Col span={12}><Statistic title={L('待下发', 'To dispatch')} value={mine.filter((c) => c.status === 'CANDIDATE').length} /></Col>
-          <Col span={12}><Statistic title={L('测试中', 'Testing')} value={mine.filter((c) => c.status === 'TESTING').length} /></Col>
+          <Col span={8}><Statistic title={L('待下发', 'To dispatch')} value={mine.filter((c) => c.status === 'CANDIDATE').length} /></Col>
+          <Col span={8}><Statistic title={L('测试中', 'Testing')} value={mine.filter((c) => c.status === 'TESTING').length} /></Col>
+          <Col span={8}><Statistic title={L('待测试适用性', 'Applicability to test')} value={checks.length} /></Col>
         </Row>
-        {mine.length === 0 && <Typography.Text type="secondary">{L('暂无待测候选', 'No candidates to test')}</Typography.Text>}
+        {mine.length === 0 && checks.length === 0 && <Typography.Text type="secondary">{L('暂无待测候选', 'No candidates to test')}</Typography.Text>}
+        {checks.map((c) => (
+          <Row2 key={c.id} onClick={() => navigate('integration')}>
+            <Space>
+              <Mono>{`${c.vehicleModelId} ${c.version}`}</Mono>
+              <Typography.Text type="secondary">← {B(setName(state.releases[c.releaseId]!.dclVersion))}</Typography.Text>
+            </Space>
+            <LabelTag map={CHECK_STATUS_LABELS} value={c.status} color={CHECK_STATUS_COLORS[c.status]} />
+          </Row2>
+        ))}
         {mine.map((c) => (
           <Row2 key={c.id} onClick={() => navigate(`integration/${c.id}`)}>
             <Space>
@@ -190,10 +202,12 @@ export function WorkbenchPage() {
       return target && r.appliedConfigId !== target.resolvedConfigId;
     });
     const latest = releasesOf(state, workspace.vehicleModelId)[0];
+    const checks = Object.values(state.applicabilityChecks).filter((c) => c.vehicleModelId === workspace.vehicleModelId && ['OPEN', 'TESTING', 'VERIFIED'].includes(c.status));
+    const blocked = blockedProductionVehicles(state, workspace.vehicleModelId);
     cards.push(
       <Card key="cr" title={<RoleTag role="CONFIG_RELEASE" />} extra={<Button size="small" onClick={() => navigate('release')}>{L('发布与配置 OTA', 'Release & OTA')}</Button>}>
         <Row gutter={16} style={{ marginBottom: 12 }}>
-          <Col span={6}><Statistic title={L('最新正式版本', 'Latest release')} value={latest ? latest.dclVersion : '—'} /></Col>
+          <Col span={6}><Statistic title={L('最新策略集', 'Latest policy set')} value={latest ? latest.dclVersion : '—'} /></Col>
           <Col span={6}><Statistic title={L('待发布候选', 'To release')} value={toRelease.length} /></Col>
           <Col span={6}><Statistic title={L('进行中 / 暂停的 OTA', 'Running / paused')} value={`${rollouts.filter((d) => d.status === 'PENDING').length} / ${rollouts.filter((d) => d.status === 'PAUSED').length}`} /></Col>
           <Col span={6}><Statistic title={L('待更新的量产车', 'Vehicles due')} value={due.length} /></Col>
@@ -204,6 +218,22 @@ export function WorkbenchPage() {
             <LabelTag map={CANDIDATE_STATUS_LABELS} value={c.status} color={CANDIDATE_STATUS_COLORS[c.status]} />
           </Row2>
         ))}
+        {checks.map((c) => (
+          <Row2 key={c.id} onClick={() => navigate('release/applicability')}>
+            <Space>
+              <Typography.Text>{L('适用性确认', 'Applicability')}</Typography.Text>
+              <Mono>{`${c.vehicleModelId} ${c.version}`}</Mono>
+              <Typography.Text type="secondary">← {B(setName(state.releases[c.releaseId]!.dclVersion))}</Typography.Text>
+            </Space>
+            <LabelTag map={CHECK_STATUS_LABELS} value={c.status} color={CHECK_STATUS_COLORS[c.status]} />
+          </Row2>
+        ))}
+        {blocked.length > 0 && (
+          <Typography.Paragraph type="danger" style={{ marginBottom: 0 }}>
+            {L(`${blocked.length} 辆量产车的软件版本没有适用的策略集：`, `${blocked.length} production vehicle(s) run software no policy set applies to: `)}
+            {blocked.map((r) => `${r.id}（${r.integrationVersion}）`).join(L('、', ', '))}
+          </Typography.Paragraph>
+        )}
         {rollouts.some((d) => d.status === 'PAUSED') && <Typography.Text type="danger">{L('有 OTA 因车辆失败而暂停', 'A rollout is paused after a vehicle failure')}</Typography.Text>}
       </Card>,
     );

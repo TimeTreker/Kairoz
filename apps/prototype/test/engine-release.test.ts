@@ -172,7 +172,7 @@ describe('configuration OTA', () => {
     const r101 = e.run('release', (c) => rel.promoteCandidate(c, cand, { dclVersion: '1.0.1', vehicleIntegrationVersions: ['1.0'] }));
     const r100 = rel.releasesOf(e.getState(), 'X89').find((r) => r.dclVersion === '1.0.0')!.id;
     const older = fails(() => e.run('release', (c) => ota.createOta(c, { releaseId: r100, vehicleGroupIds: [production], firstWave: 'ALL' })), 'OTA_BLOCKED');
-    assert.match((older.details as { issues: string[] }).issues[0]!, /resolves to the newer DCL 1.0.1/);
+    assert.match((older.details as { issues: string[] }).issues[0]!, /resolves to the newer policy set 1.0.1/);
     // A partial software upgrade leaves the whole-vehicle version unknown: production targets block.
     e.run('resource', (c) => fleet.confirmIntegration(c, 'VEH-202', { version: null, source: '域控 ADC 升级失败，版本不一致' }));
     const blocked = fails(() => e.run('release', (c) => ota.createOta(c, { releaseId: r101, vehicleGroupIds: [production], firstWave: 'ALL' })), 'OTA_BLOCKED');

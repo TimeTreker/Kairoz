@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useActor, useCan, useRun, useWorkspace } from '../app/hooks.ts';
 import { engine, useEngineState } from '../app/store.ts';
 import { ClientReportDrawer } from '../components/client-report.tsx';
-import { EnvTag, Hint, LabelTag, Mono, PageHeader, ShortId, when } from '../components/common.tsx';
+import { EnvTag, Hint, LabelTag, Mono, PageHeader, ShortId, configName, when } from '../components/common.tsx';
 import { ENVS, SCOPES } from '../domain/vocabulary.ts';
 import {
   addGroupMember,
@@ -28,6 +28,7 @@ import {
   reserveVehicle,
   setGroupApproval,
   setResourceStatus,
+  setSoftwareManifest,
   startSimulation,
   stopSimulation,
   vehicleGroupsOf,
@@ -37,15 +38,12 @@ import { registerDeviceKey } from '../engine/client-report.ts';
 import { displayName } from '../engine/config.ts';
 import { devicePublicKey, provisionDevice } from '../engine/simulator.ts';
 import { decideTestRequest, testRequestsOf } from '../engine/validation.ts';
-import type { Resource, State, TestRequest } from '../engine/types.ts';
+import { compareVersions } from '../engine/release.ts';
+import type { Resource, SoftwareVersion, State, TestRequest } from '../engine/types.ts';
 import { sha256Hex } from '../domain/canonical.ts';
 import { useI18n } from '../i18n/i18n.tsx';
 import { ENV_LABELS, REQUEST_STATUS_COLORS, REQUEST_STATUS_LABELS, RESOURCE_STATUS_LABELS, RESOURCE_TYPE_LABELS, VEHICLE_GROUP_PURPOSE_LABELS } from '../i18n/vocab.ts';
 import { navigate } from '../app/router.ts';
-
-function configLabel(s: State, id: string | null): string {
-  return id ? (s.resolvedConfigs[id]?.label ?? id) : '—';
-}
 
 function VehicleTable({ vehicles, extra }: { vehicles: Resource[]; extra?: (r: Resource) => React.ReactNode }) {
   const state = useEngineState();
@@ -87,7 +85,7 @@ function VehicleTable({ vehicles, extra }: { vehicles: Resource[]; extra?: (r: R
               <Typography.Text type="secondary">{L('尚未获取', 'Unknown')}</Typography.Text>
             ),
         },
-        { title: L('已生效配置', 'Applied configuration'), render: (_, r) => <Mono>{configLabel(state, r.appliedConfigId)}</Mono> },
+        { title: L('已生效配置', 'Applied configuration'), render: (_, r) => <Mono>{B(configName(state, r.appliedConfigId))}</Mono> },
         {
           title: L('车辆组 / 下发', 'Group / dispatch'),
           render: (_, r) => {
@@ -344,7 +342,7 @@ function VehicleGroups() {
                     columns={[
                       { title: L('车辆', 'Vehicle'), render: (_, id) => <Mono>{id}</Mono> },
                       { title: L('类型', 'Type'), render: (_, id) => B(RESOURCE_TYPE_LABELS[state.resources[id]!.type]) },
-                      { title: L('已生效', 'Applied'), render: (_, id) => <Mono>{configLabel(state, state.resources[id]!.appliedConfigId)}</Mono> },
+                      { title: L('已生效', 'Applied'), render: (_, id) => <Mono>{B(configName(state, state.resources[id]!.appliedConfigId))}</Mono> },
                       {
                         title: '',
                         render: (_, id) =>
@@ -758,14 +756,58 @@ function Registry() {
   );
 }
 
+/** A manifest typed as text: signals separated by spaces, commas or lines; one UNIT:/directory per line. */
+function parseManifest(signals?: string, sources?: string) {
+  if (!signals?.trim() && !sources?.trim()) return null;
+  return {
+    signals: (signals ?? '').split(/[\s,，]+/).filter(Boolean),
+    sources: (sources ?? '')
+      .split(/\n+/)
+      .map((l) => l.trim())
+      .filter(Boolean)
+      .map((l) => ({ unit: l.includes(':') ? l.slice(0, l.indexOf(':')) : '', directory: l.includes(':') ? l.slice(l.indexOf(':') + 1) : l })),
+  };
+}
+
 function Catalogs() {
   const state = useEngineState();
   const { L } = useI18n();
   const can = useCan();
   const run = useRun();
-  const [open, setOpen] = useState<'version' | 'image' | null>(null);
+  const [open, setOpen] = useState<'version' | 'image' | 'manifest' | null>(null);
+  const [manifestFor, setManifestFor] = useState<SoftwareVersion | null>(null);
   const [form] = Form.useForm();
   const model = Form.useWatch('vehicleModelId', form);
+  // The newest recorded manifest of the model, to start a new version from.
+  const copyPrevious = () => {
+    const previous = Object.values(state.softwareVersions)
+      .filter((v) => v.vehicleModelId === (manifestFor?.vehicleModelId ?? model) && v.manifest)
+      .sort((a, b) => compareVersions(b.version, a.version))[0];
+    if (previous?.manifest) {
+      form.setFieldsValue({ signals: previous.manifest.signals.join('\n'), sources: previous.manifest.sources.map((s) => `${s.unit}:${s.directory}`).join('\n') });
+    }
+  };
+  const manifestFields = (
+    <>
+      <Form.Item
+        name="signals"
+        label={L('软件清单（Mock）· 信号', 'Software manifest (mock) · signals')}
+        extra={
+          <Space size={4}>
+            <span>{L('每行一个，或用逗号分隔；用于逐条检查策略是否还能在该软件上运行', 'One per line or comma-separated; used to check each policy against this software')}</span>
+            <Button size="small" type="link" onClick={copyPrevious}>
+              {L('从上一版本复制', 'Copy from previous version')}
+            </Button>
+          </Space>
+        }
+      >
+        <Input.TextArea rows={4} placeholder={'brake_pressure\nvehicle_speed'} />
+      </Form.Item>
+      <Form.Item name="sources" label={L('软件清单（Mock）· 数据源', 'Software manifest (mock) · sources')} extra={L('每行一个 单元:/目录，目录包含其子目录', 'One UNIT:/directory per line; a directory covers its subdirectories')}>
+        <Input.TextArea rows={3} placeholder={'CHASSIS:/var/log\nADC:/data'} />
+      </Form.Item>
+    </>
+  );
   const canVersion = can('softwareVersion.record', { scope: 'Vehicle' });
   const canImage = can('image.register', { workspaceId: '*', groupId: '*' });
   return (
@@ -781,6 +823,21 @@ function Catalogs() {
               { title: L('车型', 'Model'), dataIndex: 'vehicleModelId' },
               { title: L('版本', 'Version'), dataIndex: 'version' },
               { title: L('来源', 'Source'), dataIndex: 'source' },
+              {
+                title: L('软件清单', 'Manifest'),
+                render: (_, v) =>
+                  v.manifest ? (
+                    <Tooltip title={`${v.manifest.signals.join(', ')} · ${v.manifest.sources.map((s) => `${s.unit}:${s.directory}`).join(', ')}`}>
+                      <Tag>{L(`信号 ${v.manifest.signals.length} · 数据源 ${v.manifest.sources.length}`, `${v.manifest.signals.length} signals · ${v.manifest.sources.length} sources`)}</Tag>
+                    </Tooltip>
+                  ) : canVersion ? (
+                    <Button size="small" type="link" onClick={() => (form.resetFields(), setManifestFor(v), setOpen('manifest'))}>
+                      {L('补录清单', 'Add manifest')}
+                    </Button>
+                  ) : (
+                    <Tag color="orange">{L('未登记', 'not recorded')}</Tag>
+                  ),
+              },
             ]}
           />
         </Card>
@@ -804,14 +861,28 @@ function Catalogs() {
       </Col>
       <Modal
         open={open !== null}
-        title={open === 'version' ? L('登记整车软件版本', 'Record a software version') : L('登记仿真镜像', 'Register a simulation image')}
+        title={
+          open === 'version'
+            ? L('登记整车软件版本', 'Record a software version')
+            : open === 'manifest'
+              ? L(`补录软件清单 · ${manifestFor?.vehicleModelId} ${manifestFor?.version}`, `Add the manifest · ${manifestFor?.vehicleModelId} ${manifestFor?.version}`)
+              : L('登记仿真镜像', 'Register a simulation image')
+        }
         onCancel={() => setOpen(null)}
         onOk={() =>
           form.validateFields().then((v) => {
             const ok =
               open === 'version'
-                ? run((c) => recordSoftwareVersion(c, v), L('已登记', 'Recorded'))
-                : run(
+                ? run(
+                    (c) => recordSoftwareVersion(c, { vehicleModelId: v.vehicleModelId, version: v.version, source: v.source, manifest: parseManifest(v.signals, v.sources) }),
+                    L('已登记；没有策略集适用时会自动开启适用性确认', 'Recorded; an applicability check opens if no policy set applies'),
+                  )
+                : open === 'manifest'
+                  ? run(
+                      (c) => setSoftwareManifest(c, { vehicleModelId: manifestFor!.vehicleModelId, version: manifestFor!.version, manifest: parseManifest(v.signals, v.sources) ?? { signals: [], sources: [] } }),
+                      L('已补录软件清单', 'Manifest recorded'),
+                    )
+                  : run(
                     (c) =>
                       registerImage(c, {
                         id: v.id,
@@ -828,10 +899,12 @@ function Catalogs() {
         }
       >
         <Form form={form} name="catalog" layout="vertical" initialValues={{ vehicleModelId: Object.keys(state.vehicleModels)[0], simulator: 'SimOne 3' }}>
-          <Form.Item name="vehicleModelId" label={L('车型', 'Model')}>
+          <Form.Item name="vehicleModelId" label={L('车型', 'Model')} hidden={open === 'manifest'}>
             <Select options={Object.keys(state.vehicleModels).map((m) => ({ value: m, label: m }))} onChange={() => form.setFieldValue('integrationVersion', undefined)} />
           </Form.Item>
-          {open === 'version' ? (
+          {open === 'manifest' ? (
+            manifestFields
+          ) : open === 'version' ? (
             <>
               <Form.Item name="version" label={L('版本', 'Version')} rules={[{ required: true }]}>
                 <Input placeholder="1.2" />
@@ -839,6 +912,7 @@ function Catalogs() {
               <Form.Item name="source" label={L('可信来源', 'Trusted source')} rules={[{ required: true }]}>
                 <Input />
               </Form.Item>
+              {manifestFields}
             </>
           ) : (
             <>

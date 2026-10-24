@@ -27,7 +27,7 @@ describe('bilingual error text', () => {
       ['SIM-902: software version unknown', 'SIM-902：整车软件版本未知'],
       ['VEH-904: a partial software update left controllers inconsistent (BMS); finish or roll back the software OTA first', 'VEH-904：软件部分升级使域控状态不一致（BMS），请先完成或回滚软件 OTA'],
       ['VEH-903: no earlier formal configuration to return to', 'VEH-903：没有可回退的上一正式配置'],
-      ['VEH-903: DCL 1.0.0 does not apply to software 1.1', 'VEH-903：DCL 1.0.0 不适用于软件 1.1'],
+      ['VEH-903: policy set 1.0.0 does not apply to software 1.1', 'VEH-903：策略集 1.0.0 不适用于软件 1.1'],
       ['VEH-001: routes through vehicle group 制动验证组; dispatch to the group', 'VEH-001：属于车辆组“制动验证组”，请按车辆组下发'],
       ['SIM-901 has no passing test', 'SIM-901 没有通过的测试'],
       ['a simulation test must pass', '须有仿真测试通过'],

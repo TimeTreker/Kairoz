@@ -8,8 +8,8 @@ import type { VersionItem } from '../domain/client-report.ts';
 import { clientReportView } from '../engine/client-report.ts';
 import type { StoredReport } from '../engine/types.ts';
 import { useI18n } from '../i18n/i18n.tsx';
-import { CLIENT_ITEM_STATUS_LABELS, REPORT_RESULT_LABELS } from '../i18n/vocab.ts';
-import { LabelTag, Mono, ShortId, when } from './common.tsx';
+import { CLIENT_ITEM_STATUS_LABELS, REPORT_RESULT_LABELS, setName } from '../i18n/vocab.ts';
+import { LabelTag, Mono, ShortId, configName, when } from './common.tsx';
 
 /** Same or different from the platform's record; a difference is shown, never acted on. */
 function Match({ same }: { same: boolean }) {
@@ -40,6 +40,8 @@ export function ClientReportDrawer({ resourceId, workspaceId, onClose }: { resou
   const actor = useActor();
   const { L, B } = useI18n();
   const view = resourceId && actor ? clientReportView(state, actor, resourceId, workspaceId) : null;
+  const reportedReleaseId = view?.latest?.payload.configuration?.releaseId;
+  const reportedSet = reportedReleaseId ? state.releases[reportedReleaseId] : undefined;
   const latest = view?.latest?.payload;
   return (
     <Drawer open={resourceId !== null} size="large" title={resourceId ? `${resourceId} · ${L('客户端状态', 'Client state')}` : ''} onClose={onClose}>
@@ -106,12 +108,12 @@ export function ClientReportDrawer({ resourceId, workspaceId, onClose }: { resou
                 </Descriptions.Item>
                 <Descriptions.Item label={L('已生效配置', 'Applied configuration')}>
                   <Space wrap>
-                    <Mono>{view.comparison.configuration.reportedLabel ?? '—'}</Mono>
+                    <Mono>{reportedSet ? B(setName(reportedSet.dclVersion)) : (view.comparison.configuration.reportedLabel ?? '—')}</Mono>
                     <ShortId value={view.comparison.configuration.reported} size={16} />
                     <Match same={view.comparison.configuration.same} />
                     {!view.comparison.configuration.same && (
                       <Typography.Text type="secondary">
-                        {L('平台记录', 'platform')}: {view.comparison.configuration.recordedLabel ?? '—'}
+                        {L('平台记录', 'platform')}: {B(configName(state, state.resources[view.resourceId]?.appliedConfigId))}
                       </Typography.Text>
                     )}
                   </Space>

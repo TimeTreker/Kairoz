@@ -5,7 +5,7 @@ import { App, Alert, Button, Card, Checkbox, Dropdown, Select, Space, Switch, Ta
 import { useEffect, useState } from 'react';
 import { useErrorText } from '../app/hooks.ts';
 import { engine, useEngineState } from '../app/store.ts';
-import { EnvTag, LabelTag, Mono, PageHeader, when } from '../components/common.tsx';
+import { EnvTag, LabelTag, Mono, PageHeader, configName, when } from '../components/common.tsx';
 import type { Ctx } from '../engine/engine.ts';
 import { advanceEvent, assessEvent, capturablePolicies, captureEvent, deliverCallback, receiveChunk, setFailParse } from '../engine/events.ts';
 import type { Quality, TrainingUse } from '../engine/types.ts';
@@ -82,7 +82,7 @@ export function SimulatorPage() {
               dataSource={pending}
               columns={[
                 { title: L('车辆', 'Vehicle'), render: (_, p) => <Mono>{p.target.resourceId}</Mono> },
-                { title: L('配置', 'Configuration'), render: (_, p) => <Mono>{state.resolvedConfigs[p.deployment.resolvedConfigId]?.label}</Mono> },
+                { title: L('配置', 'Configuration'), render: (_, p) => <Mono>{B(configName(state, p.deployment.resolvedConfigId))}</Mono> },
                 { title: L('下发', 'Dispatch'), render: (_, p) => <Mono>{p.deployment.id}</Mono> },
                 { title: L('尝试', 'Attempt'), render: (_, p) => p.target.attempt },
                 { title: L('本次尝试开始', 'Attempt since'), render: (_, p) => when(p.target.updatedAt) },
@@ -128,7 +128,7 @@ export function SimulatorPage() {
               { title: L('在线', 'Online'), render: (_, r) => <Switch size="small" checked={r.agent.online} onChange={(v) => system((c) => setAgent(c, r.id, { online: v }))} /> },
               { title: L('自动回执', 'Auto receipt'), render: (_, r) => <Switch size="small" checked={r.agent.autoAck} onChange={(v) => system((c) => setAgent(c, r.id, { autoAck: v }))} /> },
               { title: L('下一次应用失败', 'Fail next apply'), render: (_, r) => <Switch size="small" checked={r.agent.failNext} onChange={(v) => system((c) => setAgent(c, r.id, { failNext: v }))} /> },
-              { title: L('已生效配置', 'Applied'), render: (_, r) => <Mono>{r.appliedConfigId ? state.resolvedConfigs[r.appliedConfigId]?.label : '—'}</Mono> },
+              { title: L('已生效配置', 'Applied'), render: (_, r) => <Mono>{B(configName(state, r.appliedConfigId))}</Mono> },
               {
                 title: (
                   <Tooltip title={L('客户端上报实际运行的内容；离线时暂存，恢复连接后补报。签名为 Mock。', 'The client reports what it actually runs; offline, reports wait and are sent on reconnect. Signatures are mock.')}>
@@ -228,7 +228,7 @@ export function SimulatorPage() {
               placeholder={L('选择车辆', 'Vehicle')}
               value={vehicle}
               onChange={(v) => (setVehicle(v), setPolicy(undefined))}
-              options={running.map((r) => ({ value: r.id, label: `${r.id} · ${state.resolvedConfigs[r.appliedConfigId!]?.label}` }))}
+              options={running.map((r) => ({ value: r.id, label: `${r.id} · ${B(configName(state, r.appliedConfigId))}` }))}
             />
             <Select
               style={{ width: 260 }}

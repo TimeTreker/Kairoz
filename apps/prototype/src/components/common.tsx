@@ -2,7 +2,8 @@ import { Flex, Tag, Tooltip, Typography } from 'antd';
 import type { ReactNode } from 'react';
 import { useI18n } from '../i18n/i18n.tsx';
 import type { Bilingual } from '../i18n/i18n.tsx';
-import { ENV_LABELS, ROLE_LABELS, STAGE_COLORS, STAGE_LABELS } from '../i18n/vocab.ts';
+import type { State } from '../engine/types.ts';
+import { ENV_LABELS, ROLE_LABELS, STAGE_COLORS, STAGE_LABELS, setName } from '../i18n/vocab.ts';
 
 export function PageHeader({ title, subtitle, extra }: { title: string; subtitle?: string; extra?: ReactNode }) {
   return (
@@ -67,4 +68,13 @@ export function when(iso: string | null | undefined): string {
   if (!iso) return '—';
   const d = new Date(iso);
   return `${d.toLocaleDateString()} ${d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+}
+
+/** How a configuration is named: a policy set by its version, anything else by its label. */
+export function configName(s: State, id: string | null | undefined): Bilingual {
+  if (!id) return { zh: '—', en: '—' };
+  const c = s.resolvedConfigs[id];
+  if (!c) return { zh: id, en: id };
+  const release = c.kind === 'RELEASE' ? s.releases[c.sourceId] : undefined;
+  return release ? setName(release.dclVersion) : { zh: c.label, en: c.label };
 }

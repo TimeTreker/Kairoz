@@ -10,7 +10,7 @@ import type { Ctx } from './engine.ts';
 import { directTargetProblems, membersOf, openOtaOf, pendingDeploymentOf, recordGroupBinding } from './fleet.ts';
 
 export { openOtaOf };
-import { getRelease, releaseFor } from './release.ts';
+import { appliesTo, getRelease, releaseFor } from './release.ts';
 import type { Deployment, DeploymentTarget, GroupPublication, Release, Resource, State } from './types.ts';
 
 /** Why a vehicle cannot take a release now; empty when it can. */
@@ -21,8 +21,8 @@ export function otaProblems(s: State, r: Resource, release: Release, except?: st
   if (r.vehicleModelId !== release.vehicleModelId) problems.push(`${r.id}: another vehicle model`);
   const resolved = releaseFor(s, r);
   if (!resolved.release) problems.push(`${r.id}: ${resolved.problem}`);
-  else if (!release.vehicleIntegrationVersions.includes(r.integrationVersion!)) problems.push(`${r.id}: DCL ${release.dclVersion} does not apply to software ${r.integrationVersion}`);
-  else if (resolved.release.id !== release.id) problems.push(`${r.id}: resolves to the newer DCL ${resolved.release.dclVersion}`);
+  else if (!appliesTo(s, release, r.integrationVersion!)) problems.push(`${r.id}: policy set ${release.dclVersion} does not apply to software ${r.integrationVersion}`);
+  else if (resolved.release.id !== release.id) problems.push(`${r.id}: resolves to the newer policy set ${resolved.release.dclVersion}`);
   const pending = pendingDeploymentOf(s, r.id);
   if (pending && pending !== except) problems.push(`${r.id}: waiting for deployment ${pending}`);
   const open = openOtaOf(s, r.id, except);
@@ -102,7 +102,7 @@ export function createOta(
       members.push({ resourceId: rid, vehicleGroupId: null });
     }
   }
-  if (!problems.length && members.length === 0) throw rule('NOTHING_TO_ROLL_OUT', `every vehicle already runs DCL ${release.dclVersion}`);
+  if (!problems.length && members.length === 0) throw rule('NOTHING_TO_ROLL_OUT', `every vehicle already runs policy set ${release.dclVersion}`);
   const wave = input.firstWave === 'ALL' ? members.map((m) => m.resourceId) : input.firstWave;
   if (wave.length === 0) problems.push('choose the vehicles of the first wave');
   for (const rid of wave) if (!members.some((m) => m.resourceId === rid)) problems.push(`${rid}: not a vehicle of this rollout`);
@@ -221,7 +221,7 @@ export function rollbackProblems(s: State, d: Deployment): string[] {
     // Only a previous formal configuration that still fits the vehicle's software qualifies.
     if (!previous || previous.kind !== 'RELEASE') return [`${r.id}: no earlier formal configuration to return to`];
     const release = s.releases[previous.sourceId];
-    if (!release || !r.integrationVersion || !release.vehicleIntegrationVersions.includes(r.integrationVersion)) {
+    if (!release || !r.integrationVersion || !appliesTo(s, release, r.integrationVersion)) {
       return [`${r.id}: ${previous.label} does not apply to software ${r.integrationVersion ?? 'unknown'}`];
     }
     const problems: string[] = [];
@@ -313,7 +313,7 @@ export function answerConfigRequest(s: State, resourceId: string): ConfigAnswer 
   }
   if (r.env === 'production') {
     const resolved = releaseFor(s, r);
-    return resolved.release ? { configId: resolved.release.resolvedConfigId, reason: 'LATEST_RELEASE', detail: `DCL ${resolved.release.dclVersion}` } : { configId: null, reason: 'BLOCKED', detail: resolved.problem };
+    return resolved.release ? { configId: resolved.release.resolvedConfigId, reason: 'LATEST_RELEASE', detail: `policy set ${resolved.release.dclVersion}` } : { configId: null, reason: 'BLOCKED', detail: resolved.problem };
   }
   const group = s.groupMembers[r.id] ? s.vehicleGroups[s.groupMembers[r.id]!] : undefined;
   const published = group?.publication ? publishedConfig(s, group.publication) : null;
