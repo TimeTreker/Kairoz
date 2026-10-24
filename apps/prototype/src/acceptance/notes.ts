@@ -5,15 +5,15 @@ export const SCRIPT_NOTES: Record<string, string> = {
   startup: '从“原型工具 → 重置为干净安装”开始。车辆回执、事件与外部服务由车辆模拟器扮演；服务端部署、数据库备份等幕记为不适用。',
   'first-ota': '从“原型工具 → 重置为干净安装”开始。剧本中的终端命令（mock_receipt.mjs、curl）由车辆模拟器与平台页面代替；签名配置包需要服务端，原型只导出配置集合 JSON。',
   'data-usage': '使用演示数据（原型工具 → 重置为演示数据）。样例事件日期固定为 2026-10-18。',
-  'domain-integration': '使用演示数据（ADC、CDC 域集成工作区与 adc_integrator / cdc_integrator 已建立）。原型没有“用户中心切换身份”：账号的各项授权同时生效，每个动作仍只由一条完整授权放行。个人仿真不适用，改用团队研发车组。',
+  'domain-integration': '使用演示数据（ADC、CDC 域集成工作区与 adc_integrator / cdc_integrator 已建立）。原型没有“用户中心切换身份”：账号的各项授权同时生效，每个动作仍只由一条完整授权放行。',
   'client-report': '使用演示数据。车端客户端由车辆模拟器扮演，设备签名为 Mock（可伪造），不代表真实设备认证；剧本中的 Mock 控制台与 curl 由模拟器按钮代替。',
   'policy-sets': '使用演示数据。软件清单为 Mock（车辆资源按可信来源登记信号与数据源）；兼容性检查只核对信号名与数据源目录，不代表真实软件验证。',
+  'personal-simulation': '使用演示数据。车辆回执与试触发由车辆模拟器扮演仿真器；试触发不上传、不处理，只给创建人看。镜像构建与切换不在本剧本内。',
   'org-directory': '使用演示数据。公司目录由车辆模拟器扮演（真实系统中是 HR、LDAP/AD 或 SCIM 推送）；自动运行时每一步同步，也可手动“同步到平台”。',
 };
 
 /** Keyed by script and scene, e.g. 'first-ota/E05'. */
 export const SCENE_NOTES: Record<string, string> = {
-  'domain-integration/S01': '设计中的个人仿真自测在原型中没有建模；固定提交在 S04 由团队测试车组验证。',
   'domain-integration/N01': '演示数据中 ADC 域集成工作区只以 ADC 团队为来源，CDC Feature 不在可选范围（SOURCE_NOT_ALLOWED）；来源可达但跨域时返回 CROSS_DOMAIN_SOURCE（见引擎测试）。',
   'startup/A01': '浏览器原型没有服务器、数据库或部署；状态保存在浏览器本地。部署与重启在浏览器层以“重置为干净安装 + 刷新页面”核对持久化。',
   'startup/A04': '跨组只读引用在 Kairoz 中按数据项申请与批准；此时还没有数据项，“读取不等于修改”由 T-N07 验证。',

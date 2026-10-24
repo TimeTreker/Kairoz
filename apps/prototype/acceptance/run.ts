@@ -13,6 +13,7 @@ import * as domainIntegration from './domain-integration.ts';
 import * as firstOta from './first-ota.ts';
 import * as negative from './negative.ts';
 import * as orgDirectory from './org-directory.ts';
+import * as personalSim from './personal-sim.ts';
 import * as policySets from './policy-sets.ts';
 import * as startup from './startup.ts';
 import { GapError, NotApplicableError, World } from './world.ts';
@@ -50,6 +51,7 @@ const suites = [
   { id: 'domain-integration', mod: domainIntegration },
   { id: 'policy-sets', mod: policySets },
   { id: 'org-directory', mod: orgDirectory },
+  { id: 'personal-simulation', mod: personalSim },
 ] as const;
 
 const report: { script: string; name: string; rows: Row[] }[] = [];

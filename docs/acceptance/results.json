@@ -1,8 +1,8 @@
 {
-  "runAt": "2026-10-24T03:02:55.556Z",
+  "runAt": "2026-10-24T05:26:25.033Z",
   "layer": "engine",
   "counts": {
-    "PASS": 118,
+    "PASS": 128,
     "FAIL": 0,
     "GAP": 0,
     "BLOCKED": 0,
@@ -663,7 +663,7 @@
           "id": "S01",
           "title": "ADC 泊车组研发并提交",
           "actor": "adc_parking / 张景然 · 业务研发；泊车团队工作区",
-          "adaptation": "设计中的个人仿真自测在原型中没有建模；固定提交在 S04 由团队测试车组验证。",
+          "adaptation": null,
           "status": "PASS",
           "detail": null,
           "notes": []
@@ -918,6 +918,102 @@
           "id": "O06",
           "title": "组织规则的边界",
           "actor": "admin / 平台管理员",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        }
+      ]
+    },
+    {
+      "script": "personal-simulation",
+      "name": "个人研发仿真 · 草稿自测与团队测试分离",
+      "rows": [
+        {
+          "id": "PS01",
+          "title": "新建个人仿真：平台生成 UVID，软件未知",
+          "actor": "business / 陈明 · 业务研发；制动团队工作区",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "PS02",
+          "title": "把草稿配置到个人仿真，试触发并记录自测",
+          "actor": "business / 陈明 · 业务研发；车辆模拟器扮演仿真器",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "PS03",
+          "title": "个人仿真只属于本人，不进入团队资源",
+          "actor": "brake_tester / 王嘉宁；workspace_manager / 工作区管理员",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "PS04",
+          "title": "敏感文件仍须 DCL 审核",
+          "actor": "business / 陈明 · 业务研发",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "PS05",
+          "title": "软件 1.0 的个人仿真：策略集为基线，关闭其他分组策略",
+          "actor": "business / 陈明 · 业务研发",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "PS06",
+          "title": "提交时显示自测，团队测试照常",
+          "actor": "business / 陈明；brake_tester / 王嘉宁",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "PS07",
+          "title": "配额与释放",
+          "actor": "business / 陈明 · 业务研发",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "PS08",
+          "title": "测试人员也可以有自己的个人仿真",
+          "actor": "brake_tester / 王嘉宁 · 业务测试",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "PS09",
+          "title": "离职：个人仿真自动释放",
+          "actor": "公司目录（车辆模拟器扮演）；brake_dev2 / 何晓 · 新员工",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "N01",
+          "title": "不允许的个人仿真",
+          "actor": "business；workspace_manager",
           "adaptation": null,
           "status": "PASS",
           "detail": null,

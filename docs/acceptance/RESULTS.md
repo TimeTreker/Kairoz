@@ -1,10 +1,10 @@
 # 验收结果（引擎层逐幕回放）
 
-运行时间：2026-10-24T03:02:55.556Z。由 `npm run acceptance` 生成；每次重新执行，不沿用历史结果。
+运行时间：2026-10-24T05:26:25.033Z。由 `npm run acceptance` 生成；每次重新执行，不沿用历史结果。
 
 状态：PASS 通过；FAIL 失败；GAP 设计要求尚未实现；BLOCKED 前置幕未通过；NOT_APPLICABLE 浏览器原型不适用（如服务端部署）。
 
-合计：PASS 118 · FAIL 0 · GAP 0 · BLOCKED 0 · NOT_APPLICABLE 3 · NOT_WRITTEN 0
+合计：PASS 128 · FAIL 0 · GAP 0 · BLOCKED 0 · NOT_APPLICABLE 3 · NOT_WRITTEN 0
 
 ## 从零启动 · 角色协作
 
@@ -99,7 +99,7 @@
 
 | 幕 | 执行人 | 状态 | 说明 |
 |---|---|---|---|
-| S01 ADC 泊车组研发并提交 | adc_parking / 张景然 · 业务研发；泊车团队工作区 | PASS | 适配：设计中的个人仿真自测在原型中没有建模；固定提交在 S04 由团队测试车组验证。 |
+| S01 ADC 泊车组研发并提交 | adc_parking / 张景然 · 业务研发；泊车团队工作区 | PASS |  |
 | S02 ADC 系统应用组与 CDC 两组研发 | adc_system、cdc_hmi、cdc_app · 业务研发 | PASS |  |
 | S03 域集成人员以工作区管理员审批团队测试 | adc_integrator / 梁思齐 · 工作区管理员 | PASS |  |
 | S04 团队测试：先仿真后实车，交付 Verified | 各组业务测试账号 | PASS |  |
@@ -137,6 +137,21 @@
 | O04 部门合并：工作区重新挂靠 | 公司目录；admin | PASS |  |
 | O05 离职：账号停用，历史保留 | 公司目录；steering / 吴泽宇 | PASS |  |
 | O06 组织规则的边界 | admin / 平台管理员 | PASS |  |
+
+## 个人研发仿真 · 草稿自测与团队测试分离
+
+| 幕 | 执行人 | 状态 | 说明 |
+|---|---|---|---|
+| PS01 新建个人仿真：平台生成 UVID，软件未知 | business / 陈明 · 业务研发；制动团队工作区 | PASS |  |
+| PS02 把草稿配置到个人仿真，试触发并记录自测 | business / 陈明 · 业务研发；车辆模拟器扮演仿真器 | PASS |  |
+| PS03 个人仿真只属于本人，不进入团队资源 | brake_tester / 王嘉宁；workspace_manager / 工作区管理员 | PASS |  |
+| PS04 敏感文件仍须 DCL 审核 | business / 陈明 · 业务研发 | PASS |  |
+| PS05 软件 1.0 的个人仿真：策略集为基线，关闭其他分组策略 | business / 陈明 · 业务研发 | PASS |  |
+| PS06 提交时显示自测，团队测试照常 | business / 陈明；brake_tester / 王嘉宁 | PASS |  |
+| PS07 配额与释放 | business / 陈明 · 业务研发 | PASS |  |
+| PS08 测试人员也可以有自己的个人仿真 | brake_tester / 王嘉宁 · 业务测试 | PASS |  |
+| PS09 离职：个人仿真自动释放 | 公司目录（车辆模拟器扮演）；brake_dev2 / 何晓 · 新员工 | PASS |  |
+| N01 不允许的个人仿真 | business；workspace_manager | PASS |  |
 
 ## 反向用例 T-N01–T-N24
 

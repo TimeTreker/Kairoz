@@ -6,6 +6,7 @@ import * as config from '../src/engine/config.ts';
 import * as fleet from '../src/engine/fleet.ts';
 import * as integ from '../src/engine/integration.ts';
 import * as ota from '../src/engine/ota.ts';
+import * as ps from '../src/engine/personal-sim.ts';
 import * as rel from '../src/engine/release.ts';
 import { demoState } from '../src/engine/seed.ts';
 import { sendReceipt } from '../src/engine/simulator.ts';
@@ -56,6 +57,12 @@ export const scenes: Record<string, SceneSpec> = {
       const f = teamFeature(w, 'adc-parking', 'parking_slot_log', 'slot_miss', 'apa.active AND slot_confidence < 0.3');
       w.eq(w.s.features[f]!.stage, 'DCL_READY', 'a fixed commit, DCL Ready');
       w.ref.parking = f;
+      // A personal self-test of the same content: shown with the commit, never team evidence.
+      const sim = w.as('adc_parking', (c) => ps.createPersonalSim(c, { workspaceId: 'team-adc-parking', groupId: 'adc-parking', imageId: 'x89-dev-sim' }));
+      answerAll(w, w.as('adc_parking', (c) => ps.configurePersonalSim(c, sim, { featureId: f })));
+      w.as('adc_parking', (c) => ps.recordPersonalTest(c, sim, { result: 'PASS', note: '车位识别失败场景回放' }));
+      w.eq(ps.personalTestsOf(w.s, f)[0]!.matchingCommitId, w.s.features[f]!.headCommitId, 'the self-test matches the fixed commit');
+      w.eq(w.s.features[f]!.stage, 'DCL_READY', 'and changes nothing of the Feature');
     },
   },
   S02: {

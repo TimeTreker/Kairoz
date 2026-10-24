@@ -111,7 +111,7 @@ describe('personal simulation', () => {
     const p = f.draft.policies['chassis.brake.monitor']!;
     w.as('business', (c) => config.putPolicy(c, f.id, 'chassis.brake.monitor', { ...p, captures: [...p.captures, video].sort() }));
     const e = w.fails('SENSITIVE_NOT_REVIEWED', () => configure(w, 'business', id));
-    assert.deepEqual((e.details as { issues: string[] }).issues, [video]);
+    assert.deepEqual((e.details as { issues: string[] }).issues, ['制动前视视频']);
   });
 
   test('self-tests are shown against the draft and commits, never required', () => {

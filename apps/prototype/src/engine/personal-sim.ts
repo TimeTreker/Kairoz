@@ -127,9 +127,10 @@ export function configurePersonalSim(ctx: Ctx, id: string, input: { featureId: s
   const snapshot: GroupConfig = JSON.parse(JSON.stringify(normalizeConfig(feature.draft)));
   const issues = submitIssues(ctx.s, group, snapshot);
   if (issues.length) throw rule('DRAFT_NOT_RUNNABLE', 'the draft has problems; fix them before running it', { issues: issues.map((i) => `${i.key}: ${i.problems.join('; ')}`) });
+  const files = resolveFiles(ctx.s, snapshot);
   const unreviewed = reviewItems(ctx.s, snapshot, { groupId: group.id, workspaceId: feature.workspaceId })
     .filter((i) => i.status !== 'APPROVED')
-    .map((i) => i.dataKey);
+    .map((i) => files[i.dataKey]?.name ?? i.dataKey);
   if (unreviewed.length) {
     throw rule('SENSITIVE_NOT_REVIEWED', `sensitive files need a current DCL approval before any vehicle collects them: ${unreviewed.join(', ')}`, { issues: unreviewed });
   }

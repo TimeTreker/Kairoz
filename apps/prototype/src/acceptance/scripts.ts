@@ -1512,14 +1512,15 @@ export const SCRIPTS: Script[] = [
           "adc_parking"
         ],
         "workspace": null,
-        "page": "研发 Feature",
+        "page": "研发 Feature；车辆与车辆组 → 我的研发仿真；原型工具 → 车辆模拟器",
         "pre": "演示数据；ADC、CDC 域集成工作区已建立。",
         "steps": [
           "选择 adc_parking，创建 Feature，登记普通文本日志和采集策略并提交。",
-          "记录固定提交版本。"
+          "记录固定提交版本。",
+          "在“车辆与车辆组 → 我的研发仿真”新建个人仿真（x89-dev-sim），配置该 Feature 草稿，车辆模拟器回执后记录个人自测 PASS。"
         ],
-        "done": "泊车组得到 DCL Ready 的固定提交。",
-        "fail": "个人仿真自测在原型中不适用，改由团队测试车组验证。"
+        "done": "泊车组得到 DCL Ready 的固定提交；个人自测标注“与提交一致”，不计入团队验证。",
+        "fail": "个人仿真不能直接作为团队资源；固定提交在 S04 由团队测试车组验证。"
       },
       {
         "id": "S02",
@@ -2042,6 +2043,202 @@ export const SCRIPTS: Script[] = [
         ],
         "done": "基础权限按组，特殊权限显式到人；组织节点由目录维护。",
         "fail": "需要例外时显式授予到人，不要放宽组织规则。"
+      }
+    ]
+  },
+  {
+    "id": "personal-simulation",
+    "name": "个人研发仿真 · 草稿自测与团队测试分离",
+    "start": "demo",
+    "scenes": [
+      {
+        "id": "PS01",
+        "title": "新建个人仿真：平台生成 UVID，软件未知",
+        "actor": "business / 陈明 · 业务研发；制动团队工作区",
+        "accounts": [
+          "business",
+          "brake_tester"
+        ],
+        "workspace": "team-brake",
+        "page": "车辆与车辆组 → 我的研发仿真",
+        "pre": "演示数据。",
+        "steps": [
+          "business 在“我的研发仿真”新建个人仿真：业务分组制动组，镜像 x89-dev-sim（无整车版本），名称“急刹车调试”。",
+          "得到 SIM-P001：仿真、研发环境，UVID 即 SIM-P001，整车软件未知，跟随软件的基线为初始研发配置；配额显示 1/3。",
+          "“工作区车辆”和“车辆组”中都没有 SIM-P001；以 brake_tester 登录，“我的研发仿真”为空，也看不到它。"
+        ],
+        "done": "研发自助创建个人仿真，只属于创建人。",
+        "fail": "个人仿真只能用于研发环境，镜像须是本工作区车型的。"
+      },
+      {
+        "id": "PS02",
+        "title": "把草稿配置到个人仿真，试触发并记录自测",
+        "actor": "business / 陈明 · 业务研发；车辆模拟器扮演仿真器",
+        "accounts": [
+          "business"
+        ],
+        "workspace": "team-brake",
+        "page": "研发 Feature；车辆与车辆组 → 我的研发仿真；原型工具 → 车辆模拟器",
+        "pre": "PS01 完成。",
+        "steps": [
+          "在 brake_monitor 的“采集策略”把“急刹车”的触发条件改为 brake_pressure > 90 AND vehicle_deceleration > 6，不提交。",
+          "打开 SIM-P001，选择 brake_monitor、基线“跟随软件版本”，配置草稿：显示等待回执，回执前仍没有生效配置。",
+          "在车辆模拟器为 SIM-P001 发送“回执：应用成功”；再选 SIM-P001 与 chassis.brake.monitor，点“试触发（个人，仅本人可见）”。",
+          "回到 SIM-P001：正在运行“initial / chassis.brake / brake_monitor / 草稿”，两条制动策略标“草稿”；试触发列出制动监测日志；采集事件列表没有新增。",
+          "记录个人自测 PASS，说明“急刹车场景回放，触发正确”。"
+        ],
+        "done": "brake_monitor 的“下发与测试”出现个人自测（不计入验证），标注与当前草稿一致；没有团队测试记录。",
+        "fail": "回执失败时保留原配置；没有生效的草稿不能记录自测。"
+      },
+      {
+        "id": "PS03",
+        "title": "个人仿真只属于本人，不进入团队资源",
+        "actor": "brake_tester / 王嘉宁；workspace_manager / 工作区管理员",
+        "accounts": [
+          "brake_tester",
+          "workspace_manager"
+        ],
+        "workspace": "team-brake",
+        "page": "车辆与车辆组；原型工具 → 车辆模拟器",
+        "pre": "PS02 完成。",
+        "steps": [
+          "brake_tester 停止或释放 SIM-P001：被拒绝，个人仿真只能由创建人本人操作（页面不提供入口，由引擎回放核对）。",
+          "workspace_manager 把 SIM-P001 加入工作区车辆或“制动研发车组”：被拒绝；选择框中也不出现个人仿真。",
+          "车辆模拟器对 SIM-P001 只提供试触发，不能触发采集事件。"
+        ],
+        "done": "个人仿真不进入工作区车辆、车辆组或团队测试；工作区管理员也不能操作它。",
+        "fail": "需要共享资源时，由工作区管理员登记团队仿真并归入车辆组。"
+      },
+      {
+        "id": "PS04",
+        "title": "敏感文件仍须 DCL 审核",
+        "actor": "business / 陈明 · 业务研发",
+        "accounts": [
+          "business"
+        ],
+        "workspace": "team-brake",
+        "page": "研发 Feature；车辆与车辆组 → 我的研发仿真",
+        "pre": "PS03 完成。",
+        "steps": [
+          "在 brake_monitor 草稿新增文件：ADC /data/camera/brake brake_*.mp4（视频，需敏感审核），让“急刹车”也采集它。",
+          "对 SIM-P001 配置草稿：被拒绝，提示敏感文件须先通过 DCL 审核，个人仿真也不能采集。",
+          "从“急刹车”去掉该文件并删除文件，草稿回到 PS02 的内容。"
+        ],
+        "done": "个人仿真不能绕过敏感数据审核。",
+        "fail": "确需采集时先提交，由 DCL 在接入队列审核。"
+      },
+      {
+        "id": "PS05",
+        "title": "软件 1.0 的个人仿真：策略集为基线，关闭其他分组策略",
+        "actor": "business / 陈明 · 业务研发",
+        "accounts": [
+          "business"
+        ],
+        "workspace": "team-brake",
+        "page": "车辆与车辆组 → 我的研发仿真；原型工具 → 车辆模拟器",
+        "pre": "PS04 完成。",
+        "steps": [
+          "新建个人仿真，镜像 x89-1.0-sim，名称“1.0 回归”：跟随软件的基线为策略集 1.0.0。",
+          "配置 brake_monitor 草稿，关闭 chassis.steering.angle_jump（选择框只列出其他分组的策略）；车辆模拟器回执成功。",
+          "“正在运行”中转向策略标“已关闭（下发时关闭）”，制动策略为“草稿”。"
+        ],
+        "done": "草稿替换本组提交，其他分组按软件版本的策略集运行；开关只能关闭其他分组的策略。",
+        "fail": "软件没有适用策略集时，选择显式基线。"
+      },
+      {
+        "id": "PS06",
+        "title": "提交时显示自测，团队测试照常",
+        "actor": "business / 陈明；brake_tester / 王嘉宁",
+        "accounts": [
+          "business",
+          "brake_tester"
+        ],
+        "workspace": "team-brake",
+        "page": "研发 Feature → 下发与测试",
+        "pre": "PS05 完成。",
+        "steps": [
+          "business 提交 brake_monitor：对话框提示这份草稿在个人仿真上自测 PASS（仅供参考）；生成 r002。",
+          "个人自测标注“与提交一致 r002”。",
+          "brake_tester 把 r002 下发到“制动研发车组”并回执：验证目标只有 SIM-021 与 VEH-001，个人仿真不是验证目标，自测不能代替团队测试。",
+          "business 再改草稿（急刹车阈值 85）：个人自测改标“草稿已变化”。"
+        ],
+        "done": "个人自测只作参考，不卡提交；团队验证仍按车辆组进行。",
+        "fail": "不能把个人自测当作业务测试结果登记。"
+      },
+      {
+        "id": "PS07",
+        "title": "配额与释放",
+        "actor": "business / 陈明 · 业务研发",
+        "accounts": [
+          "business"
+        ],
+        "workspace": "team-brake",
+        "page": "车辆与车辆组 → 我的研发仿真",
+        "pre": "PS06 完成。",
+        "steps": [
+          "再新建一个个人仿真（x89-1.1-sim），达到 3/3；“新建个人仿真”不可用。",
+          "对 SIM-P001 配置当前草稿：等待回执时“释放”不可用；撤回后释放。",
+          "打开“显示已释放”：SIM-P001 为已释放，打开后配置、试触发与自测历史仍在；配额回到 2/3。"
+        ],
+        "done": "每人每工作区最多 3 个，释放即归还配额，历史保留。",
+        "fail": "等待回执的实例先撤回或等回执，再释放。"
+      },
+      {
+        "id": "PS08",
+        "title": "测试人员也可以有自己的个人仿真",
+        "actor": "brake_tester / 王嘉宁 · 业务测试",
+        "accounts": [
+          "brake_tester"
+        ],
+        "workspace": "team-brake",
+        "page": "车辆与车辆组 → 我的研发仿真",
+        "pre": "PS07 完成。",
+        "steps": [
+          "brake_tester 新建个人仿真（x89-dev-sim，名称“测试自查”），配置 brake_monitor 草稿（只读，不能编辑），车辆模拟器回执成功。",
+          "记录个人自测 FAIL，说明“低速急刹未触发”。",
+          "brake_monitor 的个人自测列表出现这一条；它不是验证目标，也不改变 Feature。"
+        ],
+        "done": "测试人员可以自查草稿，但个人仿真不能用于团队测试。",
+        "fail": "测试身份仍不能编辑文件和策略。"
+      },
+      {
+        "id": "PS09",
+        "title": "离职：个人仿真自动释放",
+        "actor": "公司目录（车辆模拟器扮演）；brake_dev2 / 何晓 · 新员工",
+        "accounts": [
+          "admin",
+          "brake_dev2"
+        ],
+        "workspace": "team-brake",
+        "page": "原型工具 → 车辆模拟器 → 公司目录；车辆与车辆组 → 我的研发仿真",
+        "pre": "PS08 完成。",
+        "steps": [
+          "在公司目录为制动团队办理入职 brake_dev2（何晓）并同步；brake_dev2 按组织规则获得研发权限。",
+          "brake_dev2 新建个人仿真并配置 brake_monitor 草稿，不发回执。",
+          "在公司目录办理 brake_dev2 离职并同步：账号停用；目录同步记录“释放个人仿真”；待回执的配置被撤回，实例为已释放（vehicle resources 在车辆台账可见），历史保留。"
+        ],
+        "done": "人员离开时，平台收回其个人仿真。",
+        "fail": "停用账号（离职或运维停用）都会释放个人仿真。"
+      },
+      {
+        "id": "N01",
+        "title": "不允许的个人仿真",
+        "actor": "business；workspace_manager",
+        "accounts": [
+          "business",
+          "workspace_manager",
+          "dcl"
+        ],
+        "workspace": "team-brake",
+        "page": "车辆与车辆组 → 我的研发仿真",
+        "pre": "演示数据。",
+        "steps": [
+          "以生产环境创建个人仿真：被拒绝，个人仿真只能用于研发环境（页面不提供环境选择，由引擎回放核对）。",
+          "DCL 登记 X90 的镜像后，用它在 X89 工作区创建个人仿真：被拒绝，镜像属于其他车型（页面只列出本车型镜像）。",
+          "workspace_manager（没有业务研发或业务测试授权）创建个人仿真：被拒绝。"
+        ],
+        "done": "个人仿真只给有研发或测试授权的人，在研发环境、本车型镜像上使用。",
+        "fail": "共享仿真由工作区管理员按团队资源流程登记。"
       }
     ]
   }

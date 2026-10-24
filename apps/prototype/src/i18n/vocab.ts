@@ -468,7 +468,7 @@ export const REPORT_RESULT_LABELS: Record<string, Bilingual> = {
 /** Statuses a client reports for its controllers, nodes, policies and files. */
 export const CLIENT_ITEM_STATUS_LABELS: Record<string, Bilingual> = {
   CONFIGURED: b('已配置', 'Configured'),
-  DISABLED: b('已关闭（车辆组开关）', 'Switched off (group switch)'),
+  DISABLED: b('已关闭（下发时关闭）', 'Switched off at dispatch'),
   RUNNING: b('运行中', 'Running'),
   STOPPED: b('已停止', 'Stopped'),
   PASS: b('通过', 'Pass'),
