@@ -9,7 +9,7 @@ import { newId } from '../domain/ids.ts';
 import type { Env } from '../domain/vocabulary.ts';
 import { authorizeFeature, displayName, latestRelease } from './config.ts';
 import type { Ctx } from './engine.ts';
-import { authorizePersonal, directTargetProblems, getResource, membersOf, pendingDeploymentOf, recordGroupBinding } from './fleet.ts';
+import { authorizePersonal, directTargetProblems, getResource, membersOf, pendingDeploymentOf, pendingImageChangeOf, recordGroupBinding } from './fleet.ts';
 import { getGroup } from './org.ts';
 import { setInEffect } from './release.ts';
 import type { Candidate, Deployment, DeploymentTarget, Feature, PersonalDraft, Release, ResolvedConfig, Resource, State, TestRequest, TestRun, VehicleGroup } from './types.ts';
@@ -161,6 +161,7 @@ function dispatchProblems(s: State, feature: Feature, input: { commitId: string;
       if (!(s.workspaceResources[feature.workspaceId] ?? []).includes(rid)) fail('vehicle is not assigned to the workspace');
       const pending = pendingDeploymentOf(s, rid);
       if (pending) fail(`vehicle is waiting for deployment ${pending}`);
+      if (pendingImageChangeOf(s, rid)) fail('waiting for an image change');
       const target = featureTarget(s, feature, input.commitId, g, r, input.disabledPolicies);
       if (target.problem) fail(target.problem);
     }
@@ -437,7 +438,17 @@ export interface TargetStatus {
   deploymentId: string;
   /** The vehicle is actually running this commit's configuration. */
   applied: boolean;
+  /** The newest result on the vehicle's current image: the one that counts. */
   latest: TestRun | null;
+  /** A newer result from an earlier image, kept as history; it no longer counts. */
+  stale: TestRun | null;
+}
+
+/** Results of a subject on a vehicle that count: those recorded on the image it runs now. */
+function currentRuns(s: State, subjectId: string, versionId: string, resourceId: string): { current: TestRun[]; earlier: TestRun[] } {
+  const r = s.resources[resourceId]!;
+  const runs = s.testRuns.filter((x) => x.subjectId === subjectId && x.versionId === versionId && x.resourceId === resourceId).sort((a, b) => b.seq - a.seq);
+  return { current: runs.filter((x) => x.imageId === r.imageId), earlier: runs.filter((x) => x.imageId !== r.imageId) };
 }
 
 export function testStatusFor(s: State, subjectId: string, versionId: string): TargetStatus[] {
@@ -447,8 +458,10 @@ export function testStatusFor(s: State, subjectId: string, versionId: string): T
       const d = s.deployments[t.deploymentId]!;
       const r = s.resources[t.resourceId]!;
       const applied = r.appliedConfigId === d.resolvedConfigId;
-      const runs = s.testRuns.filter((x) => x.subjectId === subjectId && x.versionId === versionId && x.resourceId === t.resourceId);
-      return { resourceId: t.resourceId, deploymentId: t.deploymentId, applied, latest: runs.sort((a, b) => b.seq - a.seq)[0] ?? null };
+      const { current, earlier } = currentRuns(s, subjectId, versionId, t.resourceId);
+      const latest = current[0] ?? null;
+      const stale = earlier[0] && (!latest || earlier[0].seq > latest.seq) ? earlier[0] : null;
+      return { resourceId: t.resourceId, deploymentId: t.deploymentId, applied, latest, stale };
     });
 }
 
@@ -465,7 +478,10 @@ export function verifyBlockers(s: State, feature: Feature): string[] {
 export function blockersFor(s: State, status: TargetStatus[]): string[] {
   const blockers: string[] = [];
   if (status.length === 0) blockers.push('no vehicles were dispatched for this commit');
-  for (const t of status) if (t.latest?.result !== 'PASS') blockers.push(`${t.resourceId} has no passing test`);
+  for (const t of status) {
+    if (t.latest?.result === 'PASS') continue;
+    blockers.push(t.stale ? `${t.resourceId} runs another image since its test; test it again` : `${t.resourceId} has no passing test`);
+  }
   const types = new Set(status.filter((t) => t.latest?.result === 'PASS').map((t) => s.resources[t.resourceId]!.type));
   if (!types.has('SIMULATION')) blockers.push('a simulation test must pass');
   if (!types.has('PHYSICAL')) blockers.push('a physical vehicle test must pass');
@@ -474,7 +490,10 @@ export function blockersFor(s: State, status: TargetStatus[]): string[] {
 
 export function assertSimulationFirst(s: State, subjectId: string, versionId: string, resourceType: string, result: string): void {
   if (resourceType !== 'PHYSICAL' || result !== 'PASS') return;
-  const simPass = s.testRuns.some((x) => x.subjectId === subjectId && x.versionId === versionId && x.resourceType === 'SIMULATION' && x.result === 'PASS');
+  // A simulation result counts only on the image the simulation still runs.
+  const simPass = s.testRuns.some(
+    (x) => x.subjectId === subjectId && x.versionId === versionId && x.resourceType === 'SIMULATION' && x.result === 'PASS' && x.imageId === s.resources[x.resourceId]?.imageId,
+  );
   if (!simPass) throw rule('SIMULATION_FIRST', 'a simulation test must pass before a physical one');
 }
 
@@ -506,6 +525,7 @@ export function recordFeatureTest(
     resourceId: r.id,
     resourceType: r.type,
     integrationVersion: r.integrationVersion,
+    imageId: r.imageId,
     env: r.env,
     resolvedConfigId: r.appliedConfigId!,
     result: input.result,
@@ -563,6 +583,9 @@ export function candidateVehicleProblems(s: State, c: Candidate, rid: string): s
   if (c.targetReleaseId !== null && !r.integrationVersion) problems.push(`${rid}: software version unknown`);
   const pending = pendingDeploymentOf(s, rid);
   if (pending) problems.push(`${rid}: waiting for deployment ${pending}`);
+  if (pendingImageChangeOf(s, rid)) problems.push(`${rid}: waiting for an image change`);
+  // Integration tests name real software versions; a derived development image is not one.
+  if (r.imageId && s.images[r.imageId]?.derived) problems.push(`${rid}: runs a derived development image`);
   return problems;
 }
 
@@ -660,6 +683,7 @@ export function recordCandidateTest(
     resourceId: r.id,
     resourceType: r.type,
     integrationVersion: r.integrationVersion,
+    imageId: r.imageId,
     env: r.env,
     resolvedConfigId: c.resolvedConfigId,
     result: input.result,

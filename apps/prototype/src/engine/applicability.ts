@@ -8,7 +8,7 @@ import type { PolicyCompatibility } from '../domain/compatibility.ts';
 import { conflict, notFound, rule } from '../domain/errors.ts';
 import { newId } from '../domain/ids.ts';
 import type { Ctx } from './engine.ts';
-import { directTargetProblems, membersOf, pendingDeploymentOf, recordGroupBinding, softwareKey } from './fleet.ts';
+import { directTargetProblems, membersOf, pendingDeploymentOf, pendingImageChangeOf, recordGroupBinding, softwareKey } from './fleet.ts';
 import { latestRelease } from './config.ts';
 import { appliesTo, getRelease, setInEffect } from './release.ts';
 import { commitSnapshot, resolveFiles } from './snapshots.ts';
@@ -131,8 +131,11 @@ export function checkVehicleProblems(s: State, check: ApplicabilityCheck, rid: s
   if (r.vehicleModelId !== check.vehicleModelId) problems.push(`${rid}: another vehicle model`);
   if (!r.integrationVersion) problems.push(`${rid}: software version unknown`);
   else if (r.integrationVersion !== check.version) problems.push(`${rid}: runs software ${r.integrationVersion}; the check is for ${check.version}`);
+  // Applicability is about the real software version; a derived development image is not it.
+  if (r.imageId && s.images[r.imageId]?.derived) problems.push(`${rid}: runs a derived development image`);
   const pending = pendingDeploymentOf(s, rid);
   if (pending) problems.push(`${rid}: waiting for deployment ${pending}`);
+  if (pendingImageChangeOf(s, rid)) problems.push(`${rid}: waiting for an image change`);
   return problems;
 }
 
@@ -228,6 +231,7 @@ export function recordApplicabilityTest(
     resourceId: r.id,
     resourceType: r.type,
     integrationVersion: r.integrationVersion,
+    imageId: r.imageId,
     env: r.env,
     resolvedConfigId: getRelease(ctx.s, check.releaseId).resolvedConfigId,
     result: input.result,

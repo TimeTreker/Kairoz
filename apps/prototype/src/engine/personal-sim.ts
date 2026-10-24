@@ -14,7 +14,7 @@ import { reviewItems } from './approvals.ts';
 import { EDITABLE_STAGES, getFeature, submitIssues } from './config.ts';
 import type { Ctx } from './engine.ts';
 import { sizeOf } from './events.ts';
-import { authorizePersonal, baseResource, getResource, pendingDeploymentOf } from './fleet.ts';
+import { assertIdle, authorizePersonal, baseResource, getResource } from './fleet.ts';
 import { getGroup, getWorkspace } from './org.ts';
 import { commitSnapshot, resolveFiles } from './snapshots.ts';
 import type { PersonalCapture, PersonalTest, Resource, State } from './types.ts';
@@ -67,6 +67,7 @@ export function createPersonalSim(ctx: Ctx, input: { workspaceId: string; groupI
   if (!workspace.groupIds.includes(group.id)) throw rule('GROUP_NOT_IN_WORKSPACE', `group ${group.id} does not work in workspace ${workspace.id}`);
   const image = ctx.s.images[input.imageId];
   if (!image) throw notFound('image', input.imageId);
+  if (image.derived) throw rule('IMAGE_NOT_IN_CATALOG', `${image.id} is a derived image of one simulation; choose a catalog image`);
   if (image.vehicleModelId !== workspace.vehicleModelId) throw rule('IMAGE_MODEL_MISMATCH', `image ${image.id} is for ${image.vehicleModelId}`);
   const owner = ctx.user().username;
   if (activePersonalCount(ctx.s, owner, workspace.id) >= PERSONAL_SIM_QUOTA) {
@@ -110,8 +111,7 @@ export function configurePersonalSim(ctx: Ctx, id: string, input: { featureId: s
   }
   if (!EDITABLE_STAGES.includes(feature.stage)) throw rule('FEATURE_IMMUTABLE', `feature in stage ${feature.stage} has no draft to run`);
   if (r.instance !== 'RUNNING') throw rule('SIMULATION_STOPPED', `${r.id} is stopped; start it first`);
-  const pending = pendingDeploymentOf(ctx.s, r.id);
-  if (pending) throw rule('VEHICLE_BUSY', `vehicle ${r.id} is waiting for deployment ${pending}`, { deploymentId: pending });
+  assertIdle(ctx.s, r.id);
   const explicit = input.baseReleaseId ?? null;
   if (explicit) {
     const release = ctx.s.releases[explicit];
@@ -282,6 +282,7 @@ export function releasePersonalSim(ctx: Ctx, id: string): void {
   const r = ownSim(ctx, id);
   const pending = personalPending(ctx.s, r.id);
   if (pending) throw rule('VEHICLE_BUSY', `${r.id} is waiting for deployment ${pending}; withdraw it or wait for the receipt`, { deploymentId: pending });
+  assertIdle(ctx.s, r.id);
   r.status = 'RETIRED';
   r.instance = 'STOPPED';
   r.updatedAt = ctx.now;
@@ -297,6 +298,12 @@ export function releasePersonalSimsOf(ctx: Ctx, username: string): string[] {
     if (r.personal?.owner !== username || r.status === 'RETIRED') continue;
     const pending = personalPending(ctx.s, r.id);
     if (pending) cancelPending(ctx, pending, 'the owner’s account was disabled');
+    for (const c of Object.values(ctx.s.imageChanges)) {
+      if (c.resourceId !== r.id || c.status !== 'PENDING') continue;
+      c.status = 'CANCELLED';
+      c.error = 'the owner’s account was disabled';
+      c.answeredAt = ctx.now;
+    }
     r.status = 'RETIRED';
     r.instance = 'STOPPED';
     r.updatedAt = ctx.now;
@@ -308,6 +315,8 @@ export function releasePersonalSimsOf(ctx: Ctx, username: string): string[] {
 export interface PersonalTestView extends PersonalTest {
   /** The Feature's draft still has the content that was tested. */
   draftCurrent: boolean;
+  /** The instance still runs the image the self-test ran on. */
+  imageCurrent: boolean;
   /** The newest commit of the Feature with exactly the tested content, if any. */
   matchingCommitId: string | null;
 }
@@ -328,6 +337,7 @@ export function personalTestsOf(s: State, featureId: string): PersonalTestView[]
       return {
         ...t,
         draftCurrent: !!snapshot && sameConfig(snapshot, draft),
+        imageCurrent: s.resources[t.resourceId]?.imageId === t.imageId,
         matchingCommitId: (snapshot && commits.find((c) => sameConfig(snapshot, commitSnapshot(s, c.id)))?.id) ?? null,
       };
     });

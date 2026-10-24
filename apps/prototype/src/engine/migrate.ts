@@ -83,7 +83,18 @@ function to9(s: Saved): void {
   s.schema = 9;
 }
 
-const STEPS: Record<number, (s: Saved) => void> = { 6: to7, 7: to8, 8: to9 };
+/** Schema 10: simulation images change by builds, deployments and rollbacks; tests pin the image. */
+function to10(s: Saved): void {
+  const resources = (s.resources ?? {}) as Rows;
+  for (const i of Object.values((s.images ?? {}) as Rows)) i.derived ??= null;
+  // No image ever changed before, so each result ran on the vehicle's current image.
+  for (const t of (s.testRuns ?? []) as Record<string, unknown>[]) if (!('imageId' in t)) t.imageId = resources[t.resourceId as string]?.imageId ?? null;
+  s.softwareBuilds ??= {};
+  s.imageChanges ??= {};
+  s.schema = 10;
+}
+
+const STEPS: Record<number, (s: Saved) => void> = { 6: to7, 7: to8, 8: to9, 9: to10 };
 
 /** The state at the current schema, or null when it cannot be read or is too old. Mutates `raw`. */
 export function migrate(raw: unknown): State | null {

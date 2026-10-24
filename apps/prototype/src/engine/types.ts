@@ -10,7 +10,7 @@ import type { FileType, Privacy } from '../domain/file-types.ts';
 import type { ReviewControls } from '../domain/intake.ts';
 import type { Domain, Env, GroupPurpose, Role, Scope, WorkspaceKind } from '../domain/vocabulary.ts';
 
-export const STATE_SCHEMA = 9;
+export const STATE_SCHEMA = 10;
 
 export interface Account {
   username: string;
@@ -362,8 +362,64 @@ export interface SimulationImage {
   build: string;
   digest: string;
   simulator: string;
+  /**
+   * A derived image (派生镜像): its base with modules rebuilt from source by one simulation's
+   * build. It keeps the base's software version as its source version, is not in the catalog
+   * and only runs on development simulations. NULL for catalog images.
+   */
+  derived: DerivedImage | null;
   createdBy: string;
   createdAt: string;
+}
+
+export interface DerivedImage {
+  fromImageId: string;
+  buildId: string;
+  resourceId: string;
+  /** module id -> what it was built from; accumulates over derived bases. */
+  modules: Record<string, { repository: string; commit: string; buildId: string }>;
+}
+
+/** A module build (构建模块) by the mock CI: source in, a derived image out; nothing is executed. */
+export interface SoftwareBuild {
+  id: string;
+  seq: number;
+  resourceId: string;
+  module: string;
+  recipe: string;
+  repository: string;
+  requestedRef: string;
+  /** The image the build starts from: the simulation's image when it was requested. */
+  baseImageId: string;
+  status: 'REQUESTED' | 'BUILT' | 'BUILD_FAILED' | 'CANCELLED';
+  /** A 40-hex ref as given (not checked), or mock-commit:<build> for a branch or tag. */
+  resolvedCommit: string | null;
+  imageId: string | null;
+  log: string | null;
+  requestedBy: string;
+  requestedAt: string;
+  builtAt: string | null;
+}
+
+/**
+ * A change of the image a simulation runs: a catalog switch, a built image deployed, or a
+ * rollback. Only the simulation provider's answer changes what the instance runs.
+ */
+export interface ImageChange {
+  id: string;
+  seq: number;
+  resourceId: string;
+  kind: 'SWITCH' | 'DEPLOY' | 'ROLLBACK';
+  fromImageId: string | null;
+  toImageId: string;
+  buildId: string | null;
+  /** ROLLBACK only: the change it undoes. */
+  rollbackOf: string | null;
+  status: 'PENDING' | 'APPLIED' | 'FAILED' | 'CANCELLED';
+  error: string | null;
+  requestedBy: string;
+  requestedAt: string;
+  answeredAt: string | null;
 }
 
 /** The simulated on-vehicle agent (prototype only): how it answers configuration requests. */
@@ -643,6 +699,8 @@ export interface TestRun {
   env: Env;
   /** The whole-vehicle software the vehicle ran when tested. */
   integrationVersion: string | null;
+  /** The simulation image it ran on (null for physical vehicles); a later image needs a new test. */
+  imageId: string | null;
   resolvedConfigId: string;
   result: 'PASS' | 'FAIL';
   summary: string;
@@ -988,6 +1046,8 @@ export interface State {
   directorySync: DirectorySync;
   personalCaptures: Record<string, PersonalCapture>;
   personalTests: Record<string, PersonalTest>;
+  softwareBuilds: Record<string, SoftwareBuild>;
+  imageChanges: Record<string, ImageChange>;
   audit: AuditEvent[];
 }
 
@@ -1043,6 +1103,8 @@ export function emptyState(): State {
     directorySync: { revision: 0, syncedAt: null, log: [] },
     personalCaptures: {},
     personalTests: {},
+    softwareBuilds: {},
+    imageChanges: {},
     audit: [],
   };
 }

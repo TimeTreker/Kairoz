@@ -4,9 +4,20 @@ import { migrate } from '../src/engine/migrate.ts';
 import { demoState } from '../src/engine/seed.ts';
 import { STATE_SCHEMA } from '../src/engine/types.ts';
 
-/** A schema 8 save: a copy of a demo (today's by default) without the fields schema 9 added. */
-function schema8(demo: unknown = demoState()): Record<string, any> {
+/** A schema 9 save: a copy of a demo (today's by default) without the fields schema 10 added. */
+function schema9(demo: unknown = demoState()): Record<string, any> {
   const s = JSON.parse(JSON.stringify(demo)) as Record<string, any>;
+  s.schema = 9;
+  delete s.softwareBuilds;
+  delete s.imageChanges;
+  for (const i of Object.values(s.images) as any[]) delete i.derived;
+  for (const t of s.testRuns as any[]) delete t.imageId;
+  return s;
+}
+
+/** A schema 8 save: a schema 9 save without the fields schema 9 added. */
+function schema8(demo: unknown = demoState()): Record<string, any> {
+  const s = schema9(demo);
   s.schema = 8;
   delete s.personalCaptures;
   delete s.personalTests;
@@ -97,6 +108,15 @@ describe('saved state migration', () => {
     assert.deepEqual(migrated.applicability, []);
     assert.equal(migrated.directory, null);
     assert.deepEqual(migrated.releases, current.releases);
+  });
+
+  test('a schema 9 save pins old test results to the image the vehicle runs', () => {
+    const current = JSON.parse(JSON.stringify(demoState()));
+    const migrated = migrate(schema9(current))!;
+    assert.equal(migrated.schema, STATE_SCHEMA);
+    for (const t of migrated.testRuns) assert.equal(t.imageId, migrated.resources[t.resourceId]!.imageId, t.id);
+    assert.deepEqual([migrated.softwareBuilds, migrated.imageChanges], [{}, {}]);
+    assert.deepEqual(migrated, current);
   });
 
   test('a schema 8 save gains personal simulation defaults and keeps everything else', () => {

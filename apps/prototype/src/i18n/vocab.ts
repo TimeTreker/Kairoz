@@ -597,3 +597,41 @@ Object.assign(ERROR_LABELS, {
   BASE_CONFLICT: b('该基线已改变本 Feature 的业务分组，请在新基线上新建 Feature', 'The base changed this Feature’s business group; start a Feature on it'),
   NO_BASE: b('没有适用于该软件版本的策略集，请指定显式基线', 'No policy set applies to this software; choose an explicit base'),
 });
+
+// Simulation software (仿真车软件)
+Object.assign(ERROR_LABELS, {
+  IMAGE_CHANGE_PENDING: b('仿真正在等待镜像变更结果，请先确认或撤回', 'The simulation is waiting for an image change; answer or withdraw it first'),
+  IMAGE_NOT_IN_CATALOG: b('派生镜像只属于构建它的仿真，请选择平台镜像目录中的镜像', 'A derived image belongs to the simulation that built it; choose a catalog image'),
+  DERIVED_DEVELOPMENT_ONLY: b('派生镜像只用于研发环境仿真；集成测试使用平台正式镜像', 'Derived images run on development simulations only; integration tests use catalog images'),
+  UNKNOWN_MODULE: b('该模块未接入构建服务', 'The module is not connected to the build provider'),
+  INVALID_REPOSITORY: b('请填写 GitHub 仓库地址：https://github.com/<owner>/<repo>', 'Use a GitHub repository address: https://github.com/<owner>/<repo>'),
+  INVALID_REF: b('源码版本只能是分支、Tag 或 Commit（字母、数字与 . _ / -）', 'The ref is a branch, tag or commit (letters, digits, . _ / -)'),
+  NO_IMAGE: b('仿真没有运行镜像', 'The simulation runs no image'),
+  BUILD_OPEN: b('已有未完成的构建，请先部署或取消', 'An open build exists; deploy or cancel it first'),
+  BUILD_CLOSED: b('构建任务已结束', 'The build is closed'),
+  BUILD_NOT_DEPLOYABLE: b('该构建没有可部署的镜像', 'The build has no image to deploy'),
+  STALE_BUILD: b('仿真的运行镜像已不是构建时的基础镜像，请重新构建', 'The simulation no longer runs the image the build started from; build again'),
+  SAME_IMAGE: b('仿真已在运行该镜像', 'The simulation already runs this image'),
+  NOTHING_TO_ROLL_BACK: b('没有可回滚的镜像变更（回滚只能执行一次）', 'No image change to roll back (a rollback is done once)'),
+});
+
+export const BUILD_STATUS_LABELS: Record<string, Bilingual> = {
+  REQUESTED: b('待构建', 'Requested'),
+  BUILT: b('已构建', 'Built'),
+  BUILD_FAILED: b('构建失败', 'Build failed'),
+  CANCELLED: b('已取消', 'Cancelled'),
+};
+export const BUILD_STATUS_COLORS: Record<string, string> = { REQUESTED: 'processing', BUILT: 'blue', BUILD_FAILED: 'red', CANCELLED: 'default' };
+
+export const IMAGE_CHANGE_KIND_LABELS: Record<string, Bilingual> = {
+  SWITCH: b('切换基础镜像', 'Base image switch'),
+  DEPLOY: b('部署构建', 'Build deployed'),
+  ROLLBACK: b('回滚', 'Rollback'),
+};
+export const IMAGE_CHANGE_STATUS_LABELS: Record<string, Bilingual> = {
+  PENDING: b('等待仿真服务', 'Waiting for the provider'),
+  APPLIED: b('已生效', 'Applied'),
+  FAILED: b('失败', 'Failed'),
+  CANCELLED: b('已撤回', 'Withdrawn'),
+};
+export const IMAGE_CHANGE_STATUS_COLORS: Record<string, string> = { PENDING: 'processing', APPLIED: 'green', FAILED: 'red', CANCELLED: 'default' };

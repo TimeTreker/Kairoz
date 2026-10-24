@@ -45,9 +45,16 @@ export function openOtaOf(s: State, resourceId: string, except?: string): string
   )?.id;
 }
 
-function assertIdle(s: State, resourceId: string): void {
+/** A simulation waiting for the provider to change its image. */
+export function pendingImageChangeOf(s: State, resourceId: string): string | undefined {
+  return Object.values(s.imageChanges).find((c) => c.resourceId === resourceId && c.status === 'PENDING')?.id;
+}
+
+export function assertIdle(s: State, resourceId: string): void {
   const pending = pendingDeploymentOf(s, resourceId) ?? openOtaOf(s, resourceId);
   if (pending) throw rule('VEHICLE_BUSY', `vehicle ${resourceId} is waiting for deployment ${pending}`, { deploymentId: pending });
+  const change = pendingImageChangeOf(s, resourceId);
+  if (change) throw rule('IMAGE_CHANGE_PENDING', `${resourceId} is waiting for an image change; answer or withdraw it first`);
 }
 
 /** Personal simulations never join workspace vehicles, vehicle groups or resource operations. */
@@ -106,7 +113,7 @@ export function registerImage(
   }
   // Demo images may carry an explicitly labelled mock digest instead of a real one.
   if (!/^sha256:([0-9a-f]{64}|mock-[a-z0-9-]{1,60})$/.test(input.digest)) throw rule('INVALID_DIGEST', 'the digest must be sha256:<64 hex> or a labelled sha256:mock-…');
-  ctx.s.images[input.id] = { ...input, createdBy: ctx.user().username, createdAt: ctx.now };
+  ctx.s.images[input.id] = { ...input, derived: null, createdBy: ctx.user().username, createdAt: ctx.now };
   return input.id;
 }
 
@@ -172,6 +179,7 @@ export function createSimulation(ctx: Ctx, input: { id: string; workspaceId: str
   if (input.env === 'production') throw rule('PRODUCTION_SIMULATION', 'simulation instances are for development and testing');
   const image = ctx.s.images[input.imageId];
   if (!image) throw notFound('image', input.imageId);
+  if (image.derived) throw rule('IMAGE_NOT_IN_CATALOG', `${image.id} is a derived image of one simulation; choose a catalog image`);
   if (image.vehicleModelId !== workspace.vehicleModelId) throw rule('IMAGE_MODEL_MISMATCH', `image ${image.id} is for ${image.vehicleModelId}`);
   if (!workspace.scopes.includes(input.pool) && !workspace.scopes.includes('Vehicle')) {
     throw rule('POOL_OUTSIDE_WORKSPACE', `pool ${input.pool} is not in the workspace scopes`);
@@ -242,7 +250,7 @@ export function authorizePersonal(ctx: Ctx, r: Resource): void {
 }
 
 /** Team simulations are run by the workspace or vehicle resources; a personal one by its owner. */
-function getSimulation(ctx: Ctx, resourceId: string): Draft<Resource> {
+export function authorizeSimulation(ctx: Ctx, resourceId: string): Draft<Resource> {
   const r = getResource(ctx.s, resourceId) as Draft<Resource>;
   if (r.type !== 'SIMULATION') throw rule('NOT_A_SIMULATION', `${r.id} is not a simulation instance`);
   if (r.personal) authorizePersonal(ctx, r);
@@ -251,7 +259,7 @@ function getSimulation(ctx: Ctx, resourceId: string): Draft<Resource> {
 }
 
 export function startSimulation(ctx: Ctx, resourceId: string): void {
-  const r = getSimulation(ctx, resourceId);
+  const r = authorizeSimulation(ctx, resourceId);
   if (r.status === 'RETIRED') throw rule('VEHICLE_UNAVAILABLE', `${r.id} is retired`);
   if (r.instance === 'RUNNING') throw rule('ALREADY_RUNNING', `${r.id} is already running`);
   r.instance = 'RUNNING';
@@ -260,7 +268,7 @@ export function startSimulation(ctx: Ctx, resourceId: string): void {
 
 /** Stops an idle simulation instance; one waiting for a configuration must answer first. */
 export function stopSimulation(ctx: Ctx, resourceId: string): void {
-  const r = getSimulation(ctx, resourceId);
+  const r = authorizeSimulation(ctx, resourceId);
   if (r.instance === 'STOPPED') throw rule('ALREADY_STOPPED', `${r.id} is already stopped`);
   assertIdle(ctx.s, r.id);
   r.instance = 'STOPPED';
