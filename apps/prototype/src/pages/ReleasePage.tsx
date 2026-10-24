@@ -14,7 +14,7 @@ import { JsonExportModal, downloadJson } from '../components/JsonExport.tsx';
 import type { JsonFile } from '../components/JsonExport.tsx';
 import { displayName } from '../engine/config.ts';
 import { membersOf, ungroupedVehicles, vehicleGroupsOf } from '../engine/fleet.ts';
-import { answerConfigRequest, cancelOta, createOta, expandOta, otaProblems, otaRollouts, pauseOta, resumeOta, rollbackOta, rollbackProblems } from '../engine/ota.ts';
+import { answerConfigRequest, cancelOta, createOta, expandOta, otaProblems, otaRollouts, outsideRollout, pauseOta, resumeOta, rollbackOta, rollbackProblems } from '../engine/ota.ts';
 import { isOpenCheck } from '../engine/applicability.ts';
 import { releaseWorkspace } from '../engine/emergency.ts';
 import { applicableVersions, compareVersions, nextDclVersion, previousRelease, promoteCandidate, releaseConfiguration, releaseFor, releasesOf, setInEffect, testedVersions, versionsInEffect } from '../engine/release.ts';
@@ -421,7 +421,7 @@ function CreateOtaModal({ projectId, onClose }: { projectId: string; onClose: ()
   const [direct, setDirect] = useState<string[]>(groups.length ? [] : ungrouped.map((r) => r.id));
   const release = releaseId ? state.releases[releaseId] : undefined;
   const vehicles = [...groupIds.flatMap((g) => membersOf(state, g)), ...direct].map((id) => state.resources[id]!);
-  const candidates = release ? vehicles.filter((r) => r.appliedConfigId !== release.resolvedConfigId) : [];
+  const candidates = release ? vehicles.filter((r) => r.appliedConfigId !== release.resolvedConfigId && !outsideRollout(state, r, release)) : [];
   const [wave, setWave] = useState<string[] | null>(null);
   const firstWave = wave ?? candidates.slice(0, 1).map((r) => r.id);
 
@@ -471,11 +471,12 @@ function CreateOtaModal({ projectId, onClose }: { projectId: string; onClose: ()
         {release &&
           vehicles.map((r) => {
             const done = r.appliedConfigId === release.resolvedConfigId;
-            const problems = done ? [] : otaProblems(state, r, release);
+            const outside = !done && outsideRollout(state, r, release);
+            const problems = done || outside ? [] : otaProblems(state, r, release);
             return (
               <Flex key={r.id} gap={8} align="center" wrap>
                 <Checkbox
-                  disabled={done}
+                  disabled={done || outside}
                   checked={firstWave.includes(r.id)}
                   onChange={(e) => setWave(e.target.checked ? [...firstWave, r.id] : firstWave.filter((x) => x !== r.id))}
                 >
@@ -485,6 +486,11 @@ function CreateOtaModal({ projectId, onClose }: { projectId: string; onClose: ()
                   {r.integrationVersion ?? L('版本未知', 'software unknown')} · {B(configName(state, r.appliedConfigId))}
                 </Typography.Text>
                 {done && <Tag color="green">{L('已运行该策略集', 'already runs it')}</Tag>}
+                {outside && (
+                  <Tag>
+                    {L(`不在本次范围：软件 ${r.integrationVersion} 应运行${B(setName(releaseFor(state, r).release!.dclVersion))}`, `Not in this rollout: software ${r.integrationVersion} runs ${B(setName(releaseFor(state, r).release!.dclVersion))}`)}
+                  </Tag>
+                )}
                 {problems.map((p) => (
                   <Tag key={p} color="red">
                     {B(issueLabel(p), p)}

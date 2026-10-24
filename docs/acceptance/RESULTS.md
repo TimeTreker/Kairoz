@@ -1,10 +1,10 @@
 # 验收结果（引擎层逐幕回放）
 
-运行时间：2026-10-23T07:37:46.762Z。由 `npm run acceptance` 生成；每次重新执行，不沿用历史结果。
+运行时间：2026-10-24T02:49:13.592Z。由 `npm run acceptance` 生成；每次重新执行，不沿用历史结果。
 
 状态：PASS 通过；FAIL 失败；GAP 设计要求尚未实现；BLOCKED 前置幕未通过；NOT_APPLICABLE 浏览器原型不适用（如服务端部署）。
 
-合计：PASS 102 · FAIL 0 · GAP 0 · BLOCKED 0 · NOT_APPLICABLE 3 · NOT_WRITTEN 0
+合计：PASS 118 · FAIL 0 · GAP 0 · BLOCKED 0 · NOT_APPLICABLE 3 · NOT_WRITTEN 0
 
 ## 从零启动 · 角色协作
 
@@ -111,6 +111,32 @@
 | N02 域账号不能整车发布或配置 OTA | adc_integrator · 配置发布（本域） | PASS |  |
 | N03 子系统发布不是正式版本 | adc_integrator；release | PASS |  |
 | N04 新的子系统发布包含旧的 | adc_integrator | PASS |  |
+
+## DCL 策略集与整车软件版本 · 适用性、研发车组与紧急停用
+
+| 幕 | 执行人 | 状态 | 说明 |
+|---|---|---|---|
+| P01 登记新软件版本，自动开启适用性确认 | resource / 刘子衡 · 车辆资源；release / 孙立 · 配置发布 | PASS |  |
+| P02 在运行新软件的测试车上验证未变化的策略集 | dcl、integration_admin、resource 准备测试车；integration_tester / 钱思源 · 集成测试 | PASS |  |
+| P03 配置发布确认适用：策略集版本号不变 | release / 孙立 · 配置发布 | PASS |  |
+| P04 不兼容的软件：逐条检查指出不能运行的策略 | resource / 刘子衡；release / 孙立 | PASS |  |
+| P05 新策略集版本：与上一版逐条比较 | steering / 吴泽宇；integrator / 赵一鸣；dcl / 林书涵；integration_tester / 钱思源；release / 孙立 | PASS |  |
+| P06 研发车组：基线跟随车辆软件，重新下发才生效 | resource / 刘子衡；workspace_manager / 周子墨；brake_tester / 王嘉宁 | PASS |  |
+| P07 开关其他分组的策略 | brake_tester / 王嘉宁 · 业务测试 | PASS |  |
+| P08 基线冲突与显式基线 | steering_tester / 吴凡；resource / 刘子衡；workspace_manager / 周子墨 | PASS |  |
+| P09 紧急停用一条策略 | dcl / 林书涵 · DCL 工程申请；release / 孙立 · 配置发布批准 | PASS |  |
+| N01 撤销适用：车辆回到仍适用的上一套或被阻止 | release / 孙立 · 配置发布 | PASS |  |
+
+## 公司目录与组织授权 · 基础权限与特殊权限
+
+| 幕 | 执行人 | 状态 | 说明 |
+|---|---|---|---|
+| O01 新员工入职：按组织规则获得基础研发权限 | 公司目录（车辆模拟器扮演）；brake_dev2 / 何晓 · 新员工 | PASS |  |
+| O02 调岗：基础权限随组织变化，显式授权待复核 | 公司目录；admin / 平台管理员 | PASS |  |
+| O03 部门改名：其他一切不变 | 公司目录；admin | PASS |  |
+| O04 部门合并：工作区重新挂靠 | 公司目录；admin | PASS |  |
+| O05 离职：账号停用，历史保留 | 公司目录；steering / 吴泽宇 | PASS |  |
+| O06 组织规则的边界 | admin / 平台管理员 | PASS |  |
 
 ## 反向用例 T-N01–T-N24
 

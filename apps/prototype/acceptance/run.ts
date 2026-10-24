@@ -12,6 +12,8 @@ import * as dataUsage from './data-usage.ts';
 import * as domainIntegration from './domain-integration.ts';
 import * as firstOta from './first-ota.ts';
 import * as negative from './negative.ts';
+import * as orgDirectory from './org-directory.ts';
+import * as policySets from './policy-sets.ts';
 import * as startup from './startup.ts';
 import { GapError, NotApplicableError, World } from './world.ts';
 import type { SceneSpec } from './world.ts';
@@ -46,6 +48,8 @@ const suites = [
   { id: 'data-usage', mod: dataUsage },
   { id: 'client-report', mod: clientReport },
   { id: 'domain-integration', mod: domainIntegration },
+  { id: 'policy-sets', mod: policySets },
+  { id: 'org-directory', mod: orgDirectory },
 ] as const;
 
 const report: { script: string; name: string; rows: Row[] }[] = [];

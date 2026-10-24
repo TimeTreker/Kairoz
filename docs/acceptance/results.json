@@ -1,8 +1,8 @@
 {
-  "runAt": "2026-10-23T07:37:46.762Z",
+  "runAt": "2026-10-24T02:49:13.592Z",
   "layer": "engine",
   "counts": {
-    "PASS": 102,
+    "PASS": 118,
     "FAIL": 0,
     "GAP": 0,
     "BLOCKED": 0,
@@ -762,6 +762,162 @@
           "id": "N04",
           "title": "新的子系统发布包含旧的",
           "actor": "adc_integrator",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        }
+      ]
+    },
+    {
+      "script": "policy-sets",
+      "name": "DCL 策略集与整车软件版本 · 适用性、研发车组与紧急停用",
+      "rows": [
+        {
+          "id": "P01",
+          "title": "登记新软件版本，自动开启适用性确认",
+          "actor": "resource / 刘子衡 · 车辆资源；release / 孙立 · 配置发布",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "P02",
+          "title": "在运行新软件的测试车上验证未变化的策略集",
+          "actor": "dcl、integration_admin、resource 准备测试车；integration_tester / 钱思源 · 集成测试",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "P03",
+          "title": "配置发布确认适用：策略集版本号不变",
+          "actor": "release / 孙立 · 配置发布",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "P04",
+          "title": "不兼容的软件：逐条检查指出不能运行的策略",
+          "actor": "resource / 刘子衡；release / 孙立",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "P05",
+          "title": "新策略集版本：与上一版逐条比较",
+          "actor": "steering / 吴泽宇；integrator / 赵一鸣；dcl / 林书涵；integration_tester / 钱思源；release / 孙立",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "P06",
+          "title": "研发车组：基线跟随车辆软件，重新下发才生效",
+          "actor": "resource / 刘子衡；workspace_manager / 周子墨；brake_tester / 王嘉宁",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "P07",
+          "title": "开关其他分组的策略",
+          "actor": "brake_tester / 王嘉宁 · 业务测试",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "P08",
+          "title": "基线冲突与显式基线",
+          "actor": "steering_tester / 吴凡；resource / 刘子衡；workspace_manager / 周子墨",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "P09",
+          "title": "紧急停用一条策略",
+          "actor": "dcl / 林书涵 · DCL 工程申请；release / 孙立 · 配置发布批准",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "N01",
+          "title": "撤销适用：车辆回到仍适用的上一套或被阻止",
+          "actor": "release / 孙立 · 配置发布",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        }
+      ]
+    },
+    {
+      "script": "org-directory",
+      "name": "公司目录与组织授权 · 基础权限与特殊权限",
+      "rows": [
+        {
+          "id": "O01",
+          "title": "新员工入职：按组织规则获得基础研发权限",
+          "actor": "公司目录（车辆模拟器扮演）；brake_dev2 / 何晓 · 新员工",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "O02",
+          "title": "调岗：基础权限随组织变化，显式授权待复核",
+          "actor": "公司目录；admin / 平台管理员",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "O03",
+          "title": "部门改名：其他一切不变",
+          "actor": "公司目录；admin",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "O04",
+          "title": "部门合并：工作区重新挂靠",
+          "actor": "公司目录；admin",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "O05",
+          "title": "离职：账号停用，历史保留",
+          "actor": "公司目录；steering / 吴泽宇",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "O06",
+          "title": "组织规则的边界",
+          "actor": "admin / 平台管理员",
           "adaptation": null,
           "status": "PASS",
           "detail": null,

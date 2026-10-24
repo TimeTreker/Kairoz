@@ -14,6 +14,14 @@ import { appliesTo, getRelease, releaseFor } from './release.ts';
 import type { Deployment, DeploymentTarget, Release, Resource, State } from './types.ts';
 import { featureTarget, featureTargetDigest } from './validation.ts';
 
+/**
+ * A vehicle another set is in effect for, whose software this set does not apply to: not a target
+ * of this rollout at all (a group may mix software versions served by different sets).
+ */
+export function outsideRollout(s: State, r: Resource, release: Release): boolean {
+  return releaseFor(s, r).release !== null && r.integrationVersion !== null && !appliesTo(s, release, r.integrationVersion);
+}
+
 /** Why a vehicle cannot take a release now; empty when it can. */
 export function otaProblems(s: State, r: Resource, release: Release, except?: string): string[] {
   const problems: string[] = [];
@@ -87,6 +95,7 @@ export function createOta(
     if (list.length === 0) problems.push(`${g.name}: no vehicles`);
     for (const rid of list) {
       const r = ctx.s.resources[rid]!;
+      if (outsideRollout(ctx.s, r, release)) continue;
       const issues = otaProblems(ctx.s, r, release);
       // Vehicles already running the release, and still fitting it, need nothing.
       if (r.appliedConfigId === release.resolvedConfigId && issues.length === 0) continue;

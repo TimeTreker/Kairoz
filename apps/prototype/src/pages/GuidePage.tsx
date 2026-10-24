@@ -136,6 +136,29 @@ export const SCENARIOS: Scenario[] = [
     ],
   },
   {
+    key: 'policy-sets',
+    titleZh: '策略集与整车软件版本',
+    titleEn: 'Policy sets and software versions',
+    steps: [
+      { account: 'resource', page: 'fleet', zh: '在“软件版本与镜像”登记 X89 1.2，软件清单“从上一版本复制”；把 VEH-202 的软件确认为 1.2', en: 'Under Software versions record X89 1.2 with Copy from previous version; confirm VEH-202 on 1.2', expectZh: '自动开启适用性确认；VEH-202 没有适用策略集，被阻止', expectEn: 'An applicability check opens; VEH-202 has no set and is blocked' },
+      { account: 'integration_tester', workspace: 'x89-integration', page: 'integration', zh: '准备运行 1.2 的仿真与实车（镜像 x89-1.2-sim），在“适用性测试”下发、回执、先仿真后实车登记 PASS、确认验证', en: 'With a simulation and a vehicle on 1.2 (image x89-1.2-sim), under Applicability tests dispatch, apply, record PASS (simulation first) and verify', expectZh: '运行 1.0 的车辆被拒绝；验证后等待配置发布', expectEn: 'Vehicles on 1.0 are refused; once verified it waits for release' },
+      { account: 'release', workspace: 'x89-project', page: 'release', zh: '在“软件版本与适用性”确认适用', en: 'Under Software & applicability confirm it', expectZh: '策略集 1.0.0 版本号不变，追加适用 1.2；VEH-202 应运行它', expectEn: 'Policy set 1.0.0 keeps its version and now also applies to 1.2; VEH-202 resolves to it' },
+      { account: 'brake_tester', workspace: 'team-brake', page: 'features', zh: '在 brake_monitor 的“下发与测试”下发时关闭 chassis.steering.angle_jump', en: 'Dispatch brake_monitor with chassis.steering.angle_jump switched off', expectZh: '每辆车按自身软件的策略集为基线；被关闭的策略在车上不触发', expectEn: 'Each vehicle builds on its software’s set; the switched-off policy does not fire' },
+      { account: 'dcl', workspace: 'x89-project', page: 'release', zh: '在策略集 1.0.0 的策略上“紧急停用”，再由 release 批准', en: 'Request an emergency stop on a policy of 1.0.0; release approves', expectZh: '生成去掉该策略的新策略集版本，只适用于原策略集生效的软件版本', expectEn: 'A new set version without the policy, only for the versions the source served' },
+    ],
+  },
+  {
+    key: 'directory',
+    titleZh: '公司目录与组织授权',
+    titleEn: 'Company directory and org grants',
+    steps: [
+      { account: 'admin', page: 'simulator', zh: '在“公司目录”为制动团队办理入职 brake_dev2，并同步到平台', en: 'In Company directory hire brake_dev2 into the brake team and sync', expectZh: '平台新建账号，没有显式授权', expectEn: 'An account is created with no explicit grants' },
+      { account: 'brake_dev2', workspace: 'team-brake', page: 'features', zh: '以 brake_dev2 登录并创建 Feature', en: 'Sign in as brake_dev2 and create a Feature', expectZh: '按制动团队的组织规则获得研发权限；不能测试或验证', expectEn: 'Business development comes from the brake team rule; no testing or verifying' },
+      { account: 'admin', page: 'simulator', zh: '把陈明调到转向团队，把 HMI 团队合并到 CDC，同步', en: 'Move 陈明 to the steering team, merge HMI into CDC, sync', expectZh: '工作台出现“待复核授权”和“组织节点已失效”', expectEn: 'The workbench lists grants to review and an orphaned workspace' },
+      { account: 'admin', page: 'org', zh: '在账号页确认保留陈明的显式授权；在“组织与工作区 → 工作区”重新挂靠 HMI 团队工作区', en: 'Keep 陈明’s explicit grants on Accounts; re-attach the HMI workspace under Organization → Workspaces', expectZh: '业务分组随工作区迁移，代码与授权不变', expectEn: 'The group moves with the workspace; codes and grants are unchanged' },
+    ],
+  },
+  {
     key: 'setup',
     titleZh: '从零开始（干净安装）',
     titleEn: 'From scratch (clean installation)',

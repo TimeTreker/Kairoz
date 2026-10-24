@@ -1724,6 +1724,326 @@ export const SCRIPTS: Script[] = [
         "fail": "—"
       }
     ]
+  },
+  {
+    "id": "policy-sets",
+    "name": "DCL 策略集与整车软件版本 · 适用性、研发车组与紧急停用",
+    "start": "demo",
+    "scenes": [
+      {
+        "id": "P01",
+        "title": "登记新软件版本，自动开启适用性确认",
+        "actor": "resource / 刘子衡 · 车辆资源；release / 孙立 · 配置发布",
+        "accounts": [
+          "resource",
+          "release"
+        ],
+        "workspace": null,
+        "page": "车辆与车辆组 → 软件版本与镜像；发布与配置 OTA → 软件版本与适用性",
+        "pre": "演示数据：策略集 1.0.0 适用于 X89 1.0，量产车 VEH-201、VEH-202 都运行它。",
+        "steps": [
+          "resource 登记整车软件版本 X89 1.2，来源为整车 OTA 发布记录，软件清单“从上一版本复制”。",
+          "resource 在车辆台账把量产车 VEH-202 的实际软件确认为 1.2（整车 OTA 回执）。",
+          "release 打开“软件版本与适用性”：1.2 没有适用的策略集，VEH-202 被列为阻止；适用性确认单已自动开启，候选策略集为 1.0.0，逐条检查全部可运行。"
+        ],
+        "done": "新软件登记即产生待办；量产车没有适用策略集时被阻止，而不是回退到研发配置。",
+        "fail": "没有自动开启确认单时，检查该车型是否已有策略集、是否有整车集成测试工作区。"
+      },
+      {
+        "id": "P02",
+        "title": "在运行新软件的测试车上验证未变化的策略集",
+        "actor": "dcl、integration_admin、resource 准备测试车；integration_tester / 钱思源 · 集成测试",
+        "accounts": [
+          "dcl",
+          "integration_admin",
+          "resource",
+          "integration_tester"
+        ],
+        "workspace": "x89-integration",
+        "page": "车辆与车辆组；配置集成 → 适用性测试",
+        "pre": "P01 完成。",
+        "steps": [
+          "dcl 登记仿真镜像 x89-1.2-sim（整车版本 1.2）；integration_admin 在 X89 集成测试创建测试环境仿真车 SIM-112。",
+          "resource 登记测试车 VEH-032 并确认软件 1.2；integration_admin 把它加入 X89 集成测试。",
+          "integration_tester 在“适用性测试”先尝试下发到 X89 集成测试车组：车辆运行 1.0，被拒绝。",
+          "改为直接下发 SIM-112 与 VEH-032，在模拟器回执；先仿真后实车登记 PASS，确认验证。"
+        ],
+        "done": "未改变的策略集在运行新软件的车辆上通过集成测试；软件不符的车辆不能参与。",
+        "fail": "实车先登记会被拒绝（需先有仿真通过）；车辆未回执不能登记结果。"
+      },
+      {
+        "id": "P03",
+        "title": "配置发布确认适用：策略集版本号不变",
+        "actor": "release / 孙立 · 配置发布",
+        "accounts": [
+          "release"
+        ],
+        "workspace": "x89-project",
+        "page": "发布与配置 OTA → 软件版本与适用性；策略集发布",
+        "pre": "P02 完成，确认单已由集成测试确认。",
+        "steps": [
+          "release 在确认单上“确认适用”，填写说明。",
+          "在“策略集发布”核对：策略集 1.0.0 的版本号与发布时的适用列表不变，当前适用 X89 1.0 与 1.2（1.2 为追加）。",
+          "在“配置 OTA”核对：VEH-202 应运行策略集 1.0.0，已是最新，无需新的 OTA。"
+        ],
+        "done": "适用关系只追加记录；车辆按软件版本取到当前适用的策略集。",
+        "fail": "集成测试未确认、软件没有清单或有策略缺少信号时，确认被拒绝。"
+      },
+      {
+        "id": "P04",
+        "title": "不兼容的软件：逐条检查指出不能运行的策略",
+        "actor": "resource / 刘子衡；release / 孙立",
+        "accounts": [
+          "resource",
+          "release"
+        ],
+        "workspace": "x89-project",
+        "page": "车辆与车辆组 → 软件版本与镜像；发布与配置 OTA → 软件版本与适用性",
+        "pre": "P03 完成。",
+        "steps": [
+          "resource 登记 X89 1.3，软件清单复制后把信号 steering_angle_rate 改名为 steering_wheel_rate。",
+          "release 查看自动开启的确认单：chassis.steering.angle_jump 缺少信号 steering_angle_rate。",
+          "确认适用不可用：该软件需要修改后的策略集，而不是带例外地确认。"
+        ],
+        "done": "兼容性逐条检查，结论按整套策略集作出。",
+        "fail": "不要为个别策略开例外；修改策略后发布新的策略集版本。"
+      },
+      {
+        "id": "P05",
+        "title": "新策略集版本：与上一版逐条比较",
+        "actor": "steering / 吴泽宇；integrator / 赵一鸣；dcl / 林书涵；integration_tester / 钱思源；release / 孙立",
+        "accounts": [
+          "steering",
+          "integrator",
+          "dcl",
+          "integration_tester",
+          "release"
+        ],
+        "workspace": "x89-project",
+        "page": "研发 Feature；配置集成；发布与配置 OTA → 策略集发布 → 与上一版比较",
+        "pre": "P04 完成。",
+        "steps": [
+          "steering 在转向团队工作区基于策略集 1.0.0 提交新 Feature lane_drift（跑偏采集）。",
+          "integrator 合并 steering_return_rate，dcl 确认处理集合，冻结候选 X89-C2；integration_tester 在 X89 集成测试车组验证。",
+          "release 发布策略集 1.0.1，适用 X89 1.0。",
+          "在 1.0.1 上“与上一版比较”：angle_jump 从 v1 到 v2，新增 return_rate v1。",
+          "在“软件版本与适用性”核对：1.0 现在运行 1.0.1，1.2 仍运行 1.0.0。"
+        ],
+        "done": "策略集之间逐条可比；一个策略集适用多个软件版本，一个软件版本先后采用多个策略集。",
+        "fail": "比较看到内容不符时检查候选来源；发布时适用版本须有集成测试。"
+      },
+      {
+        "id": "P06",
+        "title": "研发车组：基线跟随车辆软件，重新下发才生效",
+        "actor": "resource / 刘子衡；workspace_manager / 周子墨；brake_tester / 王嘉宁",
+        "accounts": [
+          "resource",
+          "workspace_manager",
+          "brake_tester"
+        ],
+        "workspace": "team-brake",
+        "page": "车辆与车辆组 → 车辆组；研发 Feature → 下发与测试",
+        "pre": "P05 完成；制动研发车组已发布 brake_monitor。",
+        "steps": [
+          "workspace_manager 查看制动研发车组：SIM-021（软件 1.0）应运行显示“软件或策略集已变化，需重新下发”。",
+          "resource 把 VEH-001 的软件确认为 1.2；它的基线仍是策略集 1.0.0，应运行与已生效一致。",
+          "brake_tester 重新下发 brake_monitor：两辆车基线不同，平台生成两次下发；回执后各自运行自己的组合。"
+        ],
+        "done": "每辆车运行“自身软件当前适用的策略集 + 本组提交”；平台不会自行推送，变化提示后由团队显式下发。",
+        "fail": "看到“需重新下发”时不要等待自动更新；下发后需等车辆回执。"
+      },
+      {
+        "id": "P07",
+        "title": "开关其他分组的策略",
+        "actor": "brake_tester / 王嘉宁 · 业务测试",
+        "accounts": [
+          "brake_tester"
+        ],
+        "workspace": "team-brake",
+        "page": "研发 Feature → 下发与测试 → 按车辆组下发；原型工具 → 车辆模拟器",
+        "pre": "P06 完成。",
+        "steps": [
+          "brake_tester 下发时尝试关闭本组策略 chassis.brake.monitor：被拒绝，本组策略只能通过提交修改。",
+          "改为关闭转向组的 chassis.steering.angle_jump 后下发，并在模拟器回执。",
+          "在模拟器的采集事件中，SIM-021 不再提供 angle_jump；制动策略和转向回正策略照常。"
+        ],
+        "done": "开关随发布记录、进入配置标识；被关闭的策略在车上不触发。",
+        "fail": "开关不进入集成合并，也不能用来打开未批准的策略。"
+      },
+      {
+        "id": "P08",
+        "title": "基线冲突与显式基线",
+        "actor": "steering_tester / 吴凡；resource / 刘子衡；workspace_manager / 周子墨",
+        "accounts": [
+          "steering_tester",
+          "resource",
+          "workspace_manager"
+        ],
+        "workspace": "team-steering",
+        "page": "研发 Feature → 下发与测试；车辆与车辆组 → 车辆组",
+        "pre": "P07 完成；lane_drift 在 P05 基于策略集 1.0.0 提交。",
+        "steps": [
+          "steering_tester 下发 lane_drift 到转向研发车组：策略集 1.0.1 已改动 chassis.steering，下发被拒绝。",
+          "resource 把 VEH-003 的软件确认为 1.3：转向研发车组上它显示“没有适用基线，保持已生效配置”。",
+          "workspace_manager 为转向研发车组指定显式基线策略集 1.0.0；steering_tester 再次下发 lane_drift，两辆车都以 1.0.0 为基线运行。"
+        ],
+        "done": "与新基线冲突时保持已生效配置并给出原因；显式基线让团队在未确认适用的软件上继续研发测试。",
+        "fail": "冲突应基于新策略集新建 Feature 解决，平台不做自动变基。"
+      },
+      {
+        "id": "P09",
+        "title": "紧急停用一条策略",
+        "actor": "dcl / 林书涵 · DCL 工程申请；release / 孙立 · 配置发布批准",
+        "accounts": [
+          "dcl",
+          "release"
+        ],
+        "workspace": "x89-project",
+        "page": "发布与配置 OTA → 策略集发布 → 紧急停用；配置 OTA",
+        "pre": "P08 完成；策略集 1.0.1 适用于 1.0。",
+        "steps": [
+          "dcl 在策略集 1.0.1 的 chassis.steering.return_rate 上“紧急停用”，写明原因；dcl 不能自己批准。",
+          "release 批准：生成策略集 1.0.2（紧急），去掉该策略，只适用于 1.0.1 当前生效的 X89 1.0。",
+          "release 新建 OTA：VEH-201 收到 1.0.2；运行 1.2 的 VEH-202 不在本次范围，继续运行 1.0.0。"
+        ],
+        "done": "车上始终运行平台叫得出名字的一套策略集；紧急停用由两人完成，并通过 OTA 生效。",
+        "fail": "批准人不能是申请人；策略集没有在任何软件版本生效时不能紧急停用。"
+      },
+      {
+        "id": "N01",
+        "title": "撤销适用：车辆回到仍适用的上一套或被阻止",
+        "actor": "release / 孙立 · 配置发布",
+        "accounts": [
+          "release"
+        ],
+        "workspace": "x89-project",
+        "page": "发布与配置 OTA → 软件版本与适用性",
+        "pre": "P09 完成；1.2 由策略集 1.0.0 经追加适用。",
+        "steps": [
+          "release 在 X89 1.2 行“撤销适用”，填写原因。",
+          "核对 1.2 没有其他适用策略集：VEH-202 被列为阻止；适用记录多了一条撤销，历史保留。"
+        ],
+        "done": "撤销只追加记录，不改写策略集。",
+        "fail": "撤销后如需恢复，重新开启适用性确认并测试。"
+      }
+    ]
+  },
+  {
+    "id": "org-directory",
+    "name": "公司目录与组织授权 · 基础权限与特殊权限",
+    "start": "demo",
+    "scenes": [
+      {
+        "id": "O01",
+        "title": "新员工入职：按组织规则获得基础研发权限",
+        "actor": "公司目录（车辆模拟器扮演）；brake_dev2 / 何晓 · 新员工",
+        "accounts": [
+          "admin",
+          "brake_dev2"
+        ],
+        "workspace": "team-brake",
+        "page": "原型工具 → 车辆模拟器 → 公司目录；研发 Feature",
+        "pre": "演示数据：制动团队有一条组织授权规则（研发环境的业务研发，制动团队工作区 / 制动组）。",
+        "steps": [
+          "在公司目录为制动团队办理入职：账号 brake_dev2，姓名何晓；同步到平台。",
+          "以 brake_dev2 登录：只有业务研发角色，可进入制动团队工作区创建 Feature。",
+          "审计中该操作的授权标注“来自组织规则”；brake_dev2 不能测试、验证，也不能在转向团队工作区研发。"
+        ],
+        "done": "基础权限随组织归属自动获得，每条仍是一条完整授权；特殊权限不会因此获得。",
+        "fail": "规则不覆盖测试人员所在部门；需要测试权限时由平台运维显式授予。"
+      },
+      {
+        "id": "O02",
+        "title": "调岗：基础权限随组织变化，显式授权待复核",
+        "actor": "公司目录；admin / 平台管理员",
+        "accounts": [
+          "admin",
+          "business"
+        ],
+        "workspace": null,
+        "page": "原型工具 → 车辆模拟器 → 公司目录；账号与授权；工作台",
+        "pre": "O01 完成。",
+        "steps": [
+          "在公司目录把陈明（business）调到转向团队并同步。",
+          "平台运维在工作台看到“调岗后待复核授权”；账号页显示组织为转向团队，制动团队规则的权限已不再出现，显式授权仍在并标记待复核。",
+          "平台运维“确认保留”，或改写授权。"
+        ],
+        "done": "组织规则的权限立即跟随调岗；显式授权由人复核，不自动删除。",
+        "fail": "不要指望调岗自动收回显式授权，必须复核。"
+      },
+      {
+        "id": "O03",
+        "title": "部门改名：其他一切不变",
+        "actor": "公司目录；admin",
+        "accounts": [
+          "admin"
+        ],
+        "workspace": null,
+        "page": "原型工具 → 车辆模拟器 → 公司目录；组织与工作区",
+        "pre": "O02 完成。",
+        "steps": [
+          "在公司目录把制动团队改名为“制动与线控团队”并同步。",
+          "组织树中节点 brake-team 名称已变，节点 ID、工作区、业务分组代码和授权都不变；目录同步记录有一条“组织节点改名”。"
+        ],
+        "done": "组织调整不改业务分组代码和 data_key，也不重算授权。",
+        "fail": "团队组织在平台内只读，改名要在目录中进行。"
+      },
+      {
+        "id": "O04",
+        "title": "部门合并：工作区重新挂靠",
+        "actor": "公司目录；admin",
+        "accounts": [
+          "admin"
+        ],
+        "workspace": null,
+        "page": "原型工具 → 车辆模拟器 → 公司目录；组织与工作区 → 工作区",
+        "pre": "O03 完成。",
+        "steps": [
+          "在公司目录把 HMI 团队合并到 CDC 并同步：人员转入 CDC，HMI 团队节点撤销。",
+          "组织与工作区中“HMI 团队工作区”和“CDC HMI 组”显示“组织节点已失效”；工作台提示重新挂靠。",
+          "平台运维把 HMI 团队工作区重新挂靠到 CDC：业务分组随之迁移，代码与授权不变。"
+        ],
+        "done": "目录变化不会删除业务分组或工作区；失效的挂靠由人处理。",
+        "fail": "重新挂靠只能选同一棵组织树中仍存在的节点。"
+      },
+      {
+        "id": "O05",
+        "title": "离职：账号停用，历史保留",
+        "actor": "公司目录；steering / 吴泽宇",
+        "accounts": [
+          "admin",
+          "steering"
+        ],
+        "workspace": null,
+        "page": "原型工具 → 车辆模拟器 → 公司目录；登录页",
+        "pre": "O04 完成。",
+        "steps": [
+          "在公司目录办理吴泽宇（steering）离职并同步。",
+          "登录页不再列出 steering；已有提交、审计中的作者仍是 steering。",
+          "本地账号（平台管理员）不受目录影响：目录中同名人员只记“跳过”。"
+        ],
+        "done": "离职即停用；目录永远不会改动本地账号。",
+        "fail": "最后一个平台管理员不会因同步被停用。"
+      },
+      {
+        "id": "O06",
+        "title": "组织规则的边界",
+        "actor": "admin / 平台管理员",
+        "accounts": [
+          "admin"
+        ],
+        "workspace": null,
+        "page": "组织与工作区 → 授权规则 / 组织树",
+        "pre": "O05 完成。",
+        "steps": [
+          "新建授权规则时选业务测试或测试环境：被拒绝，组织规则只能授予研发环境的业务研发。",
+          "尝试编辑来自目录的组织节点：不可编辑，提示在目录中修改。",
+          "停用制动团队的规则：其成员立即失去这条基础权限，显式授权不受影响。"
+        ],
+        "done": "基础权限按组，特殊权限显式到人；组织节点由目录维护。",
+        "fail": "需要例外时显式授予到人，不要放宽组织规则。"
+      }
+    ]
   }
 ];
 

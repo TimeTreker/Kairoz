@@ -7,6 +7,8 @@ export const SCRIPT_NOTES: Record<string, string> = {
   'data-usage': '使用演示数据（原型工具 → 重置为演示数据）。样例事件日期固定为 2026-10-18。',
   'domain-integration': '使用演示数据（ADC、CDC 域集成工作区与 adc_integrator / cdc_integrator 已建立）。原型没有“用户中心切换身份”：账号的各项授权同时生效，每个动作仍只由一条完整授权放行。个人仿真不适用，改用团队研发车组。',
   'client-report': '使用演示数据。车端客户端由车辆模拟器扮演，设备签名为 Mock（可伪造），不代表真实设备认证；剧本中的 Mock 控制台与 curl 由模拟器按钮代替。',
+  'policy-sets': '使用演示数据。软件清单为 Mock（车辆资源按可信来源登记信号与数据源）；兼容性检查只核对信号名与数据源目录，不代表真实软件验证。',
+  'org-directory': '使用演示数据。公司目录由车辆模拟器扮演（真实系统中是 HR、LDAP/AD 或 SCIM 推送）；自动运行时每一步同步，也可手动“同步到平台”。',
 };
 
 /** Keyed by script and scene, e.g. 'first-ota/E05'. */
