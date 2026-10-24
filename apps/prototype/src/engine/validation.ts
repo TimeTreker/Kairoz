@@ -10,7 +10,7 @@ import { newId } from '../domain/ids.ts';
 import type { Env } from '../domain/vocabulary.ts';
 import { authorizeFeature, displayName, latestRelease } from './config.ts';
 import type { Ctx } from './engine.ts';
-import { authorizePersonal, directTargetProblems, getResource, membersOf, pendingDeploymentOf, pendingImageChangeOf, pendingSoftwareUpdateOf, recordGroupBinding, softwareKey } from './fleet.ts';
+import { activeLoanOf, authorizePersonal, directTargetProblems, isOverdue, getResource, membersOf, pendingDeploymentOf, pendingImageChangeOf, pendingSoftwareUpdateOf, recordGroupBinding, softwareKey } from './fleet.ts';
 import { getGroup } from './org.ts';
 import { commitSnapshot, resolveFiles } from './snapshots.ts';
 import { setInEffect } from './release.ts';
@@ -174,6 +174,8 @@ export function vehicleDispatchProblems(s: State, feature: Feature, commitId: st
   if (pending) problems.push(`vehicle is waiting for deployment ${pending}`);
   if (pendingImageChangeOf(s, r.id)) problems.push('waiting for an image change');
   if (pendingSoftwareUpdateOf(s, r.id)) problems.push('waiting for a software update');
+  const loan = activeLoanOf(s, r.id);
+  if (loan && isOverdue(s, loan)) problems.push(`loan overdue since ${loan.dueDate}; extend or return it`);
   const target = featureTarget(s, feature, commitId, g, r, disabledPolicies);
   if (target.problem) problems.push(target.problem);
   return problems;
@@ -650,6 +652,9 @@ export function candidateVehicleProblems(s: State, c: Candidate, rid: string): s
   const pending = pendingDeploymentOf(s, rid);
   if (pending) problems.push(`${rid}: waiting for deployment ${pending}`);
   if (pendingImageChangeOf(s, rid)) problems.push(`${rid}: waiting for an image change`);
+  if (pendingSoftwareUpdateOf(s, rid)) problems.push(`${rid}: waiting for a software update`);
+  const loan = activeLoanOf(s, rid);
+  if (loan && isOverdue(s, loan)) problems.push(`${rid}: loan overdue since ${loan.dueDate}; extend or return it`);
   // Integration tests name real software versions; a derived development image is not one.
   if (r.imageId && s.images[r.imageId]?.derived) problems.push(`${rid}: runs a derived development image`);
   return problems;

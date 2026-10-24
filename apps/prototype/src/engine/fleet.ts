@@ -13,7 +13,8 @@ import { openCheckForNewSoftware } from './applicability.ts';
 import type { Actor, Ctx } from './engine.ts';
 import { getWorkspace } from './org.ts';
 import { displayName } from './config.ts';
-import type { ControllerState, GroupPublication, Resource, SoftwareChange, State, VehicleGroup, VehicleGroupEvent, VehicleGroupPurpose } from './types.ts';
+import type { ControllerState, GroupPublication, Loan, Resource, SoftwareChange, State, VehicleGroup, VehicleGroupEvent, VehicleGroupPurpose } from './types.ts';
+import { todayOf } from './clock.ts';
 
 const RESOURCE_ID = /^[A-Z][A-Z0-9-]{2,40}$/;
 const VIN = /^[A-HJ-NPR-Z0-9]{17}$/;
@@ -61,6 +62,24 @@ export function assertIdle(s: State, resourceId: string): void {
   const change = pendingImageChangeOf(s, resourceId);
   if (change) throw rule('IMAGE_CHANGE_PENDING', `${resourceId} is waiting for an image change; answer or withdraw it first`);
   if (pendingSoftwareUpdateOf(s, resourceId)) throw rule('SOFTWARE_UPDATE_PENDING', `${resourceId} is waiting for a software update; wait for it or withdraw it`);
+}
+
+/** The approved loan (借用) a vehicle is on, if it is lent. */
+export function activeLoanOf(s: State, resourceId: string): Loan | undefined {
+  return Object.values(s.loans).find((l) => l.resourceId === resourceId && l.status === 'APPROVED');
+}
+
+/** A loan past its last day: no new dispatches until it is extended or the vehicle returned. */
+export function isOverdue(s: State, l: Loan): boolean {
+  return l.status === 'APPROVED' && todayOf(s) > l.dueDate;
+}
+
+/** While a vehicle is lent, only the borrowing workspace works with it. */
+export function assertNotLentAway(s: State, resourceId: string, workspaceId: string | null): void {
+  const l = activeLoanOf(s, resourceId);
+  if (l && l.workspaceId !== workspaceId) {
+    throw rule('VEHICLE_ON_LOAN', `${resourceId} is lent to ${s.workspaces[l.workspaceId]?.name ?? l.workspaceId} until ${l.dueDate}`);
+  }
 }
 
 /** Personal simulations never join workspace vehicles, vehicle groups or resource operations. */
@@ -290,8 +309,13 @@ export function authorizeSimulation(ctx: Ctx, resourceId: string): Draft<Resourc
   const r = getResource(ctx.s, resourceId) as Draft<Resource>;
   if (r.type !== 'SIMULATION') throw rule('NOT_A_SIMULATION', `${r.id} is not a simulation instance`);
   if (r.personal) authorizePersonal(ctx, r);
-  else ctx.allow('simulation.manage', { type: 'resource', id: r.id, workspaceId: r.homeWorkspaceId ?? undefined, scope: r.pool, env: r.env });
+  else ctx.allow('simulation.manage', { type: 'resource', id: r.id, workspaceId: simulationWorkspace(ctx.s, r) ?? undefined, scope: r.pool, env: r.env });
   return r;
+}
+
+/** The workspace that runs a team simulation: its borrower while it is lent, else its home workspace. */
+export function simulationWorkspace(s: State, r: Resource): string | null {
+  return activeLoanOf(s, r.id)?.workspaceId ?? r.homeWorkspaceId;
 }
 
 export function startSimulation(ctx: Ctx, resourceId: string): void {
@@ -316,6 +340,7 @@ export function reserveVehicle(ctx: Ctx, workspaceId: string, resourceId: string
   const r = getResource(ctx.s, resourceId) as Draft<Resource>;
   ctx.allow('workspace.resources', { type: 'reservation', id: r.id, workspaceId, scope: r.pool, env: r.env });
   if (!(ctx.s.workspaceResources[workspaceId] ?? []).includes(r.id)) throw rule('VEHICLE_NOT_IN_WORKSPACE', 'add the vehicle to the workspace first');
+  assertNotLentAway(ctx.s, r.id, workspaceId);
   if (r.reservation) throw conflict('VEHICLE_RESERVED', `${r.id} is reserved by ${r.reservation.by} for ${r.reservation.purpose}`);
   if (!purpose.trim()) throw rule('PURPOSE_REQUIRED', 'say what the reservation is for');
   r.reservation = { by: ctx.user().username, purpose: purpose.trim(), at: ctx.now };
@@ -333,7 +358,10 @@ export function setResourceStatus(ctx: Ctx, resourceId: string, input: { status:
   ctx.allow('resource.manage', { type: 'resource', id: r.id, scope: r.pool, env: r.env });
   assertShared(r);
   if (!input.reason.trim()) throw rule('REASON_REQUIRED', 'give a reason');
-  if (input.status !== 'AVAILABLE') assertIdle(ctx.s, r.id);
+  if (input.status !== 'AVAILABLE') {
+    assertNotLentAway(ctx.s, r.id, null);
+    assertIdle(ctx.s, r.id);
+  }
   r.status = input.status;
   r.updatedAt = ctx.now;
 }
@@ -375,6 +403,7 @@ export function addWorkspaceVehicle(ctx: Ctx, workspaceId: string, resourceId: s
   const r = getResource(ctx.s, resourceId);
   ctx.allow('workspace.resources', { type: 'workspaceResource', id: resourceId, workspaceId, scope: r.pool, env: r.env });
   assertShared(r);
+  assertNotLentAway(ctx.s, r.id, workspaceId);
   if (!assignableVehicles(ctx.s, workspaceId).some((x) => x.id === resourceId)) {
     throw rule('VEHICLE_NOT_ASSIGNABLE', 'the vehicle does not fit this workspace (model, pool, environment) or is already assigned');
   }
@@ -388,6 +417,8 @@ export function removeWorkspaceVehicle(ctx: Ctx, workspaceId: string, resourceId
   if (groupId && ctx.s.vehicleGroups[groupId]?.workspaceId === workspaceId) {
     throw rule('VEHICLE_IN_GROUP', 'remove the vehicle from its vehicle group first');
   }
+  // A lent vehicle stays with its lenders, and leaves its borrower only by being returned.
+  if (activeLoanOf(ctx.s, resourceId)) throw rule('VEHICLE_ON_LOAN', `${resourceId} is on loan; return or recall it instead`);
   assertRemovable(ctx.s, resourceId);
   ctx.s.workspaceResources[workspaceId] = (ctx.s.workspaceResources[workspaceId] ?? []).filter((id) => id !== resourceId);
 }
@@ -463,6 +494,7 @@ export function addGroupMember(ctx: Ctx, vehicleGroupId: string, resourceId: str
   assertShared(r);
   if (!reason.trim()) throw rule('REASON_REQUIRED', 'give a reason for the membership change');
   if (!(ctx.s.workspaceResources[g.workspaceId] ?? []).includes(r.id)) throw rule('VEHICLE_NOT_IN_WORKSPACE', 'add the vehicle to the workspace first');
+  assertNotLentAway(ctx.s, r.id, g.workspaceId);
   if (r.env !== g.env) throw rule('ENV_MISMATCH', `vehicle ${r.id} is a ${r.env} vehicle; the group is ${g.env}`);
   if (r.vehicleModelId !== getWorkspace(ctx.s, g.workspaceId).vehicleModelId) throw rule('MODEL_MISMATCH', 'the vehicle is of another model');
   if (r.status !== 'AVAILABLE') throw rule('VEHICLE_UNAVAILABLE', `vehicle ${r.id} is ${r.status.toLowerCase()}`);

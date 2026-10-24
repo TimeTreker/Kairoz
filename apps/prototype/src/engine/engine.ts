@@ -8,6 +8,7 @@ import { authorize } from '../domain/authz.ts';
 import type { Action, AuthzTarget, Grant } from '../domain/authz.ts';
 import { ForbiddenError, unauthenticated } from '../domain/errors.ts';
 import { newId } from '../domain/ids.ts';
+import { nowOf } from './clock.ts';
 import { grantsOf } from './identity.ts';
 import type { AuditEvent, State } from './types.ts';
 
@@ -80,7 +81,7 @@ export class Engine {
    * operation's result, detached from the draft.
    */
   run<R>(username: string | null, operation: (ctx: Ctx) => R): R {
-    const now = new Date().toISOString();
+    const now = nowOf(this.state);
     let result: R | undefined;
     try {
       const next = produce(this.state, (s) => {

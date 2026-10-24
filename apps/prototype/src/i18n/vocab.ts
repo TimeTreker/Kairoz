@@ -734,3 +734,50 @@ export const SOFTWARE_REQUEST_STATUS_LABELS: Record<string, Bilingual> = {
   CANCELLED: b('已撤回', 'Withdrawn'),
 };
 export const SOFTWARE_REQUEST_STATUS_COLORS: Record<string, string> = { PENDING: 'processing', APPLIED: 'green', FAILED: 'red', CANCELLED: 'default' };
+
+// Borrowing (借用) and simulated time
+Object.assign(ERROR_LABELS, {
+  LOAN_NOT_LENDABLE: b('该车辆不能借用：量产车、个人仿真、已报废车辆和其他车型都不能借', 'This vehicle cannot be lent: production, personal, retired and other-model vehicles never are'),
+  ALREADY_IN_WORKSPACE: b('车辆已经在本工作区中', 'The vehicle is already in this workspace'),
+  LOAN_OPEN: b('本工作区已有该车辆的借用申请或借用', 'This workspace already has an open loan of the vehicle'),
+  LOAN_TARGET_GROUP: b('请选择本工作区一个可用的、环境相同的研发或测试车辆组', 'Choose an active development or testing vehicle group of this workspace, in the vehicle’s environment'),
+  INVALID_DUE_DATE: b('归还日期须晚于今天（延期时晚于原日期），且不超过 90 天', 'The last day is after today (and the current one, when extending) and at most 90 days ahead'),
+  LOAN_PURPOSE_REQUIRED: b('请说明借用用途', 'Say what the vehicle is borrowed for'),
+  LOAN_NOT_PENDING: b('借用申请已经结束', 'The loan request is no longer open'),
+  ALREADY_ANSWERED: b('该工作区已经答复过', 'This workspace already answered'),
+  LENDER_NOT_AGREED: b('须先由正在使用该车的工作区同意', 'Every workspace using the vehicle agrees first'),
+  LOAN_NOT_APPROVABLE: b('车辆现在不能借出', 'The vehicle cannot be lent now'),
+  LOAN_NOT_ACTIVE: b('借用不在进行中', 'The loan is not active'),
+  EXTENSION_PENDING: b('已有延期申请在等待车辆资源处理', 'An extension is already waiting for vehicle resources'),
+  NO_EXTENSION_PENDING: b('没有待处理的延期申请', 'No extension is waiting'),
+  VEHICLE_ON_LOAN: b('车辆借用中：只有借用方可以使用，借用方只能通过归还移出', 'The vehicle is on loan: only the borrower uses it, and returns it to let it go'),
+  INVALID_CLOCK_STEP: b('每次可将时间推进 1 到 30 天', 'Move the clock forward 1 to 30 days'),
+});
+export const LOAN_STATUS_LABELS: Record<string, Bilingual> = {
+  REQUESTED: b('待审批', 'Requested'),
+  APPROVED: b('借用中', 'On loan'),
+  OVERDUE: b('已到期', 'Overdue'),
+  REJECTED: b('未批准', 'Rejected'),
+  WITHDRAWN: b('已撤回', 'Withdrawn'),
+  RETURNED: b('已归还', 'Returned'),
+  RECALLED: b('已收回', 'Recalled'),
+};
+export const LOAN_STATUS_COLORS: Record<string, string> = {
+  REQUESTED: 'processing',
+  APPROVED: 'green',
+  OVERDUE: 'red',
+  REJECTED: 'default',
+  WITHDRAWN: 'default',
+  RETURNED: 'default',
+  RECALLED: 'orange',
+};
+export const LENDER_DECISION_LABELS: Record<string, Bilingual> = {
+  PENDING: b('待同意', 'To agree'),
+  AGREED: b('已同意', 'Agreed'),
+  DECLINED: b('不同意', 'Declined'),
+};
+export const EXTENSION_STATUS_LABELS: Record<string, Bilingual> = {
+  PENDING: b('延期待审批', 'Extension requested'),
+  APPROVED: b('延期已批准', 'Extension approved'),
+  REJECTED: b('延期未批准', 'Extension rejected'),
+};

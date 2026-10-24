@@ -6,12 +6,14 @@
 import { authorize } from '../domain/authz.ts';
 import type { Role } from '../domain/vocabulary.ts';
 import { blockedProductionVehicles } from './applicability.ts';
+import { mismatchesFor } from './delivery.ts';
 import type { Actor, Ctx } from './engine.ts';
 import { emergencyStopsOf } from './emergency.ts';
-import { workspaceVehicles } from './fleet.ts';
+import { isOverdue, workspaceVehicles } from './fleet.ts';
 import { workspaceAccess } from './identity.ts';
 import { intakeQueue } from './intake.ts';
 import { isConfirmed, isMergeWorkspace, verifiedSources } from './integration.ts';
+import { borrowedBy, lentBy, loansToAgree, loansToApprove, managedLoans } from './loans.ts';
 import { orphanedOrgObjects } from './org.ts';
 import { otaRollouts } from './ota.ts';
 import { referenceRequestsFor } from './references.ts';
@@ -42,6 +44,15 @@ export type NotificationKind =
   | 'ROLLOUT_PAUSED'
   | 'PRODUCTION_BLOCKED'
   | 'UNRECORDED_SOFTWARE'
+  | 'GROUP_MISMATCH'
+  | 'SOFTWARE_UPDATE'
+  | 'LOAN_TO_AGREE'
+  | 'LOAN_TO_APPROVE'
+  | 'EXTENSION_TO_APPROVE'
+  | 'LOAN_DECIDED'
+  | 'LOAN_OVERDUE'
+  | 'LOAN_ENDED'
+  | 'LOAN_RECALLED'
   | 'GRANT_REVIEW'
   | 'ORPHANED_UNIT';
 
@@ -103,6 +114,16 @@ export function notificationsFor(s: State, actor: Actor, workspaceId: string): N
       const outcome = assessSoftwareChange(s, c.id).outcome;
       add(role, 'SOFTWARE_CHANGE', [c.id, outcome], { severity: outcome === 'NONE' ? 'INFO' : 'WARNING', subject: c.resourceId, detail: `${c.fromVersion ?? '—'} → ${c.toVersion} · ${outcome}`, link: 'workbench', at: c.at });
     }
+    for (const f of mismatchesFor(s, actor, workspaceId)) {
+      add(role, 'GROUP_MISMATCH', [f.resourceId, f.follow.since, f.check.outcome], { severity: 'WARNING', subject: f.resourceId, detail: `${s.vehicleGroups[f.vehicleGroupId]?.name ?? f.vehicleGroupId} · ${f.check.outcome}`, link: 'fleet/groups', at: f.follow.since });
+    }
+  }
+  // The answer to an account's own software update request.
+  const updater = (['BUSINESS_DEV', 'BUSINESS_TEST', 'WORKSPACE_ADMIN', 'VEHICLE_RESOURCE'] as const).find(has);
+  if (updater) {
+    for (const q of Object.values(s.vehicleSoftwareRequests).filter((x) => x.workspaceId === workspaceId && x.requestedBy === actor.username && (x.status === 'APPLIED' || x.status === 'FAILED'))) {
+      add(updater, 'SOFTWARE_UPDATE', [q.id, q.status], { severity: q.status === 'FAILED' ? 'WARNING' : 'INFO', subject: q.resourceId, detail: `${q.toVersion} · ${q.status}`, link: 'fleet/workspace', at: q.answeredAt });
+    }
   }
   if (has('BUSINESS_TEST')) {
     for (const f of features) {
@@ -129,6 +150,37 @@ export function notificationsFor(s: State, actor: Actor, workspaceId: string): N
   if (has('WORKSPACE_ADMIN')) {
     for (const r of testRequestsOf(s, workspaceId).filter((x) => x.status === 'PENDING')) {
       add('WORKSPACE_ADMIN', 'TEST_REQUEST_PENDING', [r.id, r.status], { severity: 'WARNING', subject: s.features[r.featureId]?.name ?? r.featureId, detail: s.accounts[r.requestedBy]?.displayName ?? r.requestedBy, link: 'fleet/groups', at: r.requestedAt });
+    }
+  }
+  if (has('WORKSPACE_ADMIN')) {
+    for (const l of loansToAgree(s, actor, workspaceId)) {
+      add('WORKSPACE_ADMIN', 'LOAN_TO_AGREE', [l.id, l.status], { severity: 'WARNING', subject: l.resourceId, detail: s.workspaces[l.workspaceId]?.name ?? l.workspaceId, link: 'fleet/loans', at: l.requestedAt });
+    }
+    const r0 = (id: string) => s.resources[id]!;
+    const mine = borrowedBy(s, workspaceId).filter((l) => authorize(actor.grants, 'workspace.resources', { workspaceId, scope: r0(l.resourceId).pool, env: r0(l.resourceId).env }).ok);
+    for (const l of mine) {
+      const ext = l.extensions.at(-1);
+      if (l.status === 'APPROVED' || l.status === 'REJECTED') {
+        const extended = l.status === 'APPROVED' && ext && ext.status !== 'PENDING';
+        const detail = extended ? `EXTENSION_${ext.status}` : l.status;
+        add('WORKSPACE_ADMIN', 'LOAN_DECIDED', [l.id, detail, ext?.decidedAt ?? null], { severity: detail.endsWith('REJECTED') ? 'WARNING' : 'INFO', subject: l.resourceId, detail, link: 'fleet/loans', at: extended ? ext.decidedAt : l.decidedAt });
+      }
+      if (isOverdue(s, l)) add('WORKSPACE_ADMIN', 'LOAN_OVERDUE', [l.id, l.dueDate], { severity: 'WARNING', subject: l.resourceId, detail: l.dueDate, link: 'fleet/loans', at: null });
+      if (l.status === 'RECALLED') add('WORKSPACE_ADMIN', 'LOAN_RECALLED', [l.id, l.status], { severity: 'WARNING', subject: l.resourceId, detail: l.endNote, link: 'fleet/loans', at: l.endedAt });
+    }
+    for (const l of lentBy(s, workspaceId).filter((x) => x.status === 'RETURNED' || x.status === 'RECALLED')) {
+      if (!authorize(actor.grants, 'workspace.resources', { workspaceId, scope: r0(l.resourceId).pool, env: r0(l.resourceId).env }).ok) continue;
+      add('WORKSPACE_ADMIN', 'LOAN_ENDED', [l.id, l.status], { severity: 'INFO', subject: l.resourceId, detail: `${l.status} · ${l.softwareAtStart ?? '—'} → ${l.softwareAtEnd ?? '—'}`, link: 'fleet/workspace', at: l.endedAt });
+    }
+  }
+  if (has('VEHICLE_RESOURCE')) {
+    for (const l of loansToApprove(s, actor)) {
+      add('VEHICLE_RESOURCE', 'LOAN_TO_APPROVE', [l.id, l.status], { severity: 'WARNING', subject: l.resourceId, detail: s.workspaces[l.workspaceId]?.name ?? l.workspaceId, link: 'fleet/loans', at: l.requestedAt });
+    }
+    for (const l of managedLoans(s, actor).filter((x) => x.status === 'APPROVED')) {
+      const ext = l.extensions.find((x) => x.status === 'PENDING');
+      if (ext) add('VEHICLE_RESOURCE', 'EXTENSION_TO_APPROVE', [l.id, ext.requestedAt], { severity: 'WARNING', subject: l.resourceId, detail: ext.dueDate, link: 'fleet/loans', at: ext.requestedAt });
+      if (isOverdue(s, l)) add('VEHICLE_RESOURCE', 'LOAN_OVERDUE', [l.id, l.dueDate], { severity: 'WARNING', subject: l.resourceId, detail: l.dueDate, link: 'fleet/loans', at: null });
     }
   }
   for (const role of ['WORKSPACE_ADMIN', 'VEHICLE_RESOURCE'] as const) {

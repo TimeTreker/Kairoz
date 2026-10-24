@@ -40,6 +40,15 @@ export const NOTIFICATION_CATEGORY: Record<NotificationKind, string> = {
   ROLLOUT_PAUSED: 'RELEASE',
   PRODUCTION_BLOCKED: 'RELEASE',
   UNRECORDED_SOFTWARE: 'VEHICLE',
+  GROUP_MISMATCH: 'VEHICLE',
+  SOFTWARE_UPDATE: 'VEHICLE',
+  LOAN_TO_AGREE: 'VEHICLE',
+  LOAN_TO_APPROVE: 'VEHICLE',
+  EXTENSION_TO_APPROVE: 'VEHICLE',
+  LOAN_DECIDED: 'VEHICLE',
+  LOAN_OVERDUE: 'VEHICLE',
+  LOAN_ENDED: 'VEHICLE',
+  LOAN_RECALLED: 'VEHICLE',
   GRANT_REVIEW: 'ORG',
   ORPHANED_UNIT: 'ORG',
 };
@@ -126,6 +135,46 @@ export function useNotificationText() {
         return { title: L(`量产车 ${s} 被阻止`, `Production vehicle ${s} is blocked`), body: L(`软件 ${d} 没有适用的策略集。`, `No policy set applies to software ${d}.`) };
       case 'UNRECORDED_SOFTWARE':
         return { title: L(`${s} 上报了未登记的软件版本`, `${s} reported an unrecorded software version`), body: L(`先登记 ${d}，再确认。`, `Record ${d}, then confirm it.`) };
+      case 'GROUP_MISMATCH': {
+        const [group, outcome] = d.split(' · ');
+        return {
+          title: L(`${s} 与车辆组的发布不匹配`, `${s} does not fit what ${group} runs`),
+          body: `${B(CHANGE_OUTCOME_LABELS[outcome ?? ''] as Bilingual | undefined, outcome ?? '')} · ${L('修改策略并下发，或更新车辆整车版本', 'adapt the policies and dispatch, or update the vehicle’s software')}`,
+        };
+      }
+      case 'SOFTWARE_UPDATE': {
+        const [version, status] = d.split(' · ');
+        return status === 'FAILED'
+          ? { title: L(`${s} 整车软件更新失败`, `Software update of ${s} failed`), body: L(`未能更新到 ${version}，车辆保持原版本。`, `It did not move to ${version}; it keeps its software.`) }
+          : { title: L(`${s} 已更新到 ${version}`, `${s} updated to ${version}`), body: L('车辆重启上报后，按车辆组的发布推送配置。', 'After its restart report, the group’s publication is pushed if it fits.') };
+      }
+      case 'LOAN_TO_AGREE':
+        return { title: L(`${d} 申请借用 ${s}`, `${d} asks to borrow ${s}`), body: L('同意后由车辆资源批准；批准时车辆离开本工作区的车辆组。', 'Vehicle resources approve after you agree; the vehicle then leaves your vehicle group.') };
+      case 'LOAN_TO_APPROVE':
+        return { title: L(`${s} 借用待审批`, `Loan of ${s} to approve`), body: L(`借用方：${d}`, `Borrower: ${d}`) };
+      case 'EXTENSION_TO_APPROVE':
+        return { title: L(`${s} 借用延期待审批`, `Loan extension of ${s} to decide`), body: L(`延期至 ${d}`, `Until ${d}`) };
+      case 'LOAN_DECIDED': {
+        const text: Record<string, [string, string]> = {
+          APPROVED: [L(`${s} 借用已批准`, `Loan of ${s} approved`), L('车辆已加入申请的车辆组。', 'The vehicle joined the vehicle group you asked for.')],
+          REJECTED: [L(`${s} 借用未批准`, `Loan of ${s} rejected`), L('查看说明后可重新申请。', 'See the note; you can ask again.')],
+          EXTENSION_APPROVED: [L(`${s} 借用延期已批准`, `Loan extension of ${s} approved`), ''],
+          EXTENSION_REJECTED: [L(`${s} 借用延期未批准`, `Loan extension of ${s} rejected`), L('请按原日期归还。', 'Return it by the current last day.')],
+        };
+        const [title, body] = text[d] ?? [s, d];
+        return { title, body };
+      }
+      case 'LOAN_OVERDUE':
+        return { title: L(`${s} 借用已到期`, `Loan of ${s} is overdue`), body: L(`最后一天 ${d}；不能再下发，请延期或归还。`, `Last day ${d}; nothing new is dispatched to it. Extend or return it.`) };
+      case 'LOAN_ENDED': {
+        const [status, versions] = d.split(' · ');
+        return {
+          title: status === 'RECALLED' ? L(`${s} 已被车辆资源收回`, `${s} was recalled by vehicle resources`) : L(`${s} 已归还`, `${s} was returned`),
+          body: L(`整车软件 ${versions}；需要时重新加入车辆组。`, `Software ${versions}; add it to a vehicle group again when needed.`),
+        };
+      }
+      case 'LOAN_RECALLED':
+        return { title: L(`借用的 ${s} 已被收回`, `Borrowed ${s} was recalled`), body: d };
       case 'GRANT_REVIEW':
         return { title: L(`${s} 调岗后待复核授权`, `Grants of ${s} to review after a move`), body: d };
       case 'ORPHANED_UNIT':

@@ -8,7 +8,7 @@ import type { Draft } from 'immer';
 import { conflict, notFound, rule } from '../domain/errors.ts';
 import { newId } from '../domain/ids.ts';
 import type { Ctx } from './engine.ts';
-import { assertIdle, getResource, pendingSoftwareUpdateOf, softwareKey } from './fleet.ts';
+import { assertIdle, assertNotLentAway, getResource, pendingSoftwareUpdateOf, softwareKey } from './fleet.ts';
 import { assessPublicationOn } from './software-change.ts';
 import type { PublicationCheck } from './software-change.ts';
 import type { Resource, State, VehicleGroup, VehicleSoftwareRequest } from './types.ts';
@@ -42,6 +42,7 @@ export function requestVehicleSoftware(ctx: Ctx, workspaceId: string, resourceId
   const r = getResource(ctx.s, resourceId);
   authorizeUpdate(ctx, workspaceId, r);
   if (!(ctx.s.workspaceResources[workspaceId] ?? []).includes(r.id)) throw rule('VEHICLE_NOT_IN_WORKSPACE', `${r.id} is not a vehicle of this workspace`);
+  assertNotLentAway(ctx.s, r.id, workspaceId);
   if (r.type !== 'PHYSICAL') throw rule('SIMULATION_SOFTWARE_FROM_IMAGE', 'a simulation’s software comes from its image; switch its image');
   if (r.env === 'production') throw rule('PRODUCTION_SOFTWARE', 'production vehicles change software only through the vehicle OTA program');
   if (r.status === 'RETIRED') throw rule('VEHICLE_UNAVAILABLE', `${r.id} is retired`);

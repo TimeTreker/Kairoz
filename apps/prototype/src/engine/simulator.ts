@@ -7,6 +7,7 @@ import type { ClientReportPayload, SignedReport, VersionItem } from '../domain/c
 import { notFound, rule } from '../domain/errors.ts';
 import { newId } from '../domain/ids.ts';
 import { acceptClientReport, checkClientReport, configurationContents } from './client-report.ts';
+import { DAY_MS, nowOf } from './clock.ts';
 import type { Ctx } from './engine.ts';
 import type { AgentState, DeviceState, Resource, State } from './types.ts';
 import { syncIfChanged } from './company-directory.ts';
@@ -267,6 +268,13 @@ export function completeVehicleSoftware(ctx: Ctx, requestId: string, result: 'AP
     if (clientRunning(ctx.s.resources[q.resourceId]!)) restartClient(ctx, q.resourceId);
   }
   return q.status;
+}
+
+/** Simulated time (模拟时间): the platform clock moves forward 1 to 30 days; it never goes back. */
+export function advanceClock(ctx: Ctx, days: number): string {
+  if (!Number.isInteger(days) || days < 1 || days > 30) throw rule('INVALID_CLOCK_STEP', 'move the clock forward 1 to 30 days');
+  ctx.s.clockOffsetMs += days * DAY_MS;
+  return nowOf(ctx.s);
 }
 
 export function upgradeClient(ctx: Ctx, resourceId: string, version: string): void {
