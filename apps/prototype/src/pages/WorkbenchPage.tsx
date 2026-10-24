@@ -1,4 +1,5 @@
 import { Badge, Button, Card, Col, Flex, Row, Space, Statistic, Typography } from 'antd';
+import { useState } from 'react';
 import type { ReactNode } from 'react';
 import { useActor, useCanOpen, useWorkspace } from '../app/hooks.ts';
 import { navigate } from '../app/router.ts';
@@ -12,6 +13,8 @@ import { blockedProductionVehicles } from '../engine/applicability.ts';
 import { emergencyStopsOf } from '../engine/emergency.ts';
 import { orphanedOrgObjects } from '../engine/org.ts';
 import { PERSONAL_SIM_QUOTA, personalPending, personalSimsOf } from '../engine/personal-sim.ts';
+import { softwareChangesFor, unrecordedReports } from '../engine/software-change.ts';
+import { OutcomeTag, SoftwareChangeDrawer } from '../components/software-change.tsx';
 import { otaRollouts } from '../engine/ota.ts';
 import { releaseFor, releasesOf } from '../engine/release.ts';
 import { managedResources, pendingDeploymentOf, vehicleGroupsOf, workspaceVehicles } from '../engine/fleet.ts';
@@ -50,6 +53,7 @@ export function WorkbenchPage() {
   const { workspace, roles } = useWorkspace();
   const { L, B } = useI18n();
   const cards: ReactNode[] = [];
+  const [changeOf, setChangeOf] = useState<string | null>(null);
   const features = workspace ? visibleFeatures(state, actor, workspace.id) : [];
 
   if (roles.includes('BUSINESS_DEV') && workspace) {
@@ -127,6 +131,25 @@ export function WorkbenchPage() {
         <Typography.Text type="secondary">
           {L('在自己的仿真上运行本组 Feature 草稿、试触发并自测；不计入团队测试。', 'Run your group’s Feature drafts on your own simulations, fire trials and self-test; never team evidence.')}
         </Typography.Text>
+      </Card>,
+    );
+  }
+  const changes = workspace ? softwareChangesFor(state, actor, workspace.id) : [];
+  if (changes.length > 0) {
+    cards.push(
+      <Card key="software" title={L('车辆软件已变化', 'Vehicle software changed')}>
+        <Typography.Paragraph type="secondary">
+          {L('车辆组中的实车上报了新的整车软件版本。逐辆查看对本组文件与策略的影响并确认。', 'Vehicles of your groups report new whole-vehicle software. Check what it means for the group’s files and policies, vehicle by vehicle, and confirm.')}
+        </Typography.Paragraph>
+        {changes.map((c) => (
+          <Row2 key={c.id} onClick={() => setChangeOf(c.id)}>
+            <Space>
+              <Mono>{c.resourceId}</Mono>
+              <span>{`${c.fromVersion ?? '—'} → ${c.toVersion}`}</span>
+            </Space>
+            <OutcomeTag changeId={c.id} />
+          </Row2>
+        ))}
       </Card>,
     );
   }
@@ -285,6 +308,15 @@ export function WorkbenchPage() {
           <Col span={8}><Statistic title={L('软件版本未知', 'Unknown software')} value={managed.filter((r) => r.type === 'PHYSICAL' && !r.integrationVersion).length} /></Col>
           <Col span={8}><Statistic title={L('等待回执', 'Awaiting receipts')} value={managed.filter((r) => pendingDeploymentOf(state, r.id)).length} /></Col>
         </Row>
+        {unrecordedReports(state, actor).map((c) => (
+          <Row2 key={c.id} onClick={() => navigate('fleet/registry')}>
+            <Space>
+              <Typography.Text type="warning">{L('上报了未登记的软件版本', 'Reported an unrecorded software version')}</Typography.Text>
+              <Mono>{`${c.resourceId} · ${c.toVersion}`}</Mono>
+            </Space>
+            <Typography.Text type="secondary">{L('先登记版本，再确认', 'Record the version, then confirm')}</Typography.Text>
+          </Row2>
+        ))}
       </Card>,
     );
   }
@@ -364,6 +396,7 @@ export function WorkbenchPage() {
           ))}
         </Row>
       )}
+      <SoftwareChangeDrawer changeId={changeOf} onClose={() => setChangeOf(null)} />
     </div>
   );
 }

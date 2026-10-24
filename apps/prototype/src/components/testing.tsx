@@ -40,13 +40,21 @@ export function TargetsTable({ status, action }: { status: TargetStatus[]; actio
                 <Typography.Text type="secondary">
                   {t.latest.summary} · {state.accounts[t.latest.tester]?.displayName} · {when(t.latest.createdAt)}
                 </Typography.Text>
+                {t.latest.integrationVersion !== state.resources[t.resourceId]!.integrationVersion && (
+                  // Kept because the base is the same and every policy still runs on the new software.
+                  <Typography.Text type="secondary">
+                    {L(`在 ${t.latest.integrationVersion ?? '—'} 上测试，车辆现为 ${state.resources[t.resourceId]!.integrationVersion ?? '—'}`, `Tested on ${t.latest.integrationVersion ?? '—'}; the vehicle now runs ${state.resources[t.resourceId]!.integrationVersion ?? '—'}`)}
+                  </Typography.Text>
+                )}
               </Space>
             ) : t.stale ? (
-              // A result from an earlier image is history: the vehicle runs another image now.
+              // A result from earlier software is history: the vehicle runs another image or version now.
               <Space orientation="vertical" size={0}>
-                <Tag color="gold">{L('镜像已变化，需重新测试', 'Image changed; test again')}</Tag>
+                <Tag color="gold">
+                  {state.resources[t.resourceId]!.type === 'SIMULATION' ? L('镜像已变化，需重新测试', 'Image changed; test again') : L('整车软件已变化，需重新测试', 'Software changed; test again')}
+                </Tag>
                 <Typography.Text type="secondary">
-                  {L('之前', 'Earlier')}: {t.stale.result} · {t.stale.imageId} · {when(t.stale.createdAt)}
+                  {L('之前', 'Earlier')}: {t.stale.result} · {t.stale.imageId ?? t.stale.integrationVersion ?? '—'} · {when(t.stale.createdAt)}
                 </Typography.Text>
               </Space>
             ) : (

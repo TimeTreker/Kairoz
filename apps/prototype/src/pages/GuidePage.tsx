@@ -63,6 +63,17 @@ export const SCENARIOS: Scenario[] = [
     ],
   },
   {
+    key: 'software-change',
+    titleZh: '整车软件版本变化',
+    titleEn: 'Vehicle software changes',
+    steps: [
+      { account: 'business', page: 'simulator', zh: '在原型工具 → 车辆模拟器对 VEH-001“更多 → 模拟整车软件 OTA…”刷写 1.1，再“上报”', en: 'In Prototype → Vehicle simulator, on VEH-001 use More → Simulate a vehicle software OTA… with 1.1, then Report', expectZh: '平台从签名上报中得知 VEH-001 运行 1.1', expectEn: 'The platform learns from the signed report that VEH-001 runs 1.1' },
+      { account: 'business', workspace: 'team-brake', page: 'workbench', zh: '在工作台“车辆软件已变化”打开 VEH-001', en: 'On the workbench open VEH-001 under Vehicle software changed', expectZh: '基线、文件、策略逐层检查；新旧版本同一策略集且都可运行时为“无需修改”', expectEn: 'Base, files and policies are checked level by level; with the same set and everything runnable it reads No change needed' },
+      { account: 'business', workspace: 'team-brake', page: 'workbench', zh: '点“确认”', en: 'Click Confirm', expectZh: '不建分支、不重新下发；车上的测试结果继续有效并标注测试时的版本', expectEn: 'No branch and no republish; the vehicle’s results still count, tagged with the version they ran on' },
+      { account: 'resource', page: 'fleet', zh: '车辆上报未登记的版本时，在“软件版本与镜像”登记它，再在车辆台账“确认软件版本”', en: 'When a vehicle reports an unrecorded version, record it under Software & images, then Confirm software in the registry', expectZh: '平台才更新车辆的软件版本并通知车辆组团队', expectEn: 'Only then does the platform update the vehicle and tell its group’s team' },
+    ],
+  },
+  {
     key: 'intake',
     titleZh: 'DCL 接入 · 敏感文件审核',
     titleEn: 'DCL intake · sensitive review',

@@ -219,7 +219,7 @@ export function assessSoftwareChange(s: State, changeId: string): SoftwareAssess
 }
 
 /** Those who publish to the vehicle's group are the ones told about its software. */
-function changeTarget(s: State, change: SoftwareChange) {
+export function softwareChangeTarget(s: State, change: SoftwareChange) {
   const r = s.resources[change.resourceId]!;
   const g = groupOf(s, r.id);
   const group = g?.groupId ? s.groups[g.groupId] : undefined;
@@ -230,7 +230,7 @@ function changeTarget(s: State, change: SoftwareChange) {
 /** The vehicle's team has seen the change and its check (确认); recorded once. */
 export function acknowledgeSoftwareChange(ctx: Ctx, changeId: string): void {
   const change = getSoftwareChange(ctx.s, changeId) as Draft<SoftwareChange>;
-  const target = changeTarget(ctx.s, change);
+  const target = softwareChangeTarget(ctx.s, change);
   if (change.status !== 'APPLIED' || !target) throw rule('NOT_A_TEAM_CHANGE', 'this change has no vehicle group team to confirm it');
   ctx.allow('feature.dispatch', target);
   if (change.acknowledgedBy) throw conflict('ALREADY_ACKNOWLEDGED', `already confirmed by ${change.acknowledgedBy}`);
@@ -243,7 +243,7 @@ export function softwareChangesFor(s: State, actor: Actor, workspaceId: string):
   return Object.values(s.softwareChanges)
     .filter((c) => {
       if (c.status !== 'APPLIED' || c.acknowledgedBy) return false;
-      const t = changeTarget(s, c);
+      const t = softwareChangeTarget(s, c);
       return !!t && t.workspaceId === workspaceId && authorize(actor.grants, 'feature.dispatch', t).ok;
     })
     .sort((a, b) => b.seq - a.seq);

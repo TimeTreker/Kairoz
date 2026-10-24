@@ -6,6 +6,8 @@ import { engine, useEngineState } from '../app/store.ts';
 import { ClientReportDrawer } from '../components/client-report.tsx';
 import { PersonalSims } from '../components/personal-sim.tsx';
 import { SimSoftwareDrawer, isDerivedImage } from '../components/sim-software.tsx';
+import { SoftwareChangeDrawer } from '../components/software-change.tsx';
+import { openChangeOf, unrecordedReports } from '../engine/software-change.ts';
 import { catalogImages } from '../engine/sim-software.ts';
 import { EnvTag, Hint, LabelTag, Mono, PageHeader, ShortId, configName, when } from '../components/common.tsx';
 import { ENVS, SCOPES } from '../domain/vocabulary.ts';
@@ -33,6 +35,7 @@ import {
   setGroupBase,
   setResourceStatus,
   setSoftwareManifest,
+  softwareKey,
   startSimulation,
   stopSimulation,
   vehicleGroupsOf,
@@ -283,6 +286,7 @@ function VehicleGroups() {
   const run = useRun();
   const [creating, setCreating] = useState(false);
   const [member, setMember] = useState<{ groupId: string; action: 'add' | 'remove'; resourceId?: string } | null>(null);
+  const [changeOf, setChangeOf] = useState<string | null>(null);
   const [form] = Form.useForm();
   const [memberForm] = Form.useForm();
   if (!workspace) return null;
@@ -383,7 +387,23 @@ function VehicleGroups() {
                     dataSource={members}
                     locale={{ emptyText: L('没有车辆', 'No vehicles') }}
                     columns={[
-                      { title: L('车辆', 'Vehicle'), render: (_, id) => <Mono>{id}</Mono> },
+                      {
+                        title: L('车辆', 'Vehicle'),
+                        render: (_, id) => {
+                          // A software change the team has not confirmed yet: open its check.
+                          const change = openChangeOf(state, id);
+                          return (
+                            <Space size={4} wrap>
+                              <Mono>{id}</Mono>
+                              {change && (
+                                <Tag color="orange" style={{ cursor: 'pointer' }} onClick={() => setChangeOf(change.id)}>
+                                  {L('软件', 'Software')} {change.fromVersion ?? '—'} → {change.toVersion} · {L('待确认', 'to confirm')}
+                                </Tag>
+                              )}
+                            </Space>
+                          );
+                        },
+                      },
                       { title: L('类型', 'Type'), render: (_, id) => B(RESOURCE_TYPE_LABELS[state.resources[id]!.type]) },
                       { title: L('软件', 'Software'), render: (_, id) => state.resources[id]!.integrationVersion ?? <Tag color="orange">{L('未知', 'unknown')}</Tag> },
                       { title: L('已生效', 'Applied'), render: (_, id) => <Mono>{B(configName(state, state.resources[id]!.appliedConfigId))}</Mono> },
@@ -508,6 +528,7 @@ function VehicleGroups() {
           </Form.Item>
         </Form>
       </Modal>
+      <SoftwareChangeDrawer changeId={changeOf} onClose={() => setChangeOf(null)} />
     </Space>
   );
 }
@@ -613,6 +634,7 @@ function Registry() {
   const [vf] = Form.useForm();
   const [sf] = Form.useForm();
   const vehicles = managedResources(state, actor);
+  const unrecorded = unrecordedReports(state, actor);
   return (
     <Card extra={<Button icon={<PlusOutlined />} onClick={() => (form.resetFields(), setRegistering(true))}>{L('登记实车', 'Register vehicle')}</Button>}>
       <Hint>{L('实车登记时整车版本为空，由 DIP / OTA 等可信来源上报后确认；仿真车的版本由镜像决定。', 'Physical vehicles start with unknown software, confirmed later from a trusted source (DIP, OTA); a simulation’s version comes from its image.')}</Hint>
@@ -622,11 +644,28 @@ function Registry() {
           <Typography.Text type="secondary">{L('仅创建人可操作', 'Owner only')}</Typography.Text>
         ) : (
           <Space size={0}>
-            {r.type === 'PHYSICAL' && (
-              <Button type="link" size="small" onClick={() => (vf.setFieldsValue({ version: r.integrationVersion, source: '' }), setConfirming(r))}>
-                {L('确认软件版本', 'Confirm software')}
-              </Button>
-            )}
+            {r.type === 'PHYSICAL' &&
+              (() => {
+                // The vehicle reported a version the platform does not know: record it, then confirm it here.
+                const reported = unrecorded.find((c) => c.resourceId === r.id);
+                const known = reported && state.softwareVersions[softwareKey(r.vehicleModelId, reported.toVersion)];
+                return (
+                  <>
+                    {reported && (
+                      <Tag color="purple">
+                        {L('上报', 'Reported')} {reported.toVersion}（{known ? L('已登记，待确认', 'recorded; confirm it') : L('未登记', 'not recorded')}）
+                      </Tag>
+                    )}
+                    <Button
+                      type="link"
+                      size="small"
+                      onClick={() => (vf.setFieldsValue(reported ? { version: known ? reported.toVersion : r.integrationVersion, source: L('客户端上报', 'Client report') } : { version: r.integrationVersion, source: '' }), setConfirming(r))}
+                    >
+                      {L('确认软件版本', 'Confirm software')}
+                    </Button>
+                  </>
+                );
+              })()}
             {r.type === 'PHYSICAL' && (
               <Button
                 type="link"

@@ -242,13 +242,14 @@ export function restartClient(ctx: Ctx, resourceId: string): 'ACCEPTED' | 'REPLA
  * A whole-vehicle software OTA on a simulated physical vehicle: the car now runs `version`, and
  * says so in its next signed report. The platform learns it only from that report.
  */
-export function simulateSoftwareOta(ctx: Ctx, resourceId: string, version: string): void {
+export function simulateSoftwareOta(ctx: Ctx, resourceId: string, version: string): string {
   const r = ctx.s.resources[resourceId];
   if (!r) throw notFound('vehicle', resourceId);
   if (r.type !== 'PHYSICAL') throw rule('SIMULATION_SOFTWARE_FROM_IMAGE', 'a simulation’s software comes from its image');
   const v = version.trim();
   if (!/^[A-Za-z0-9._-]{1,40}$/.test(v)) throw rule('INVALID_VERSION', 'a software version is letters, digits, . _ - (up to 40)');
   provisionDevice(ctx, r.id).software = v;
+  return v;
 }
 
 export function upgradeClient(ctx: Ctx, resourceId: string, version: string): void {

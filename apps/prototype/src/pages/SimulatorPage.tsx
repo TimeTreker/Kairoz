@@ -1,7 +1,7 @@
 // The vehicle simulator: plays the vehicles and simulators. It is a prototype tool, clearly
 // separate from the product's role pages, which never fabricate results themselves.
 
-import { App, Alert, Button, Card, Checkbox, Dropdown, Select, Space, Switch, Table, Tag, Tooltip, Typography } from 'antd';
+import { App, Alert, Button, Card, Checkbox, Dropdown, Input, Modal, Select, Space, Switch, Table, Tag, Tooltip, Typography } from 'antd';
 import { useEffect, useState } from 'react';
 import { useErrorText } from '../app/hooks.ts';
 import { engine, useEngineState } from '../app/store.ts';
@@ -12,7 +12,7 @@ import { advanceEvent, assessEvent, capturablePolicies, captureEvent, deliverCal
 import { personalCapturablePolicies, trialCapture } from '../engine/personal-sim.ts';
 import { answerImageChange, completeBuild } from '../engine/sim-software.ts';
 import type { Quality, TrainingUse } from '../engine/types.ts';
-import { deviceSummary, flushOutbox, pendingForVehicles, reportNow, restartClient, sendFault, sendReceipt, setAgent, tick, upgradeClient } from '../engine/simulator.ts';
+import { deviceSummary, flushOutbox, pendingForVehicles, reportNow, restartClient, sendFault, sendReceipt, setAgent, simulateSoftwareOta, tick, upgradeClient } from '../engine/simulator.ts';
 import type { ReportFault } from '../engine/simulator.ts';
 import { useI18n } from '../i18n/i18n.tsx';
 import { ERROR_LABELS, EVENT_STATUS_COLORS, IMAGE_CHANGE_KIND_LABELS, EVENT_STATUS_LABELS, QUALITY_LABELS, REPORT_RESULT_LABELS, RESOURCE_TYPE_LABELS, TRAINING_USE_LABELS } from '../i18n/vocab.ts';
@@ -103,6 +103,8 @@ export function SimulatorPage() {
   const { message } = App.useApp();
   const errorText = useErrorText();
   const [auto, setAuto] = useState(autoTimer !== undefined);
+  const [otaOf, setOtaOf] = useState<string | null>(null);
+  const [otaVersion, setOtaVersion] = useState('');
 
   const system = <R,>(op: (c: Ctx) => R, ok?: string) => {
     try {
@@ -277,6 +279,7 @@ export function SimulatorPage() {
                         menu={{
                           items: [
                             { key: 'upgrade', label: L(`升级客户端到 ${next}`, `Upgrade client to ${next}`) },
+                            ...(r.type === 'PHYSICAL' ? [{ key: 'ota', label: L('模拟整车软件 OTA…', 'Simulate a vehicle software OTA…') }] : []),
                             { type: 'divider' },
                             { key: 'REPLAY', label: L('重放上一份上报', 'Resend the last report'), disabled: !d?.hasSent },
                             { key: 'SEQUENCE_CONFLICT', label: L('同序号发送不同内容', 'Same sequence, other content'), disabled: !d?.hasSent },
@@ -286,6 +289,7 @@ export function SimulatorPage() {
                           ],
                           onClick: ({ key }) => {
                             if (key === 'upgrade') system((c) => upgradeClient(c, r.id, next), L(`客户端已升级到 ${next}，下一次上报会带上新版本`, `Client upgraded to ${next}; the next report carries it`));
+                            else if (key === 'ota') (setOtaVersion(''), setOtaOf(r.id));
                             else fault(key as ReportFault);
                           },
                         }}
@@ -412,6 +416,24 @@ export function SimulatorPage() {
           />
         </Card>
         <CompanyDirectoryCard />
+        <Modal
+          open={otaOf !== null}
+          title={`${L('模拟整车软件 OTA', 'Simulate a vehicle software OTA')} · ${otaOf ?? ''}`}
+          okText={L('刷写', 'Flash')}
+          onCancel={() => setOtaOf(null)}
+          onOk={() => {
+            const done = system((c) => simulateSoftwareOta(c, otaOf!, otaVersion), L('车辆已运行新版本；下一次上报会带上它', 'The vehicle runs the new version; its next report carries it'));
+            if (done !== undefined) setOtaOf(null);
+          }}
+        >
+          <Typography.Paragraph type="secondary">
+            {L(
+              '扮演一次外部整车软件 OTA：车辆实际运行的版本改变，平台只从车辆签名的上报中得知。可以是平台未登记的版本。',
+              'Plays an external vehicle software OTA: the version the vehicle actually runs changes, and the platform learns it only from the vehicle’s signed report. It may be a version the platform has not recorded.',
+            )}
+          </Typography.Paragraph>
+          <Input value={otaVersion} onChange={(e) => setOtaVersion(e.target.value)} placeholder="1.1" />
+        </Modal>
       </Space>
     </div>
   );
