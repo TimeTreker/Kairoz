@@ -438,8 +438,8 @@ function CreateOtaModal({ projectId, onClose }: { projectId: string; onClose: ()
     >
       <Hint>
         {L(
-          '先向第一批车辆灰度，确认回执成功后再扩大范围；任一车辆失败会暂停整个 OTA。平台逐车校验车型、实际整车版本、是否为最新匹配版本和占用情况，任一不满足则整体拒绝。',
-          'Send to a first wave, then expand after successful receipts; any failure pauses the whole rollout. Each vehicle’s model, actual software, newest match and occupancy are checked; any failure rejects the whole rollout.',
+          '先向第一批车辆灰度，确认回执成功后再扩大范围；任一车辆失败会暂停整个 OTA。平台逐车校验车型、实际整车版本、是否为最新匹配版本和占用情况，任一不满足则整体拒绝。软件版本已由其他策略集服务、本策略集又不适用的车辆不在本次范围。',
+          'Send to a first wave, then expand after successful receipts; any failure pauses the whole rollout. Each vehicle’s model, actual software, newest match and occupancy are checked; any failure rejects the whole rollout. Vehicles whose software another set serves, and this set does not apply to, are not part of the rollout.',
         )}
       </Hint>
       <Space orientation="vertical" size={12} style={{ width: '100%' }}>

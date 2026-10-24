@@ -22,6 +22,7 @@ import {
 } from '../engine/org.ts';
 import type { State, Workspace } from '../engine/types.ts';
 import { useI18n } from '../i18n/i18n.tsx';
+import { issueLabel } from '../i18n/issues.ts';
 import { SYNC_KIND_LABELS, WORKSPACE_KIND_LABELS } from '../i18n/vocab.ts';
 
 function treeOf(state: State, filter: (kind: string, projectId: string | null) => boolean, L: (zh: string, en: string) => string): TreeDataNode[] {
@@ -306,7 +307,7 @@ export function OrgPage() {
                         { title: L('修订', 'Rev.'), dataIndex: 'revision' },
                         { title: L('变化', 'Change'), render: (_, e) => <LabelTag map={SYNC_KIND_LABELS} value={e.kind} /> },
                         { title: L('对象', 'Subject'), render: (_, e) => <Mono>{e.subject}</Mono> },
-                        { title: L('说明', 'Detail'), dataIndex: 'detail' },
+                        { title: L('说明', 'Detail'), render: (_, e) => B(issueLabel(e.detail), e.detail) },
                         { title: L('时间', 'At'), render: (_, e) => when(e.at) },
                       ]}
                     />

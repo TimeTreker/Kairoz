@@ -107,6 +107,10 @@ const PROBLEMS: Pattern[] = [
   [/confirm the collection scope/, () => '请确认采集范围'],
   [/confirm the retention period/, () => '请确认保留期限'],
   [/describe (\w+)/, ([f]) => `请说明${CONTROL[f!] ?? f}`],
+  // Company directory sync
+  [/username taken by another account/, () => '账号名已被其他账号使用'],
+  [/not a valid username/, () => '不是有效的账号名'],
+  [/the last platform administrator stays active/, () => '最后一个平台管理员保持启用'],
   // Training data
   [/processing failed/, () => '处理失败'],
   [/processing not finished/, () => '处理未完成'],
