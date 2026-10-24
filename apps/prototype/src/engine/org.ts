@@ -78,6 +78,7 @@ export function createOrgUnit(ctx: Ctx, input: { id: string; name: string; paren
   let projectId: string | null = null;
   if (input.parentId) {
     const parent = getUnit(ctx.s, input.parentId);
+    if (parent.source === 'DIRECTORY') throw rule('DIRECTORY_MANAGED', 'the team tree here mirrors the company directory; change it there');
     if (parent.status !== 'ACTIVE') throw rule('PARENT_ARCHIVED', `parent ${parent.id} is archived`);
     kind = parent.kind;
     projectId = parent.projectId;
@@ -90,6 +91,7 @@ export function createOrgUnit(ctx: Ctx, input: { id: string; name: string; paren
 export function updateOrgUnit(ctx: Ctx, id: string, input: { name?: string; parentId?: string | null }): void {
   ctx.allow('org.manage', { type: 'orgUnit', id });
   const unit = getUnit(ctx.s, id);
+  if (unit.source === 'DIRECTORY') throw rule('DIRECTORY_MANAGED', 'this unit mirrors the company directory; change it there');
   if (input.name !== undefined) unit.name = input.name;
   if (input.parentId !== undefined && input.parentId !== unit.parentId) {
     if (unit.kind === 'PROJECT' && unit.parentId === null) throw rule('PROJECT_ROOT_FIXED', 'a project root cannot be moved');
@@ -106,6 +108,55 @@ export function updateOrgUnit(ctx: Ctx, id: string, input: { name?: string; pare
     unit.parentId = input.parentId;
     assertTeamWorkspacesIntact(ctx.s);
   }
+}
+
+/**
+ * Re-attaches a workspace to another org unit, e.g. after its directory department was merged away.
+ * A team's business groups that sat on its old unit move with it; codes, data keys and grants stay.
+ */
+export function moveWorkspaceUnit(ctx: Ctx, workspaceId: string, orgUnitId: string): void {
+  ctx.allow('workspace.manage', { type: 'workspace', id: workspaceId, workspaceId });
+  const ws = getWorkspace(ctx.s, workspaceId);
+  const unit = getUnit(ctx.s, orgUnitId);
+  if (unit.status !== 'ACTIVE') throw rule('UNIT_ARCHIVED', `organization unit ${unit.id} is archived`);
+  if (ws.kind === 'TEAM' ? unit.kind !== 'TEAM' : unit.kind !== 'PROJECT' || unit.projectId !== ws.projectId) {
+    throw rule('WORKSPACE_TREE_MISMATCH', 'the unit is in another organization tree than the workspace');
+  }
+  const old = ws.orgUnitId;
+  if (ws.kind === 'TEAM') {
+    for (const g of ws.groupIds) {
+      const group = ctx.s.groups[g]!;
+      if (group.orgUnitId === old) group.orgUnitId = unit.id;
+    }
+  }
+  ws.orgUnitId = unit.id;
+  checkMembership(ctx.s, ws, ws);
+  assertTeamWorkspacesIntact(ctx.s);
+}
+
+/** Re-attaches a business group to another unit of the same tree. Its code and data keys never change. */
+export function moveGroupUnit(ctx: Ctx, groupId: string, orgUnitId: string): void {
+  ctx.allow('org.manage', { type: 'group', id: groupId });
+  const group = getGroup(ctx.s, groupId);
+  const unit = getUnit(ctx.s, orgUnitId);
+  if (unit.status !== 'ACTIVE') throw rule('UNIT_ARCHIVED', `organization unit ${unit.id} is archived`);
+  const current = ctx.s.orgUnits[group.orgUnitId];
+  if (current && (current.kind !== unit.kind || current.projectId !== unit.projectId)) throw rule('CROSS_TREE_MOVE', 'a group can only move within its own organization tree');
+  group.orgUnitId = unit.id;
+  assertTeamWorkspacesIntact(ctx.s);
+}
+
+/** Workspaces and business groups whose org unit no longer exists (组织节点已失效). */
+export function orphanedOrgObjects(s: State): { workspaces: string[]; groups: string[] } {
+  const gone = (unitId: string) => s.orgUnits[unitId]?.status !== 'ACTIVE';
+  return {
+    workspaces: Object.values(s.workspaces)
+      .filter((w) => w.status === 'ACTIVE' && gone(w.orgUnitId))
+      .map((w) => w.id),
+    groups: Object.values(s.groups)
+      .filter((g) => g.status === 'ACTIVE' && gone(g.orgUnitId))
+      .map((g) => g.id),
+  };
 }
 
 /** A TEAM workspace only holds groups of its own team. */

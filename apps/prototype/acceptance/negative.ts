@@ -252,9 +252,10 @@ export const cases: Record<string, SceneSpec> = {
   },
   'T-N21': {
     run: (w) => {
-      w.as('admin', (c) => replaceGrants(c, 'business', []));
-      w.denied('business', (c) => config.submitFeature(c, feature(w, 'guided_brake').id, {}));
-      w.check(Object.values(w.s.commits).some((c) => c.author === 'business'), 'history is kept');
+      // steering is in no unit an org rule covers, so revoking its explicit grants leaves it nothing.
+      w.as('admin', (c) => replaceGrants(c, 'steering', []));
+      w.denied('steering', (c) => config.submitFeature(c, feature(w, 'steering_return_rate').id, {}));
+      w.check(Object.values(w.s.commits).some((c) => c.author === 'steering'), 'history is kept');
     },
   },
   'T-N22': {

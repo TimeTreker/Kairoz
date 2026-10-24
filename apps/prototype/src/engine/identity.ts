@@ -9,7 +9,8 @@ import { newId, USERNAME } from '../domain/ids.ts';
 import { ENVS, WILDCARD } from '../domain/vocabulary.ts';
 import type { Env, Role } from '../domain/vocabulary.ts';
 import type { Actor, Ctx } from './engine.ts';
-import type { State } from './types.ts';
+import { getUnit, unitWithin } from './org.ts';
+import type { Account, GrantRule, State } from './types.ts';
 
 export const BOOTSTRAP_ADMIN = 'admin';
 
@@ -109,14 +110,96 @@ export function updateAccount(ctx: Ctx, username: string, input: { displayName?:
   assertFullAdministratorRemains(ctx.s);
 }
 
-/** Replaces the full grant set of an account. */
+/** Replaces the full grant set of an account. Reviewing them after a move is done with it. */
 export function replaceGrants(ctx: Ctx, username: string, grants: GrantInput[]): void {
   ctx.allow('account.manage', { type: 'account', id: username });
   const account = ctx.s.accounts[username];
   if (!account) throw notFound('account', username);
   checkGrants(ctx.s, grants);
   account.grants = toGrants(grants);
+  account.grantReview = null;
   assertFullAdministratorRemains(ctx.s);
+}
+
+/** Platform ops keeps an account's explicit grants unchanged after the person moved units. */
+export function confirmGrantReview(ctx: Ctx, username: string): void {
+  ctx.allow('account.manage', { type: 'account', id: username });
+  const account = ctx.s.accounts[username];
+  if (!account) throw notFound('account', username);
+  if (!account.grantReview) throw rule('NO_REVIEW_PENDING', 'the account has no grants waiting for review');
+  account.grantReview = null;
+}
+
+// ---------------------------------------------------------------------------
+// Base rights from org membership (按组织授予的基础权限)
+// ---------------------------------------------------------------------------
+
+/** What an org grant rule may give: developing in the team's own groups, in development only. */
+export const BASE_RULE_ROLES: readonly Role[] = ['BUSINESS_DEV'];
+export const BASE_RULE_ENVS: readonly Env[] = ['development'];
+
+/** Whether a rule covers members of a unit: its own unit, or below it when it includes subunits. */
+export function ruleCovers(s: State, r: GrantRule, unitId: string): boolean {
+  return r.orgUnitId === unitId || (r.includeSubunits && unitWithin(s, unitId, r.orgUnitId));
+}
+
+/**
+ * The grants an account acts with: its explicit grants, plus one complete grant per active rule
+ * covering the active unit the directory places it in. Each is still matched alone.
+ */
+export function grantsOf(s: State, account: Pick<Account, 'grants' | 'orgUnitId'>): Grant[] {
+  const unit = account.orgUnitId ? s.orgUnits[account.orgUnitId] : undefined;
+  if (!unit || unit.status !== 'ACTIVE') return account.grants;
+  const derived: Grant[] = Object.values(s.grantRules)
+    .filter((r) => r.status === 'ACTIVE' && s.orgUnits[r.orgUnitId]?.status === 'ACTIVE' && ruleCovers(s, r, unit.id))
+    .map((r) => ({ id: `rule:${r.id}`, role: r.role, workspaces: [...r.workspaces], groups: [...r.groups], scopes: [...r.scopes], envs: [...r.envs], dispatchOnly: false, ruleId: r.id }));
+  return derived.length ? [...account.grants, ...derived] : account.grants;
+}
+
+export interface GrantRuleInput {
+  orgUnitId: string;
+  includeSubunits: boolean;
+  role: string;
+  workspaces: string[];
+  groups: string[];
+  scopes: string[];
+  envs: string[];
+}
+
+/** Platform ops gives the members of a team unit base rights. Special rights stay explicit. */
+export function createGrantRule(ctx: Ctx, input: GrantRuleInput): string {
+  ctx.allow('account.manage', { type: 'grantRule', id: input.orgUnitId });
+  const unit = getUnit(ctx.s, input.orgUnitId);
+  if (unit.kind !== 'TEAM') throw rule('UNIT_NOT_TEAM', 'base rights follow the team organization; choose a team unit');
+  if (unit.status !== 'ACTIVE') throw rule('UNIT_ARCHIVED', `organization unit ${unit.id} is archived`);
+  if (!(BASE_RULE_ROLES as string[]).includes(input.role) || input.envs.some((e) => !(BASE_RULE_ENVS as string[]).includes(e))) {
+    throw rule('GRANT_NOT_BASE_ELIGIBLE', 'org rules only give business development in the development environment; other rights are granted to people explicitly');
+  }
+  checkGrants(ctx.s, [{ ...input, dispatchOnly: false }]);
+  const id = newId('gk');
+  ctx.s.grantRules[id] = {
+    id,
+    orgUnitId: unit.id,
+    includeSubunits: input.includeSubunits,
+    role: input.role as Role,
+    workspaces: [...input.workspaces],
+    groups: [...input.groups],
+    scopes: [...input.scopes],
+    envs: [...input.envs] as Env[],
+    status: 'ACTIVE',
+    createdBy: ctx.user().username,
+    createdAt: ctx.now,
+  };
+  return id;
+}
+
+/** Stops a rule; its members lose the grants it gave at once. */
+export function archiveGrantRule(ctx: Ctx, ruleId: string): void {
+  ctx.allow('account.manage', { type: 'grantRule', id: ruleId });
+  const r = ctx.s.grantRules[ruleId];
+  if (!r) throw notFound('grant rule', ruleId);
+  if (r.status !== 'ACTIVE') throw rule('RULE_ARCHIVED', 'the rule is already archived');
+  r.status = 'ARCHIVED';
 }
 
 export interface WorkspaceAccess {

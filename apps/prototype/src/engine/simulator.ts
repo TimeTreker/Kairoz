@@ -9,6 +9,7 @@ import { newId } from '../domain/ids.ts';
 import { acceptClientReport, checkClientReport, configurationContents } from './client-report.ts';
 import type { Ctx } from './engine.ts';
 import type { AgentState, DeviceState, Resource, State } from './types.ts';
+import { syncIfChanged } from './company-directory.ts';
 import { advanceEvent } from './events.ts';
 import { acceptReceipt } from './validation.ts';
 
@@ -61,6 +62,8 @@ export function tick(ctx: Ctx): number {
     answered += 1;
   }
   for (const r of Object.values(ctx.s.resources)) reportIfDue(ctx, r);
+  // The company directory pushes its changes like a SCIM feed would.
+  answered += syncIfChanged(ctx);
   return answered;
 }
 

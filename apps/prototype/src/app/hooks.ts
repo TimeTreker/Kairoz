@@ -4,7 +4,7 @@ import { authorize, canOpenPage } from '../domain/authz.ts';
 import type { Action, AuthzTarget } from '../domain/authz.ts';
 import { DomainError, ForbiddenError } from '../domain/errors.ts';
 import type { Actor, Ctx } from '../engine/engine.ts';
-import { workspaceAccess } from '../engine/identity.ts';
+import { grantsOf, workspaceAccess } from '../engine/identity.ts';
 import { useI18n } from '../i18n/i18n.tsx';
 import { issueLabel } from '../i18n/issues.ts';
 import { DENY_REASON_LABELS, ERROR_LABELS } from '../i18n/vocab.ts';
@@ -17,7 +17,7 @@ export function useActor(): Actor | null {
   return useMemo(() => {
     const account = username ? state.accounts[username] : undefined;
     if (!account || account.status !== 'ACTIVE') return null;
-    return { username: account.username, displayName: account.displayName, grants: account.grants };
+    return { username: account.username, displayName: account.displayName, grants: grantsOf(state, account) };
   }, [state, username]);
 }
 

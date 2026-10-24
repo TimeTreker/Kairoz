@@ -1,17 +1,30 @@
 import { PlusOutlined } from '@ant-design/icons';
-import { Button, Card, Col, Form, Input, Modal, Row, Select, Space, Table, Tabs, Tag, Tree, Typography } from 'antd';
+import { Button, Card, Checkbox, Col, Descriptions, Form, Input, Modal, Row, Select, Space, Table, Tabs, Tag, Tree, Typography } from 'antd';
 import type { TreeDataNode } from 'antd';
 import { useState } from 'react';
 import { useCan, useRun } from '../app/hooks.ts';
 import { useEngineState } from '../app/store.ts';
-import { Hint, LabelTag, Mono, PageHeader } from '../components/common.tsx';
+import { Hint, LabelTag, Mono, PageHeader, RoleTag, when } from '../components/common.tsx';
 import { DOMAINS, SCOPES } from '../domain/vocabulary.ts';
-import { createGroup, createOrgUnit, createProject, createVehicleModel, createWorkspace, unitPath, updateOrgUnit, updateWorkspace } from '../engine/org.ts';
+import { archiveGrantRule, createGrantRule, ruleCovers } from '../engine/identity.ts';
+import {
+  createGroup,
+  createOrgUnit,
+  createProject,
+  createVehicleModel,
+  createWorkspace,
+  moveGroupUnit,
+  moveWorkspaceUnit,
+  orphanedOrgObjects,
+  unitPath,
+  updateOrgUnit,
+  updateWorkspace,
+} from '../engine/org.ts';
 import type { State, Workspace } from '../engine/types.ts';
 import { useI18n } from '../i18n/i18n.tsx';
-import { WORKSPACE_KIND_LABELS } from '../i18n/vocab.ts';
+import { SYNC_KIND_LABELS, WORKSPACE_KIND_LABELS } from '../i18n/vocab.ts';
 
-function treeOf(state: State, filter: (kind: string, projectId: string | null) => boolean): TreeDataNode[] {
+function treeOf(state: State, filter: (kind: string, projectId: string | null) => boolean, L: (zh: string, en: string) => string): TreeDataNode[] {
   const units = Object.values(state.orgUnits).filter((u) => filter(u.kind, u.projectId));
   const build = (parentId: string | null): TreeDataNode[] =>
     units
@@ -20,8 +33,10 @@ function treeOf(state: State, filter: (kind: string, projectId: string | null) =
       .map((u) => ({
         key: u.id,
         title: (
-          <span>
+          <span style={u.status === 'ARCHIVED' ? { opacity: 0.55 } : undefined}>
             {u.name} <Typography.Text type="secondary" className="kz-mono">{u.id}</Typography.Text>
+            {u.source === 'DIRECTORY' && <Tag style={{ marginLeft: 6 }}>{u.externalId === u.id ? L('目录', 'directory') : L(`目录 ${u.externalId}`, `directory ${u.externalId}`)}</Tag>}
+            {u.status === 'ARCHIVED' && <Tag color="red">{L('已撤销', 'removed')}</Tag>}
             {Object.values(state.workspaces)
               .filter((w) => w.orgUnitId === u.id)
               .map((w) => (
@@ -43,9 +58,12 @@ export function OrgPage() {
   const can = useCan();
   const canOrg = can('org.manage', {});
   const canWorkspaces = can('workspace.manage', {});
-  const [modal, setModal] = useState<null | 'unit' | 'project' | 'model' | 'group' | 'workspace' | { edit: string } | { ws: string }>(null);
+  const [modal, setModal] = useState<null | 'unit' | 'project' | 'model' | 'group' | 'workspace' | 'rule' | { edit: string } | { ws: string } | { rehome: 'workspace' | 'group'; id: string }>(null);
+  const canAccounts = can('account.manage', {});
+  const orphaned = orphanedOrgObjects(state);
   const [form] = Form.useForm();
-  const units = Object.values(state.orgUnits);
+  const units = Object.values(state.orgUnits).filter((u) => u.status === 'ACTIVE');
+  const fromDirectory = units.some((u) => u.source === 'DIRECTORY');
   const unitOptions = units.map((u) => ({ value: u.id, label: `${unitPath(state, u.id).map((p) => p.name).join(' / ')} (${u.kind})` }));
   const close = () => (setModal(null), form.resetFields());
   const modalTitle =
@@ -59,11 +77,15 @@ export function OrgPage() {
             ? L('新建业务分组', 'New business group')
             : modal === 'workspace'
               ? L('新建工作区', 'New workspace')
-              : modal && 'edit' in modal
-                ? `${L('编辑组织节点', 'Edit org unit')} · ${state.orgUnits[modal.edit]?.name ?? modal.edit}`
-                : modal && 'ws' in modal
-                  ? `${L('编辑工作区', 'Edit workspace')} · ${state.workspaces[modal.ws]?.name ?? modal.ws}`
-                  : '';
+              : modal === 'rule'
+                ? L('新建组织授权规则', 'New org grant rule')
+                : modal && 'edit' in modal
+                  ? `${L('编辑组织节点', 'Edit org unit')} · ${state.orgUnits[modal.edit]?.name ?? modal.edit}`
+                  : modal && 'ws' in modal
+                    ? `${L('编辑工作区', 'Edit workspace')} · ${state.workspaces[modal.ws]?.name ?? modal.ws}`
+                    : modal && 'rehome' in modal
+                      ? `${L('重新挂靠', 'Re-attach')} · ${modal.rehome === 'workspace' ? state.workspaces[modal.id]?.name : state.groups[modal.id]?.name}`
+                      : '';
   const kind = Form.useWatch('kind', form);
 
   const save = () =>
@@ -75,8 +97,18 @@ export function OrgPage() {
       else if (modal === 'group') ok = run((c) => createGroup(c, v), L('已创建', 'Created'));
       else if (modal === 'workspace')
         ok = run((c) => createWorkspace(c, { ...v, groupIds: v.groupIds ?? [], scopes: v.scopes ?? [], sourceWorkspaceIds: v.sourceWorkspaceIds ?? [] }), L('已创建', 'Created'));
+      else if (modal === 'rule')
+        ok = run(
+          (c) => createGrantRule(c, { orgUnitId: v.orgUnitId, includeSubunits: !!v.includeSubunits, role: 'BUSINESS_DEV', workspaces: v.workspaces ?? [], groups: v.groups ?? [], scopes: [], envs: ['development'] }),
+          L('已创建；该组织节点的成员立即获得这条基础权限', 'Created; members of the unit get this base right at once'),
+        );
       else if (modal && 'edit' in modal) ok = run((c) => updateOrgUnit(c, modal.edit, { name: v.name, parentId: v.parentId ?? null }), L('已保存', 'Saved'));
       else if (modal && 'ws' in modal) ok = run((c) => updateWorkspace(c, modal.ws, v), L('已保存', 'Saved'));
+      else if (modal && 'rehome' in modal)
+        ok =
+          modal.rehome === 'workspace'
+            ? run((c) => moveWorkspaceUnit(c, modal.id, v.orgUnitId), L('已重新挂靠；业务分组代码、数据键和授权不变', 'Re-attached; group codes, data keys and grants are unchanged'))
+            : run((c) => moveGroupUnit(c, modal.id, v.orgUnitId), L('已重新挂靠', 'Re-attached'));
       if (ok !== undefined) close();
     });
 
@@ -97,12 +129,21 @@ export function OrgPage() {
               <Row gutter={16}>
                 <Col xs={24} lg={12}>
                   <Card title={L('团队组织', 'Team organization')} extra={canOrg && <Button icon={<PlusOutlined />} onClick={() => setModal('unit')}>{L('新建节点', 'New unit')}</Button>}>
+                    {fromDirectory && (
+                      <Hint>
+                        {L(
+                          '团队组织由公司目录同步，平台内只读：部门改名、调整或撤销都在目录中进行。业务分组、工作区与授权由平台管理；组织变化不会改动业务分组代码。',
+                          'The team organization is synced from the company directory and read-only here: renaming, moving or removing departments happens in the directory. Business groups, workspaces and grants are the platform’s; org changes never change a group’s code.',
+                        )}
+                      </Hint>
+                    )}
                     <Tree
                       defaultExpandAll
-                      treeData={treeOf(state, (k) => k === 'TEAM')}
+                      treeData={treeOf(state, (k) => k === 'TEAM', L)}
                       onSelect={([key]) => {
                         if (!key || !canOrg) return;
                         const u = state.orgUnits[String(key)]!;
+                        if (u.source === 'DIRECTORY' || u.status !== 'ACTIVE') return;
                         form.setFieldsValue({ name: u.name, parentId: u.parentId });
                         setModal({ edit: u.id });
                       }}
@@ -112,7 +153,7 @@ export function OrgPage() {
                 <Col xs={24} lg={12}>
                   {Object.values(state.projects).map((p) => (
                     <Card key={p.id} title={`${L('项目组织', 'Project organization')} · ${p.name}`} style={{ marginBottom: 16 }}>
-                      <Tree defaultExpandAll treeData={treeOf(state, (k, pid) => k === 'PROJECT' && pid === p.id)} />
+                      <Tree defaultExpandAll treeData={treeOf(state, (k, pid) => k === 'PROJECT' && pid === p.id, L)} />
                     </Card>
                   ))}
                   {canOrg && (
@@ -136,7 +177,22 @@ export function OrgPage() {
                   columns={[
                     { title: L('工作区', 'Workspace'), render: (_, w) => <Space orientation="vertical" size={0}><span>{w.name}</span><Mono>{w.id}</Mono></Space> },
                     { title: L('类型', 'Kind'), render: (_, w) => <LabelTag map={WORKSPACE_KIND_LABELS} value={w.kind} /> },
-                    { title: L('组织路径', 'Org path'), render: (_, w) => unitPath(state, w.orgUnitId).map((u) => u.name).join(' / ') },
+                    {
+                      title: L('组织路径', 'Org path'),
+                      render: (_, w) =>
+                        orphaned.workspaces.includes(w.id) ? (
+                          <Space size={4} wrap>
+                            <Tag color="red">{L('组织节点已失效', 'Org unit no longer exists')}</Tag>
+                            {canWorkspaces && (
+                              <Button size="small" type="link" onClick={() => (form.resetFields(), setModal({ rehome: 'workspace', id: w.id }))}>
+                                {L('重新挂靠', 'Re-attach')}
+                              </Button>
+                            )}
+                          </Space>
+                        ) : (
+                          unitPath(state, w.orgUnitId).map((u) => u.name).join(' / ')
+                        ),
+                    },
                     { title: L('车型', 'Model'), dataIndex: 'vehicleModelId' },
                     { title: L('业务分组', 'Groups'), render: (_, w) => w.groupIds.map((g) => <Tag key={g}>{state.groups[g]?.name}</Tag>) },
                     { title: L('范围', 'Scopes'), render: (_, w) => w.scopes.join(', ') },
@@ -162,9 +218,102 @@ export function OrgPage() {
                     { title: L('代码', 'Code'), render: (_, g) => <Mono>{g.code}</Mono> },
                     { title: L('域', 'Domain'), dataIndex: 'domain' },
                     { title: L('用途', 'Purpose'), render: (_, g) => <Tag>{g.purpose === 'DEV' ? L('研发', 'Development') : L('测试', 'Testing')}</Tag> },
-                    { title: L('所属节点', 'Unit'), render: (_, g) => unitPath(state, g.orgUnitId).map((u) => u.name).join(' / ') },
+                    {
+                      title: L('所属节点', 'Unit'),
+                      render: (_, g) =>
+                        orphaned.groups.includes(g.id) ? (
+                          <Space size={4} wrap>
+                            <Tag color="red">{L('组织节点已失效', 'Org unit no longer exists')}</Tag>
+                            {canOrg && (
+                              <Button size="small" type="link" onClick={() => (form.resetFields(), setModal({ rehome: 'group', id: g.id }))}>
+                                {L('重新挂靠', 'Re-attach')}
+                              </Button>
+                            )}
+                          </Space>
+                        ) : (
+                          unitPath(state, g.orgUnitId).map((u) => u.name).join(' / ')
+                        ),
+                    },
                   ]}
                 />
+              </Card>
+            ),
+          },
+          {
+            key: 'rules',
+            label: L('授权规则', 'Grant rules'),
+            children: (
+              <Card extra={canAccounts && <Button icon={<PlusOutlined />} onClick={() => (form.resetFields(), setModal('rule'))}>{L('新建规则', 'New rule')}</Button>}>
+                <Hint>
+                  {L(
+                    '组织授权规则让某个团队节点的成员自动获得基础权限：只能是研发环境的业务研发。测试、管理、集成、发布、车辆资源和敏感数据等特殊权限必须显式授予到人；规则不要覆盖测试人员所在的部门，避免测试身份修改自己测试的内容。成员调岗时，规则授予的权限随组织变化，显式授权标记待复核；离职即停用。',
+                    'An org grant rule gives the members of a team unit a base right: business development in the development environment only. Testing, administration, integration, release, vehicle resources and sensitive data are always granted to people explicitly; keep rules off the departments testers sit in, so a tester never edits what they test. When someone moves, rule grants follow the unit and explicit grants are flagged for review; leaving disables the account.',
+                  )}
+                </Hint>
+                <Table
+                  rowKey="id"
+                  pagination={false}
+                  dataSource={Object.values(state.grantRules)}
+                  locale={{ emptyText: L('暂无组织授权规则', 'No org grant rules') }}
+                  columns={[
+                    { title: L('组织节点', 'Unit'), render: (_, r) => `${unitPath(state, r.orgUnitId).map((u) => u.name).join(' / ')}${r.includeSubunits ? L('（含下级）', ' (and below)') : ''}` },
+                    { title: L('角色', 'Role'), render: (_, r) => <RoleTag role={r.role} /> },
+                    { title: L('工作区', 'Workspaces'), render: (_, r) => r.workspaces.map((w) => <Tag key={w}>{state.workspaces[w]?.name ?? w}</Tag>) },
+                    { title: L('业务分组', 'Groups'), render: (_, r) => r.groups.map((g) => <Tag key={g}>{state.groups[g]?.name ?? g}</Tag>) },
+                    { title: L('环境', 'Envs'), render: (_, r) => r.envs.join(', ') },
+                    {
+                      title: L('覆盖人员', 'Members'),
+                      render: (_, r) =>
+                        Object.values(state.accounts)
+                          .filter((a) => a.status === 'ACTIVE' && a.orgUnitId && ruleCovers(state, r, a.orgUnitId))
+                          .map((a) => a.displayName)
+                          .join('、') || '—',
+                    },
+                    { title: L('状态', 'Status'), render: (_, r) => (r.status === 'ACTIVE' ? (state.orgUnits[r.orgUnitId]?.status === 'ACTIVE' ? <Tag color="green">{L('生效', 'Active')}</Tag> : <Tag color="red">{L('组织节点已失效', 'Org unit no longer exists')}</Tag>) : <Tag>{L('已停用', 'Archived')}</Tag>) },
+                    {
+                      title: '',
+                      render: (_, r) =>
+                        canAccounts &&
+                        r.status === 'ACTIVE' && (
+                          <Button size="small" type="link" danger onClick={() => run((c) => archiveGrantRule(c, r.id), L('已停用；成员立即失去这条基础权限', 'Archived; members lose this base right at once'))}>
+                            {L('停用', 'Archive')}
+                          </Button>
+                        ),
+                    },
+                  ]}
+                />
+              </Card>
+            ),
+          },
+          {
+            key: 'sync',
+            label: L('目录同步', 'Directory sync'),
+            children: (
+              <Card>
+                {state.directory ? (
+                  <>
+                    <Descriptions size="small" column={{ xs: 1, md: 3 }} style={{ marginBottom: 12 }}>
+                      <Descriptions.Item label={L('已同步修订', 'Revision synced')}>{state.directorySync.revision}</Descriptions.Item>
+                      <Descriptions.Item label={L('目录当前修订', 'Directory revision')}>{state.directory.revision}</Descriptions.Item>
+                      <Descriptions.Item label={L('同步时间', 'Synced at')}>{when(state.directorySync.syncedAt)}</Descriptions.Item>
+                    </Descriptions>
+                    <Table
+                      rowKey="seq"
+                      size="small"
+                      pagination={{ pageSize: 20, hideOnSinglePage: true }}
+                      dataSource={state.directorySync.log}
+                      columns={[
+                        { title: L('修订', 'Rev.'), dataIndex: 'revision' },
+                        { title: L('变化', 'Change'), render: (_, e) => <LabelTag map={SYNC_KIND_LABELS} value={e.kind} /> },
+                        { title: L('对象', 'Subject'), render: (_, e) => <Mono>{e.subject}</Mono> },
+                        { title: L('说明', 'Detail'), dataIndex: 'detail' },
+                        { title: L('时间', 'At'), render: (_, e) => when(e.at) },
+                      ]}
+                    />
+                  </>
+                ) : (
+                  <Typography.Text type="secondary">{L('本安装未接入公司目录；团队组织由平台维护。', 'This installation has no company directory; the platform maintains the team organization.')}</Typography.Text>
+                )}
               </Card>
             ),
           },
@@ -186,10 +335,41 @@ export function OrgPage() {
               <Input placeholder={modal === 'model' ? 'X91' : 'brake-team'} />
             </Form.Item>
           )}
-          {modal !== null && (
+          {modal !== null && modal !== 'rule' && !(typeof modal === 'object' && 'rehome' in modal) && (
             <Form.Item name="name" label={L('名称', 'Name')} rules={[{ required: true }]}>
               <Input />
             </Form.Item>
+          )}
+          {modal !== null && typeof modal === 'object' && 'rehome' in modal && (
+            <Form.Item name="orgUnitId" label={L('新的组织节点', 'New org unit')} rules={[{ required: true }]}>
+              <Select
+                options={unitOptions.filter((u) => {
+                  const unit = state.orgUnits[u.value]!;
+                  const current = modal.rehome === 'workspace' ? state.workspaces[modal.id] : undefined;
+                  if (current) return current.kind === 'TEAM' ? unit.kind === 'TEAM' : unit.kind === 'PROJECT' && unit.projectId === current.projectId;
+                  const group = state.groups[modal.id];
+                  const old = group ? state.orgUnits[group.orgUnitId] : undefined;
+                  return !old || (unit.kind === old.kind && unit.projectId === old.projectId);
+                })}
+              />
+            </Form.Item>
+          )}
+          {modal === 'rule' && (
+            <>
+              <Form.Item name="orgUnitId" label={L('团队组织节点', 'Team unit')} rules={[{ required: true }]}>
+                <Select options={unitOptions.filter((u) => state.orgUnits[u.value]!.kind === 'TEAM')} />
+              </Form.Item>
+              <Form.Item name="includeSubunits" valuePropName="checked">
+                <Checkbox>{L('包含下级节点的成员', 'Include members of units below')}</Checkbox>
+              </Form.Item>
+              <Typography.Paragraph type="secondary">{L('角色：业务研发；环境：研发（组织规则只能授予这一项）', 'Role: business development; environment: development (the only base right a rule may give)')}</Typography.Paragraph>
+              <Form.Item name="workspaces" label={L('工作区', 'Workspaces')} rules={[{ required: true }]}>
+                <Select mode="multiple" options={Object.values(state.workspaces).filter((w) => w.kind === 'TEAM').map((w) => ({ value: w.id, label: w.name }))} />
+              </Form.Item>
+              <Form.Item name="groups" label={L('业务分组', 'Business groups')} rules={[{ required: true }]}>
+                <Select mode="multiple" options={Object.values(state.groups).map((g) => ({ value: g.id, label: g.name }))} />
+              </Form.Item>
+            </>
           )}
           {(modal === 'unit' || (modal !== null && typeof modal === 'object' && 'edit' in modal)) && (
             <Form.Item name="parentId" label={L('上级节点（团队树留空 = 根）', 'Parent (blank for a team root)')}>

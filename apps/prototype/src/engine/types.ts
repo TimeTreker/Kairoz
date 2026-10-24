@@ -853,6 +853,7 @@ export interface DirectorySyncEntry {
     | 'UNIT_MOVED'
     | 'UNIT_ARCHIVED'
     | 'ACCOUNT_CREATED'
+    | 'ACCOUNT_LINKED'
     | 'ACCOUNT_MOVED'
     | 'ACCOUNT_DISABLED'
     | 'ACCOUNT_REACTIVATED'

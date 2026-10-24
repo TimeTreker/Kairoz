@@ -8,6 +8,7 @@ import { authorize } from '../domain/authz.ts';
 import type { Action, AuthzTarget, Grant } from '../domain/authz.ts';
 import { ForbiddenError, unauthenticated } from '../domain/errors.ts';
 import { newId } from '../domain/ids.ts';
+import { grantsOf } from './identity.ts';
 import type { AuditEvent, State } from './types.ts';
 
 export const AUDIT_LIMIT = 3000;
@@ -87,7 +88,7 @@ export class Engine {
         if (username !== null) {
           const account = s.accounts[username];
           if (!account || account.status !== 'ACTIVE') throw unauthenticated('the account is not active; sign in again');
-          actor = { username: account.username, displayName: account.displayName, grants: account.grants as Grant[] };
+          actor = { username: account.username, displayName: account.displayName, grants: grantsOf(s, account) as Grant[] };
         }
         const ctx: Ctx = {
           s,
@@ -150,6 +151,6 @@ export class Engine {
   read<R>(username: string, query: (state: State, actor: Actor) => R): R {
     const account = this.state.accounts[username];
     if (!account || account.status !== 'ACTIVE') throw unauthenticated('the account is not active; sign in again');
-    return query(this.state, { username: account.username, displayName: account.displayName, grants: account.grants });
+    return query(this.state, { username: account.username, displayName: account.displayName, grants: grantsOf(this.state, account) });
   }
 }

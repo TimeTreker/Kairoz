@@ -6,6 +6,7 @@ import assert from 'node:assert/strict';
 import { DomainError } from '../src/domain/errors.ts';
 import type { Actor, Ctx } from '../src/engine/engine.ts';
 import { Engine } from '../src/engine/engine.ts';
+import { grantsOf } from '../src/engine/identity.ts';
 import type { State } from '../src/engine/types.ts';
 
 /** A requirement of the scene that the prototype does not implement yet. */
@@ -42,7 +43,7 @@ export class World {
   actor(username: string): Actor {
     const a = this.s.accounts[username];
     assert.ok(a, `account ${username} exists`);
-    return { username, displayName: a.displayName, grants: a.grants };
+    return { username, displayName: a.displayName, grants: grantsOf(this.s, a) };
   }
 
   /** Expects the call to be refused with `code`; nothing but the audit trail may change. */

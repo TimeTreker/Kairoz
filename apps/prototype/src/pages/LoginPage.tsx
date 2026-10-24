@@ -2,6 +2,7 @@ import { UserOutlined } from '@ant-design/icons';
 import { Avatar, Card, Col, Flex, Row, Segmented, Space, Tag, Typography } from 'antd';
 import { PrototypeMenu } from '../app/PrototypeMenu.tsx';
 import { setSession, useEngineState } from '../app/store.ts';
+import { grantsOf } from '../engine/identity.ts';
 import { useI18n } from '../i18n/i18n.tsx';
 import { ROLE_GOALS, ROLE_LABELS } from '../i18n/vocab.ts';
 import { ROLES } from '../domain/vocabulary.ts';
@@ -48,7 +49,7 @@ export function LoginPage() {
                             </Typography.Text>
                           </div>
                           <div style={{ marginTop: 6 }}>
-                            {[...new Set(a.grants.map((g) => g.role))].map((r) => (
+                            {[...new Set(grantsOf(state, a).map((g) => g.role))].map((r) => (
                               <Tag key={r} style={{ marginBottom: 4 }}>
                                 {B(ROLE_LABELS[r])}
                                 {a.grants.some((g) => g.role === r && g.dispatchOnly) ? L('（仅下发）', ' (dispatch only)') : ''}

@@ -10,6 +10,7 @@ import { intakeQueue } from '../engine/intake.ts';
 import { isConfirmed, isMergeWorkspace, verifiedSources } from '../engine/integration.ts';
 import { blockedProductionVehicles } from '../engine/applicability.ts';
 import { emergencyStopsOf } from '../engine/emergency.ts';
+import { orphanedOrgObjects } from '../engine/org.ts';
 import { otaRollouts } from '../engine/ota.ts';
 import { releaseFor, releasesOf } from '../engine/release.ts';
 import { managedResources, pendingDeploymentOf, vehicleGroupsOf, workspaceVehicles } from '../engine/fleet.ts';
@@ -281,6 +282,8 @@ export function WorkbenchPage() {
     );
   }
   if (canOpen('org') || canOpen('accounts')) {
+    const reviews = Object.values(state.accounts).filter((a) => a.status === 'ACTIVE' && a.grantReview);
+    const orphaned = orphanedOrgObjects(state);
     cards.push(
       <Card key="ops" title={<RoleTag role="PLATFORM_OPS" />}>
         <Row gutter={16}>
@@ -288,6 +291,21 @@ export function WorkbenchPage() {
           <Col span={8}><Statistic title={L('工作区', 'Workspaces')} value={Object.keys(state.workspaces).length} /></Col>
           <Col span={8}><Statistic title={L('业务分组', 'Groups')} value={Object.keys(state.groups).length} /></Col>
         </Row>
+        {reviews.map((a) => (
+          <Row2 key={a.username} onClick={() => navigate('accounts')}>
+            <Space>
+              <Typography.Text type="warning">{L('调岗后待复核授权', 'Grants to review after a move')}</Typography.Text>
+              <span>{a.displayName}</span>
+            </Space>
+            <Typography.Text type="secondary">{`${state.orgUnits[a.grantReview!.fromUnitId ?? '']?.name ?? '—'} → ${state.orgUnits[a.grantReview!.toUnitId ?? '']?.name ?? '—'}`}</Typography.Text>
+          </Row2>
+        ))}
+        {[...orphaned.workspaces.map((id) => state.workspaces[id]!.name), ...orphaned.groups.map((id) => state.groups[id]!.name)].map((name) => (
+          <Row2 key={name} onClick={() => navigate('org')}>
+            <Typography.Text type="danger">{L('组织节点已失效，需重新挂靠', 'Org unit no longer exists; re-attach')}</Typography.Text>
+            <span>{name}</span>
+          </Row2>
+        ))}
         <Space style={{ marginTop: 12 }}>
           {canOpen('org') && <Button onClick={() => navigate('org')}>{L('组织与工作区', 'Organization')}</Button>}
           {canOpen('accounts') && <Button onClick={() => navigate('accounts')}>{L('账号与授权', 'Accounts')}</Button>}

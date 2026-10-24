@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react';
 import { useErrorText } from '../app/hooks.ts';
 import { engine, useEngineState } from '../app/store.ts';
 import { EnvTag, LabelTag, Mono, PageHeader, configName, when } from '../components/common.tsx';
+import { CompanyDirectoryCard } from '../components/company-directory.tsx';
 import type { Ctx } from '../engine/engine.ts';
 import { advanceEvent, assessEvent, capturablePolicies, captureEvent, deliverCallback, receiveChunk, setFailParse } from '../engine/events.ts';
 import type { Quality, TrainingUse } from '../engine/types.ts';
@@ -319,6 +320,7 @@ export function SimulatorPage() {
             ]}
           />
         </Card>
+        <CompanyDirectoryCard />
       </Space>
     </div>
   );

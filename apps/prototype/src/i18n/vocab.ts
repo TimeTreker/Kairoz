@@ -550,3 +550,29 @@ export const STOP_STATUS_LABELS: Record<string, Bilingual> = {
 };
 
 export const STOP_STATUS_COLORS: Record<string, string> = { REQUESTED: 'gold', APPROVED: 'red', REJECTED: 'default' };
+
+// Company directory and base grants
+Object.assign(ERROR_LABELS, {
+  DIRECTORY_MANAGED: b('该组织节点来自公司目录，只能在目录中修改', 'This unit mirrors the company directory; change it there'),
+  DIRECTORY_NOT_CONNECTED: b('本安装未接入公司目录', 'This installation has no company directory'),
+  DIRECTORY_USERNAME_TAKEN: b('目录中已有这个账号名', 'The directory already has this username'),
+  PERSON_LEFT: b('该人员已离职', 'The person has left'),
+  SAME_DEPARTMENT: b('请选择另一个部门', 'Choose another department'),
+  NO_REVIEW_PENDING: b('该账号没有待复核的授权', 'The account has no grants waiting for review'),
+  UNIT_NOT_TEAM: b('基础权限跟随团队组织，请选择团队组织节点', 'Base rights follow the team organization; choose a team unit'),
+  GRANT_NOT_BASE_ELIGIBLE: b('按组织规则只能授予研发环境的业务研发；其他权限须显式授予到人', 'Org rules only give business development in the development environment; other rights are granted to people explicitly'),
+  RULE_ARCHIVED: b('该授权规则已停用', 'The rule is already archived'),
+});
+
+export const SYNC_KIND_LABELS: Record<string, Bilingual> = {
+  UNIT_CREATED: b('新建组织节点', 'Unit created'),
+  UNIT_RENAMED: b('组织节点改名', 'Unit renamed'),
+  UNIT_MOVED: b('组织节点移动', 'Unit moved'),
+  UNIT_ARCHIVED: b('组织节点撤销', 'Unit removed'),
+  ACCOUNT_CREATED: b('新建账号', 'Account created'),
+  ACCOUNT_LINKED: b('关联已有账号', 'Account linked'),
+  ACCOUNT_MOVED: b('人员调岗', 'Person moved'),
+  ACCOUNT_DISABLED: b('离职停用', 'Disabled (left)'),
+  ACCOUNT_REACTIVATED: b('重新启用', 'Reactivated'),
+  ACCOUNT_SKIPPED: b('跳过', 'Skipped'),
+};

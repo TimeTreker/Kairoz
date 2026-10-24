@@ -35,7 +35,18 @@ export function AuditPage() {
           columns={[
             { title: L('时间', 'Time'), render: (_, e) => when(e.at) },
             { title: L('账号', 'Account'), render: (_, e) => state.accounts[e.username ?? '']?.displayName ?? e.username },
-            { title: L('角色', 'Role'), render: (_, e) => (e.role ? <RoleTag role={e.role} /> : '—') },
+            {
+              title: L('角色', 'Role'),
+              render: (_, e) =>
+                e.role ? (
+                  <span>
+                    <RoleTag role={e.role} />
+                    {e.grantId?.startsWith('rule:') && <Tag color="cyan">{L('来自组织规则', 'from org rule')}</Tag>}
+                  </span>
+                ) : (
+                  '—'
+                ),
+            },
             { title: L('操作', 'Action'), render: (_, e) => <Mono>{e.action}</Mono> },
             { title: L('对象', 'Target'), render: (_, e) => <Mono>{[e.targetType, e.targetId].filter(Boolean).join(':')}</Mono> },
             { title: L('工作区', 'Workspace'), render: (_, e) => e.workspaceId ?? '—' },

@@ -5,12 +5,13 @@ import { produce } from 'immer';
 import type { GrantInput } from '../domain/authz.ts';
 import { createFeature, addFile, putPolicy, submitFeature } from './config.ts';
 import { Engine } from './engine.ts';
-import { createAccount, installAdmin } from './identity.ts';
+import { createAccount, createGrantRule, installAdmin } from './identity.ts';
 import { createGroup, createOrgUnit, createProject, createVehicleModel, createWorkspace } from './org.ts';
 import { createPipeline, createTemplate } from './processing.ts';
 import { requestReference } from './references.ts';
 import { addGroupMember, addWorkspaceVehicle, confirmIntegration, createSimulation, createVehicleGroup, recordSoftwareVersion, registerImage, registerPhysical } from './fleet.ts';
 import { registerDeviceKey } from './client-report.ts';
+import { connectDirectory, hirePerson, syncIfChanged } from './company-directory.ts';
 import { captureEvent, processEvent } from './events.ts';
 import { confirmProcessing, freezeCandidate, previewMerge } from './integration.ts';
 import { createOta } from './ota.ts';
@@ -102,17 +103,28 @@ export function demoState(): State {
 
   as(admin, (c) => createVehicleModel(c, { id: 'X89', name: 'X89' }));
   as(admin, (c) => createVehicleModel(c, { id: 'X90', name: 'X90' }));
-  for (const [id, name, parentId] of [
-    ['company', '公司', null],
-    ['vehicle-rd', '整车研发中心', 'company'],
-    ['chassis', '底盘部门', 'vehicle-rd'],
-    ['ai-center', 'AI 中心', 'company'],
-    ['adc', 'ADC', 'ai-center'],
-    ['cockpit', '座舱部门', 'vehicle-rd'],
-    ['cdc', 'CDC', 'cockpit'],
-  ] as const) {
-    as(admin, (c) => createOrgUnit(c, { id, name, parentId }));
-  }
+  // The team organization comes from the company directory (simulated): departments keep their
+  // directory ids as unit ids. People are added once their accounts exist, so sync links them.
+  engine.run(null, (c) =>
+    connectDirectory(c, {
+      departments: [
+        { extId: 'company', name: '公司', parentExtId: null },
+        { extId: 'vehicle-rd', name: '整车研发中心', parentExtId: 'company' },
+        { extId: 'chassis', name: '底盘部门', parentExtId: 'vehicle-rd' },
+        { extId: 'ai-center', name: 'AI 中心', parentExtId: 'company' },
+        { extId: 'adc', name: 'ADC', parentExtId: 'ai-center' },
+        { extId: 'cockpit', name: '座舱部门', parentExtId: 'vehicle-rd' },
+        { extId: 'cdc', name: 'CDC', parentExtId: 'cockpit' },
+        ...DEMO_TEAMS.map((t) => ({ extId: t.unit, name: t.unitName, parentExtId: t.parent })),
+        { extId: 'chassis-test', name: '底盘测试组', parentExtId: 'chassis' },
+        { extId: 'vehicle-integration', name: '整车集成与发布部', parentExtId: 'vehicle-rd' },
+        { extId: 'vehicle-resources', name: '车辆资源部', parentExtId: 'vehicle-rd' },
+        { extId: 'data-closed-loop', name: '数据闭环部', parentExtId: 'ai-center' },
+      ],
+      people: [],
+    }),
+  );
+  engine.run(null, (c) => syncIfChanged(c));
   as(admin, (c) => createProject(c, { id: 'x89', name: 'X89 项目', vehicleModelId: 'X89' }));
   for (const [id, name] of [
     ['x89-chassis', '底盘模块'],
@@ -123,7 +135,6 @@ export function demoState(): State {
     as(admin, (c) => createOrgUnit(c, { id, name, parentId: 'x89' }));
   }
   for (const t of DEMO_TEAMS) {
-    as(admin, (c) => createOrgUnit(c, { id: t.unit, name: t.unitName, parentId: t.parent }));
     as(admin, (c) => createGroup(c, { id: t.group, code: t.code, name: t.groupName, domain: t.domain, purpose: 'DEV', orgUnitId: t.unit }));
     as(admin, (c) =>
       createWorkspace(c, {
@@ -220,6 +231,34 @@ export function demoState(): State {
       { role: 'CONFIG_RELEASE', workspaces: [domainWs], scopes: [domain], envs: ['testing'] },
     ]);
   }
+
+  // Everyone but the platform administrator is in the company directory; the sync links their
+  // accounts by username. Members of the brake team get business development there from the org
+  // rule; every other right stays an explicit grant. Chassis testers sit in their own department,
+  // so the rule never lets a tester edit what they test.
+  const departmentOf: Record<string, string> = {
+    dispatch_operator: 'chassis-test',
+    workspace_manager: 'chassis',
+    adc_integrator: 'adc',
+    cdc_integrator: 'cdc',
+    dcl: 'data-closed-loop',
+    integrator: 'vehicle-integration',
+    integration_admin: 'vehicle-integration',
+    integration_tester: 'vehicle-integration',
+    release: 'vehicle-integration',
+    resource: 'vehicle-resources',
+  };
+  for (const t of DEMO_TEAMS) {
+    departmentOf[t.developer[0]] = t.unit;
+    departmentOf[t.tester[0]] = t.domain === 'Chassis' ? 'chassis-test' : t.unit;
+  }
+  engine.run(null, (c) => {
+    for (const [username, deptExtId] of Object.entries(departmentOf)) hirePerson(c, { username, displayName: c.s.accounts[username]!.displayName, deptExtId });
+  });
+  engine.run(null, (c) => syncIfChanged(c));
+  as(admin, (c) =>
+    createGrantRule(c, { orgUnitId: 'brake-team', includeSubunits: false, role: 'BUSINESS_DEV', workspaces: ['team-brake'], groups: ['brake'], scopes: [], envs: ['development'] }),
+  );
 
   // DCL engineering publishes RawStorage pipelines and default templates for every file type.
   for (const [fileType, format] of FILE_TYPE_FORMATS) {

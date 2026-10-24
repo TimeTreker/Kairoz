@@ -7,7 +7,7 @@ import { EnvTag, Hint, Mono, PageHeader, RoleTag } from '../components/common.ts
 import type { Grant, GrantInput } from '../domain/authz.ts';
 import { DISPATCH_ONLY_ROLES } from '../domain/authz.ts';
 import { ENVS, ROLE_INFO, ROLES, SCOPES } from '../domain/vocabulary.ts';
-import { createAccount, replaceGrants, updateAccount } from '../engine/identity.ts';
+import { confirmGrantReview, createAccount, grantsOf, replaceGrants, updateAccount } from '../engine/identity.ts';
 import { useI18n } from '../i18n/i18n.tsx';
 import { ENV_LABELS, ROLE_LABELS } from '../i18n/vocab.ts';
 
@@ -84,7 +84,10 @@ export function AccountsPage() {
     <div className="kz-page">
       <PageHeader
         title={L('账号与授权', 'Accounts & grants')}
-        subtitle={L('每一行授权都是一条完整授权：角色 + 工作区 + 分组或范围 + 环境。操作必须由同一条授权完整满足，授权不能拼接。', 'Each grant row is one complete authorization: role + workspaces + groups or scopes + environments. An action must be satisfied by one grant; grants are never combined.')}
+        subtitle={L(
+          '每一行授权都是一条完整授权：角色 + 工作区 + 分组或范围 + 环境。操作必须由同一条授权完整满足，授权不能拼接。“来自组织”的授权由组织授权规则按目录归属自动获得，其余授权显式授予到人。',
+          'Each grant row is one complete authorization: role + workspaces + groups or scopes + environments. An action must be satisfied by one grant; grants are never combined. Grants marked “from org” follow directory membership through org grant rules; all others are granted to the person explicitly.',
+        )}
         extra={canManage && <Button type="primary" icon={<PlusOutlined />} onClick={() => open('new')}>{L('新建账号', 'New account')}</Button>}
       />
       <Card>
@@ -94,7 +97,46 @@ export function AccountsPage() {
           pagination={{ pageSize: 30, hideOnSinglePage: true }}
           columns={[
             { title: L('人员', 'Person'), render: (_, a) => <Space orientation="vertical" size={0}><span>{a.displayName}</span><Mono>{a.username}</Mono></Space> },
-            { title: L('授权', 'Grants'), render: (_, a) => <Space orientation="vertical">{a.grants.map((g) => <GrantSummary key={g.id} grant={g} />)}</Space> },
+            {
+              title: L('组织', 'Unit'),
+              render: (_, a) => (
+                <Space orientation="vertical" size={0}>
+                  <span>{a.orgUnitId ? (state.orgUnits[a.orgUnitId]?.name ?? a.orgUnitId) : '—'}</span>
+                  <Tag color={a.employeeId ? 'blue' : undefined}>{a.employeeId ? L(`目录 ${a.employeeId}`, `directory ${a.employeeId}`) : L('本地账号', 'local')}</Tag>
+                </Space>
+              ),
+            },
+            {
+              title: L('授权', 'Grants'),
+              render: (_, a) => (
+                <Space orientation="vertical">
+                  {a.grantReview && (
+                    <Space size={4} wrap>
+                      <Tag color="orange">
+                        {L(
+                          `待复核：已从 ${state.orgUnits[a.grantReview.fromUnitId ?? '']?.name ?? '—'} 调到 ${state.orgUnits[a.grantReview.toUnitId ?? '']?.name ?? '—'}`,
+                          `To review: moved from ${state.orgUnits[a.grantReview.fromUnitId ?? '']?.name ?? '—'} to ${state.orgUnits[a.grantReview.toUnitId ?? '']?.name ?? '—'}`,
+                        )}
+                      </Tag>
+                      {canManage && (
+                        <Button size="small" type="link" onClick={() => run((c) => confirmGrantReview(c, a.username), L('已确认保留显式授权', 'Explicit grants kept'))}>
+                          {L('确认保留', 'Keep them')}
+                        </Button>
+                      )}
+                    </Space>
+                  )}
+                  {a.grants.map((g) => <GrantSummary key={g.id} grant={g} />)}
+                  {grantsOf(state, a)
+                    .filter((g) => g.ruleId)
+                    .map((g) => (
+                      <Space key={g.id} size={4} wrap>
+                        <GrantSummary grant={g} />
+                        <Tag color="cyan">{L(`来自组织：${state.orgUnits[state.grantRules[g.ruleId!]!.orgUnitId]?.name}`, `from org: ${state.orgUnits[state.grantRules[g.ruleId!]!.orgUnitId]?.name}`)}</Tag>
+                      </Space>
+                    ))}
+                </Space>
+              ),
+            },
             {
               title: L('启用', 'Active'),
               render: (_, a) => <Switch checked={a.status === 'ACTIVE'} disabled={!canManage} onChange={(on) => run((c) => updateAccount(c, a.username, { status: on ? 'ACTIVE' : 'DISABLED' }))} />,
