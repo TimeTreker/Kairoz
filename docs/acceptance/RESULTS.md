@@ -1,10 +1,10 @@
 # 验收结果（引擎层逐幕回放）
 
-运行时间：2026-10-24T08:21:58.491Z。由 `npm run acceptance` 生成；每次重新执行，不沿用历史结果。
+运行时间：2026-10-24T10:22:23.712Z。由 `npm run acceptance` 生成；每次重新执行，不沿用历史结果。
 
 状态：PASS 通过；FAIL 失败；GAP 设计要求尚未实现；BLOCKED 前置幕未通过；NOT_APPLICABLE 浏览器原型不适用（如服务端部署）。
 
-合计：PASS 150 · FAIL 0 · GAP 0 · BLOCKED 0 · NOT_APPLICABLE 3 · NOT_WRITTEN 0
+合计：PASS 161 · FAIL 0 · GAP 0 · BLOCKED 0 · NOT_APPLICABLE 3 · NOT_WRITTEN 0
 
 ## 从零启动 · 角色协作
 
@@ -189,6 +189,22 @@
 | NC04 全部已读与未读筛选 | business | PASS |  |
 | NC05 警告类事项排在前面 | dcl；adc_parking；workspace_manager；brake_tester | PASS |  |
 | NC06 失效通知不能打开 | workspace_manager；brake_tester | PASS |  |
+
+## 借用车辆 · 下发与推送、更新整车版本
+
+| 幕 | 执行人 | 状态 | 说明 |
+|---|---|---|---|
+| BR01 借用目录只给选车需要的信息 | workspace_manager | PASS |  |
+| BR02 申请借用：写明车辆组和最后一天 | workspace_manager；business；resource | PASS |  |
+| BR03 使用方工作区先同意 | adc_integrator；resource | PASS |  |
+| BR04 车辆资源批准：车辆换组 | resource；workspace_manager；adc_integrator | PASS |  |
+| BR05 车辆上报：与车辆组的发布不匹配 | 车辆模拟器；business | PASS |  |
+| BR06 不改策略，更新车辆的整车版本 | business；车辆模拟器 | PASS |  |
+| BR07 下发与推送是两个状态 | 车辆模拟器；brake_tester | PASS |  |
+| BR08 借用到期：不能再下发，延期后恢复 | 车辆模拟器；workspace_manager；resource；brake_tester | PASS |  |
+| BR09 归还：软件保留，借出方收到提醒 | workspace_manager；adc_integrator | PASS |  |
+| BR10 整车软件自己变了：更新回去 | 车辆模拟器；business | PASS |  |
+| N01 借出期间的拒绝 | steering；adc_integrator；resource；dispatch_operator | PASS |  |
 
 ## 反向用例 T-N01–T-N24
 

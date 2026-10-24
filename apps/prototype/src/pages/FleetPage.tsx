@@ -16,6 +16,7 @@ import { catalogImages } from '../engine/sim-software.ts';
 import { EnvTag, Hint, LabelTag, Mono, PageHeader, ShortId, configName, when } from '../components/common.tsx';
 import { ENVS, SCOPES } from '../domain/vocabulary.ts';
 import {
+  activeLoanOf,
   addGroupMember,
   addWorkspaceVehicle,
   archiveVehicleGroup,
@@ -162,6 +163,8 @@ function WorkspaceVehicles() {
   const canSim = ENVS.some((env) => can('simulation.manage', { workspaceId: workspace.id, env }));
   const manages = (r: Resource) => can('workspace.resources', { workspaceId: workspace.id, scope: r.pool, env: r.env });
   const runsSim = (r: Resource) => r.type === 'SIMULATION' && can('simulation.manage', { workspaceId: simulationWorkspace(state, r) ?? workspace.id, scope: r.pool, env: r.env });
+  // While a vehicle is lent only the borrower works with it, and the borrower lets it go by returning it.
+  const lentAway = (r: Resource) => (activeLoanOf(state, r.id)?.workspaceId ?? workspace.id) !== workspace.id;
   const images = catalogImages(state, workspace.vehicleModelId);
   return (
     <Card
@@ -197,6 +200,7 @@ function WorkspaceVehicles() {
                 </Button>
               ))}
             {manages(r) &&
+              !lentAway(r) &&
               (r.reservation ? (
                 <Button type="link" size="small" onClick={() => run((c) => releaseReservation(c, workspace.id, r.id), L('已解除预约', 'Reservation released'))}>
                   {L('解除预约', 'Release')}
@@ -211,7 +215,7 @@ function WorkspaceVehicles() {
                 {L('运行镜像', 'Running image')}
               </Button>
             )}
-            {canUpdate(workspace.id, r) && (
+            {canUpdate(workspace.id, r) && !lentAway(r) && (
               <Button type="link" size="small" onClick={() => setUpdateOf(r.id)}>
                 {L('更新整车版本', 'Update software')}
               </Button>
@@ -221,7 +225,7 @@ function WorkspaceVehicles() {
                 {L('客户端状态', 'Client state')}
               </Button>
             )}
-            {manages(r) && (
+            {manages(r) && !activeLoanOf(state, r.id) && (
               <Button type="link" size="small" danger onClick={() => run((c) => removeWorkspaceVehicle(c, workspace.id, r.id), L('已移出工作区', 'Removed from the workspace'))}>
                 {L('移出', 'Remove')}
               </Button>
@@ -556,7 +560,8 @@ function VehicleGroups() {
             <Form.Item name="resourceId" label={L('车辆', 'Vehicle')} rules={[{ required: true }]}>
               <Select
                 options={workspaceVehicles(state, workspace.id)
-                  .filter((r) => !state.groupMembers[r.id])
+                  // A vehicle lent to another workspace stays out of this workspace's groups.
+                  .filter((r) => !state.groupMembers[r.id] && (activeLoanOf(state, r.id)?.workspaceId ?? workspace.id) === workspace.id)
                   .map((r) => ({ value: r.id, label: `${r.id} · ${r.type} · ${r.env}` }))}
               />
             </Form.Item>
@@ -907,9 +912,14 @@ function Registry() {
           })
         }
       >
+        {statusOf && activeLoanOf(state, statusOf.id) && (
+          <Hint>{L('车辆借用中：先由借用方归还或在“借用”中收回，才能转为维护或报废。', 'The vehicle is on loan: it is returned, or recalled under Loans, before it goes into maintenance or is retired.')}</Hint>
+        )}
         <Form form={sf} name="status" layout="vertical">
           <Form.Item name="status" label={L('状态', 'Status')}>
-            <Select options={['AVAILABLE', 'MAINTENANCE', 'RETIRED'].map((s) => ({ value: s, label: B(RESOURCE_STATUS_LABELS[s]) }))} />
+            <Select
+              options={['AVAILABLE', 'MAINTENANCE', 'RETIRED'].map((s) => ({ value: s, label: B(RESOURCE_STATUS_LABELS[s]), disabled: s !== 'AVAILABLE' && !!statusOf && !!activeLoanOf(state, statusOf.id) }))}
+            />
           </Form.Item>
           <Form.Item name="reason" label={L('原因', 'Reason')} rules={[{ required: true }]}>
             <Input />

@@ -2678,6 +2678,223 @@ export const SCRIPTS: Script[] = [
         "fail": "按通知操作前以对象页面的当前状态为准。"
       }
     ]
+  },
+  {
+    "id": "borrowing",
+    "name": "借用车辆 · 下发与推送、更新整车版本",
+    "start": "demo",
+    "scenes": [
+      {
+        "id": "BR01",
+        "title": "借用目录只给选车需要的信息",
+        "actor": "workspace_manager",
+        "accounts": [
+          "workspace_manager"
+        ],
+        "workspace": "team-brake",
+        "page": "车辆与车辆组 → 借用 → 借用车辆",
+        "pre": "演示数据。",
+        "steps": [
+          "以 workspace_manager 登录（制动团队工作区），在“借用”点“借用车辆”。",
+          "目录列出 VEH-004：实车 · 研发 · ADC · 整车软件未知 · 可用 · 使用方“系统应用团队工作区”。",
+          "没有量产车，也没有本工作区已有的车辆；目录不显示车上配置、客户端上报或测试结果。"
+        ],
+        "done": "选车所需的信息可见，其他分组的数据在批准前不可见。",
+        "fail": "本资源池且无人使用的车辆标注“可直接加入”，不需要借用。"
+      },
+      {
+        "id": "BR02",
+        "title": "申请借用：写明车辆组和最后一天",
+        "actor": "workspace_manager；business；resource",
+        "accounts": [
+          "workspace_manager",
+          "business",
+          "resource"
+        ],
+        "workspace": "team-brake",
+        "page": "借用 → 借用目录 → 申请借用",
+        "pre": "BR01 完成。",
+        "steps": [
+          "对 VEH-004 点“申请借用”：加入“制动研发车组”，最后一天为 7 天后，用途“AEB 联合制动验证”。",
+          "最后一天选今天会被拒绝：“归还日期须晚于今天…”。business 没有借用权限。",
+          "借入表显示“待使用方同意 · 系统应用团队工作区 · 待同意”；车辆资源此时不能批准（“须先由正在使用该车的工作区同意”）。"
+        ],
+        "done": "申请记录车辆组、最后一天、用途和需要同意的使用方。",
+        "fail": "申请不改变车辆、车辆组或任何配置。"
+      },
+      {
+        "id": "BR03",
+        "title": "使用方工作区先同意",
+        "actor": "adc_integrator；resource",
+        "accounts": [
+          "adc_integrator",
+          "resource"
+        ],
+        "workspace": "team-adc-system",
+        "page": "借用 → 借出",
+        "pre": "BR02 完成。",
+        "steps": [
+          "以 adc_integrator 登录（系统应用团队工作区）：通知中心有“制动团队工作区申请借用 VEH-004”。",
+          "在“借出”对 VEH-004 点“同意”：状态变为“待车辆资源批准”。",
+          "resource 的通知与工作台出现“VEH-004 借用待审批”。"
+        ],
+        "done": "使用方同意后才交给车辆资源。",
+        "fail": "不同意须写原因，申请随即结束。"
+      },
+      {
+        "id": "BR04",
+        "title": "车辆资源批准：车辆换组",
+        "actor": "resource；workspace_manager；adc_integrator",
+        "accounts": [
+          "resource",
+          "workspace_manager",
+          "adc_integrator"
+        ],
+        "workspace": null,
+        "page": "借用 → 借用审批；车辆与车辆组",
+        "pre": "BR03 完成。",
+        "steps": [
+          "resource 在“借用审批 → 待审批”看到检查“可以借出”，点“批准”。",
+          "VEH-004 离开“系统应用研发车组”（组审计：借出至 制动团队工作区），加入“制动研发车组”（借用：AEB 联合制动验证）。",
+          "制动团队的车辆列表标注“借用 · 至 …”；系统应用团队的列表标注“借出至 制动团队工作区 · 至 …”。"
+        ],
+        "done": "归属、资源池和环境不变，只有使用方和车辆组变化。",
+        "fail": "车辆有待回执、仿真运行中或被预约时不能批准。"
+      },
+      {
+        "id": "BR05",
+        "title": "车辆上报：与车辆组的发布不匹配",
+        "actor": "车辆模拟器；business",
+        "accounts": [
+          "business"
+        ],
+        "workspace": "team-brake",
+        "page": "车辆模拟器 → 车端 Agent；车辆与车辆组 → 车辆组",
+        "pre": "BR04 完成。",
+        "steps": [
+          "在车辆模拟器对 VEH-004 点“上报”。",
+          "以 business 登录：VEH-004 在制动研发车组中标注“与车辆组不匹配 · 整车软件版本未知，无法检查”，没有推送任何配置；通知中心有同一提醒。",
+          "打开它：两种做法——确认并下发（使用初始研发配置），或更新整车版本。"
+        ],
+        "done": "平台不自行下发不匹配的配置，由团队选择。",
+        "fail": "匹配的车辆在上报后直接推送车辆组的配置。"
+      },
+      {
+        "id": "BR06",
+        "title": "不改策略，更新车辆的整车版本",
+        "actor": "business；车辆模拟器",
+        "accounts": [
+          "business"
+        ],
+        "workspace": "team-brake",
+        "page": "与车辆组不匹配 → 更新整车版本；车辆模拟器 → 整车 OTA 系统",
+        "pre": "BR05 完成。",
+        "steps": [
+          "点“更新整车版本”，选择 X89 1.0：预览“无需修改”；原因“与车组一致”，提交给整车 OTA。",
+          "在车辆模拟器“整车 OTA 系统”点“更新成功”：车辆重启并上报 1.0。",
+          "云端推送车辆组的配置（brake_monitor r001，标注“随车辆组推送”，已推送·待回执）；回执后 VEH-004 运行它。"
+        ],
+        "done": "策略不变；车辆刷到合适的版本后自动推送已下发给车辆组的配置。",
+        "fail": "平台只从车辆上报得知新版本；整车 OTA 失败时车辆保持原版本。"
+      },
+      {
+        "id": "BR07",
+        "title": "下发与推送是两个状态",
+        "actor": "车辆模拟器；brake_tester",
+        "accounts": [
+          "brake_tester"
+        ],
+        "workspace": "team-brake",
+        "page": "研发 Feature → 下发与测试；车辆模拟器",
+        "pre": "BR06 完成。",
+        "steps": [
+          "在车辆模拟器让 VEH-004 离线。",
+          "brake_tester 把 guided_brake 按车辆组下发到制动研发车组：三辆车都是“已下发·待推送”。",
+          "执行一步：SIM-021 与 VEH-001 变为“已推送·待回执”，VEH-004 仍“已下发·待推送”；恢复在线再执行一步后才推送；回执后生效。"
+        ],
+        "done": "下发只设置云端配置；车辆上线时才推送，回执后才生效。",
+        "fail": "离线车辆不会被当成已收到。"
+      },
+      {
+        "id": "BR08",
+        "title": "借用到期：不能再下发，延期后恢复",
+        "actor": "车辆模拟器；workspace_manager；resource；brake_tester",
+        "accounts": [
+          "workspace_manager",
+          "resource",
+          "brake_tester"
+        ],
+        "workspace": "team-brake",
+        "page": "车辆模拟器 → 模拟时间；借用；研发 Feature → 下发与测试",
+        "pre": "BR07 完成。",
+        "steps": [
+          "在车辆模拟器“模拟时间”推进 7 天，再推进 1 天：借用已到期，workspace_manager 与 resource 都收到警告。",
+          "brake_tester 再次下发 guided_brake：被拒绝，“VEH-004：借用已于 … 到期，请延期或归还”。",
+          "workspace_manager 申请延期 7 天，resource 批准；再次下发成功，回执后生效。"
+        ],
+        "done": "到期只阻止新的下发，平台不会自行收回。",
+        "fail": "延期须由车辆资源批准；车辆资源也可以收回。"
+      },
+      {
+        "id": "BR09",
+        "title": "归还：软件保留，借出方收到提醒",
+        "actor": "workspace_manager；adc_integrator",
+        "accounts": [
+          "workspace_manager",
+          "adc_integrator"
+        ],
+        "workspace": null,
+        "page": "借用 → 借入；借出；车辆组",
+        "pre": "BR08 完成。",
+        "steps": [
+          "workspace_manager 在“借入”对 VEH-004 点“归还”：车辆离开制动研发车组和制动团队工作区，车上配置和整车软件保持不变。",
+          "adc_integrator 收到“VEH-004 已归还 · 整车软件 — → 1.0”；借出表显示同样的软件变化。",
+          "adc_integrator 把 VEH-004 加回系统应用研发车组；该组没有发布，上报后不推送。"
+        ],
+        "done": "平台不替借出方重新入组，也不回滚配置。",
+        "fail": "有待回执的下发或仿真运行中时不能归还。"
+      },
+      {
+        "id": "BR10",
+        "title": "整车软件自己变了：更新回去",
+        "actor": "车辆模拟器；business",
+        "accounts": [
+          "business"
+        ],
+        "workspace": "team-brake",
+        "page": "车辆模拟器；工作台 → 车辆软件已变化",
+        "pre": "BR09 完成。",
+        "steps": [
+          "在车辆模拟器对 VEH-001 “模拟整车软件 OTA”到 1.1 并上报：business 的工作台显示“1.0 → 1.1 · 新软件没有适用的策略集”。",
+          "打开它，点“更新整车版本”选 1.0 并提交；在模拟器“整车 OTA 系统”点“更新成功”。",
+          "VEH-001 回到 1.0，两次变化都已确认；它的配置仍然适用，不需要推送。"
+        ],
+        "done": "不匹配时可以改策略，也可以只更新车辆的整车版本。",
+        "fail": "更新申请等待期间不能下发到该车。"
+      },
+      {
+        "id": "N01",
+        "title": "借出期间的拒绝",
+        "actor": "steering；adc_integrator；resource；dispatch_operator",
+        "accounts": [
+          "steering",
+          "adc_integrator",
+          "resource",
+          "dispatch_operator"
+        ],
+        "workspace": null,
+        "page": "借用；车辆组；车辆台账",
+        "pre": "BR04 完成（支线）。",
+        "steps": [
+          "steering 不能归还制动团队借的车。",
+          "adc_integrator 不能把借出的 VEH-004 加入自己的车辆组：“车辆借用中…”。",
+          "resource 不能把借出的车转为维护。",
+          "dispatch_operator 不能申请更新整车版本。"
+        ],
+        "done": "借用期间只有借用方使用车辆。",
+        "fail": "拒绝不改变任何状态。"
+      }
+    ]
   }
 ];
 
