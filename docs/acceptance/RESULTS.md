@@ -1,10 +1,10 @@
 # 验收结果（引擎层逐幕回放）
 
-运行时间：2026-10-24T05:26:25.033Z。由 `npm run acceptance` 生成；每次重新执行，不沿用历史结果。
+运行时间：2026-10-24T06:29:48.817Z。由 `npm run acceptance` 生成；每次重新执行，不沿用历史结果。
 
 状态：PASS 通过；FAIL 失败；GAP 设计要求尚未实现；BLOCKED 前置幕未通过；NOT_APPLICABLE 浏览器原型不适用（如服务端部署）。
 
-合计：PASS 128 · FAIL 0 · GAP 0 · BLOCKED 0 · NOT_APPLICABLE 3 · NOT_WRITTEN 0
+合计：PASS 137 · FAIL 0 · GAP 0 · BLOCKED 0 · NOT_APPLICABLE 3 · NOT_WRITTEN 0
 
 ## 从零启动 · 角色协作
 
@@ -152,6 +152,20 @@
 | PS08 测试人员也可以有自己的个人仿真 | brake_tester / 王嘉宁 · 业务测试 | PASS |  |
 | PS09 离职：个人仿真自动释放 | 公司目录（车辆模拟器扮演）；brake_dev2 / 何晓 · 新员工 | PASS |  |
 | N01 不允许的个人仿真 | business；workspace_manager | PASS |  |
+
+## 仿真车软件 · 模块构建、部署与回滚
+
+| 幕 | 执行人 | 状态 | 说明 |
+|---|---|---|---|
+| SW01 个人仿真运行草稿并自测 | business / 陈明 · 业务研发；制动团队工作区 | PASS |  |
+| SW02 构建制动模块：生成派生镜像，运行镜像不变 | business / 陈明；车辆模拟器扮演构建服务 | PASS |  |
+| SW03 部署派生镜像：失败保留原状，成功后配置需重新下发 | business / 陈明；车辆模拟器扮演仿真服务 | PASS |  |
+| SW04 在新镜像上重新下发并自测 | business / 陈明 | PASS |  |
+| SW05 回滚镜像，只能回滚一次 | business / 陈明；车辆模拟器扮演仿真服务 | PASS |  |
+| SW06 不合法的构建请求 | business / 陈明；brake_tester | PASS |  |
+| SW07 共享仿真：工作区管理员切换基础镜像 | workspace_manager / 工作区管理员；business | PASS |  |
+| SW08 镜像变化后，旧测试结果不再计入 | business、brake_tester、workspace_manager | PASS |  |
+| N01 派生镜像不进入集成测试与镜像目录 | integration_admin、integration_tester；business、workspace_manager | PASS |  |
 
 ## 反向用例 T-N01–T-N24
 

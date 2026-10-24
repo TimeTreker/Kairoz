@@ -400,7 +400,8 @@ function VehicleGroups() {
                                     <Space size={4} wrap>
                                       <Tag color={ANSWER_COLORS[a.reason] ?? 'default'}>{B(CONFIG_ANSWER_LABELS[a.reason])}</Tag>
                                       {a.reason === 'GROUP_TARGET' && <Mono>{B(configName(state, a.configId))}</Mono>}
-                                      {due && <Tag color="gold">{L('待回执', 'awaiting receipt')}</Tag>}
+                                      {/* Not applied: a receipt is on its way, or (after an image change) nothing was sent yet. */}
+                                      {due && (pendingDeploymentOf(state, id) ? <Tag color="gold">{L('待回执', 'awaiting receipt')}</Tag> : <Tag color="gold">{L('需重新下发', 'publish again')}</Tag>)}
                                     </Space>
                                   </Tooltip>
                                 );

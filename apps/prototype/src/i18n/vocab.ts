@@ -620,8 +620,9 @@ export const BUILD_STATUS_LABELS: Record<string, Bilingual> = {
   BUILT: b('已构建', 'Built'),
   BUILD_FAILED: b('构建失败', 'Build failed'),
   CANCELLED: b('已取消', 'Cancelled'),
+  DEPLOYED: b('已部署', 'Deployed'),
 };
-export const BUILD_STATUS_COLORS: Record<string, string> = { REQUESTED: 'processing', BUILT: 'blue', BUILD_FAILED: 'red', CANCELLED: 'default' };
+export const BUILD_STATUS_COLORS: Record<string, string> = { REQUESTED: 'processing', BUILT: 'blue', BUILD_FAILED: 'red', CANCELLED: 'default', DEPLOYED: 'green' };
 
 export const IMAGE_CHANGE_KIND_LABELS: Record<string, Bilingual> = {
   SWITCH: b('切换基础镜像', 'Base image switch'),

@@ -156,7 +156,14 @@ export function SimSoftware({ resourceId }: { resourceId: string }) {
             columns={[
               { title: L('构建', 'Build'), render: (_, b) => `${moduleName(b.module)} · ${when(b.requestedAt)}` },
               { title: L('源码', 'Source'), render: (_, b) => <Mono>{`${b.repository.replace('https://github.com/', '')} @ ${b.requestedRef} → ${shortCommit(b.resolvedCommit)}`}</Mono> },
-              { title: L('状态', 'Status'), render: (_, b) => <Tag color={BUILD_STATUS_COLORS[b.status]}>{B(BUILD_STATUS_LABELS[b.status])}</Tag> },
+              {
+                title: L('状态', 'Status'),
+                render: (_, b) => {
+                  // A built image that reached the simulation reads as deployed, even after a rollback.
+                  const shown = b.status === 'BUILT' && changes.some((c) => c.buildId === b.id && c.status === 'APPLIED') ? 'DEPLOYED' : b.status;
+                  return <Tag color={BUILD_STATUS_COLORS[shown]}>{B(BUILD_STATUS_LABELS[shown])}</Tag>;
+                },
+              },
               { title: L('镜像', 'Image'), render: (_, b) => <Mono>{b.imageId ?? '—'}</Mono> },
               {
                 title: '',

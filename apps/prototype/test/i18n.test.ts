@@ -30,6 +30,8 @@ describe('bilingual error text', () => {
       ['VEH-903: policy set 1.0.0 does not apply to software 1.1', 'VEH-903：策略集 1.0.0 不适用于软件 1.1'],
       ['VEH-001: routes through vehicle group 制动验证组; dispatch to the group', 'VEH-001：属于车辆组“制动验证组”，请按车辆组下发'],
       ['SIM-901 has no passing test', 'SIM-901 没有通过的测试'],
+      ['SIM-021 runs another image since its test; test it again', 'SIM-021 测试后已更换镜像，需重新测试'],
+      ['SIM-101: runs a derived development image', 'SIM-101：运行研发派生镜像'],
       ['a simulation test must pass', '须有仿真测试通过'],
       ['chassis.brake: 制动诊断日志: gnss-edge@1 does not support format text', 'chassis.brake: 制动诊断日志：gnss-edge@1 不支持格式 text'],
       ['VEH-002: maintenance', 'VEH-002：维护中'],

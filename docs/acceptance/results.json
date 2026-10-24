@@ -1,8 +1,8 @@
 {
-  "runAt": "2026-10-24T05:26:25.033Z",
+  "runAt": "2026-10-24T06:29:48.817Z",
   "layer": "engine",
   "counts": {
-    "PASS": 128,
+    "PASS": 137,
     "FAIL": 0,
     "GAP": 0,
     "BLOCKED": 0,
@@ -1014,6 +1014,93 @@
           "id": "N01",
           "title": "不允许的个人仿真",
           "actor": "business；workspace_manager",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        }
+      ]
+    },
+    {
+      "script": "sim-software",
+      "name": "仿真车软件 · 模块构建、部署与回滚",
+      "rows": [
+        {
+          "id": "SW01",
+          "title": "个人仿真运行草稿并自测",
+          "actor": "business / 陈明 · 业务研发；制动团队工作区",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "SW02",
+          "title": "构建制动模块：生成派生镜像，运行镜像不变",
+          "actor": "business / 陈明；车辆模拟器扮演构建服务",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "SW03",
+          "title": "部署派生镜像：失败保留原状，成功后配置需重新下发",
+          "actor": "business / 陈明；车辆模拟器扮演仿真服务",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "SW04",
+          "title": "在新镜像上重新下发并自测",
+          "actor": "business / 陈明",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "SW05",
+          "title": "回滚镜像，只能回滚一次",
+          "actor": "business / 陈明；车辆模拟器扮演仿真服务",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "SW06",
+          "title": "不合法的构建请求",
+          "actor": "business / 陈明；brake_tester",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "SW07",
+          "title": "共享仿真：工作区管理员切换基础镜像",
+          "actor": "workspace_manager / 工作区管理员；business",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "SW08",
+          "title": "镜像变化后，旧测试结果不再计入",
+          "actor": "business、brake_tester、workspace_manager",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "N01",
+          "title": "派生镜像不进入集成测试与镜像目录",
+          "actor": "integration_admin、integration_tester；business、workspace_manager",
           "adaptation": null,
           "status": "PASS",
           "detail": null,

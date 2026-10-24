@@ -2241,6 +2241,181 @@ export const SCRIPTS: Script[] = [
         "fail": "共享仿真由工作区管理员按团队资源流程登记。"
       }
     ]
+  },
+  {
+    "id": "sim-software",
+    "name": "仿真车软件 · 模块构建、部署与回滚",
+    "start": "demo",
+    "scenes": [
+      {
+        "id": "SW01",
+        "title": "个人仿真运行草稿并自测",
+        "actor": "business / 陈明 · 业务研发；制动团队工作区",
+        "accounts": [
+          "business"
+        ],
+        "workspace": "team-brake",
+        "page": "车辆与车辆组 → 我的研发仿真；原型工具 → 车辆模拟器",
+        "pre": "演示数据。",
+        "steps": [
+          "新建个人仿真：制动组，镜像 x89-1.0-sim，名称“制动模块调试”；整车软件 1.0，基线策略集 1.0.0。",
+          "配置 brake_monitor 草稿，车辆模拟器回执成功；记录个人自测 PASS，说明“原镜像上急刹车触发正确”。"
+        ],
+        "done": "个人仿真运行草稿，已有一条在原镜像上的自测。",
+        "fail": "回执失败时保留原配置。"
+      },
+      {
+        "id": "SW02",
+        "title": "构建制动模块：生成派生镜像，运行镜像不变",
+        "actor": "business / 陈明；车辆模拟器扮演构建服务",
+        "accounts": [
+          "business"
+        ],
+        "workspace": "team-brake",
+        "page": "我的研发仿真 → 运行镜像；原型工具 → 车辆模拟器",
+        "pre": "SW01 完成。",
+        "steps": [
+          "在“运行镜像”选择制动模块，仓库 https://github.com/example/brake，源码版本 main，“构建模块”：构建显示待构建。该地址为剧本占位，不表示访问了真实仓库。",
+          "在车辆模拟器“仿真软件：构建与部署”点“构建成功”：生成派生镜像 dev-x89-1.0-sim-brake-1，源码固定为 mock-commit。",
+          "回到个人仿真：运行镜像仍是 x89-1.0-sim，草稿配置仍生效。"
+        ],
+        "done": "构建只生成派生镜像，不改变仿真正在运行的镜像和配置。",
+        "fail": "构建失败时运行镜像不变，可重新构建。"
+      },
+      {
+        "id": "SW03",
+        "title": "部署派生镜像：失败保留原状，成功后配置需重新下发",
+        "actor": "business / 陈明；车辆模拟器扮演仿真服务",
+        "accounts": [
+          "business"
+        ],
+        "workspace": "team-brake",
+        "page": "我的研发仿真 → 运行镜像；原型工具 → 车辆模拟器",
+        "pre": "SW02 完成。",
+        "steps": [
+          "实例运行时“部署”不可用（引擎拒绝：先停止实例）；停止实例后部署，在模拟器点“部署失败”：仍运行 x89-1.0-sim，草稿配置仍生效。",
+          "再次部署，在模拟器点“部署成功”：运行 dev-x89-1.0-sim-brake-1（派生镜像），来源整车版本仍为 1.0；已生效配置清空。",
+          "个人自测列表中原镜像上的自测标“镜像已变化”。"
+        ],
+        "done": "镜像只在仿真服务确认后改变；新镜像上 DCL 客户端从空开始。",
+        "fail": "失败的部署不影响原镜像和原配置。"
+      },
+      {
+        "id": "SW04",
+        "title": "在新镜像上重新下发并自测",
+        "actor": "business / 陈明",
+        "accounts": [
+          "business"
+        ],
+        "workspace": "team-brake",
+        "page": "我的研发仿真；原型工具 → 车辆模拟器",
+        "pre": "SW03 完成。",
+        "steps": [
+          "启动实例，重新配置 brake_monitor 草稿，模拟器回执成功。",
+          "记录个人自测 PASS，说明“新制动模块上急刹车触发正确”：这条自测的镜像为派生镜像。"
+        ],
+        "done": "原镜像上的自测只作历史，不代表新软件验证通过。",
+        "fail": "没有生效的草稿不能记录自测。"
+      },
+      {
+        "id": "SW05",
+        "title": "回滚镜像，只能回滚一次",
+        "actor": "business / 陈明；车辆模拟器扮演仿真服务",
+        "accounts": [
+          "business"
+        ],
+        "workspace": "team-brake",
+        "page": "我的研发仿真 → 运行镜像；原型工具 → 车辆模拟器",
+        "pre": "SW04 完成。",
+        "steps": [
+          "停止实例，点“回滚到 x89-1.0-sim”，在模拟器点“部署成功”：恢复之前的镜像，已生效配置清空。",
+          "回滚按钮不再出现（引擎拒绝再次回滚）。"
+        ],
+        "done": "回滚恢复之前的镜像并保留历史。",
+        "fail": "重复回滚被拒绝；需要时重新构建并部署。"
+      },
+      {
+        "id": "SW06",
+        "title": "不合法的构建请求",
+        "actor": "business / 陈明；brake_tester",
+        "accounts": [
+          "business",
+          "brake_tester"
+        ],
+        "workspace": "team-brake",
+        "page": "我的研发仿真 → 运行镜像",
+        "pre": "SW05 完成。",
+        "steps": [
+          "仓库填 file:///etc/passwd、https://evil.test/repo 或带 ?token= 的地址：被拒绝，只接受 GitHub 仓库地址。",
+          "模块 shell 不在已接入模块中（页面只列出四个模块，由引擎回放核对）。",
+          "请求一个构建后再请求：被拒绝，先部署或取消；“取消”后构建为已取消。brake_tester 不能为陈明的个人仿真构建（引擎回放）。"
+        ],
+        "done": "不下载源码、不执行命令，只接受已接入模块与合法仓库。",
+        "fail": "共享仿真的构建由工作区管理员进行。"
+      },
+      {
+        "id": "SW07",
+        "title": "共享仿真：工作区管理员切换基础镜像",
+        "actor": "workspace_manager / 工作区管理员；business",
+        "accounts": [
+          "workspace_manager",
+          "business"
+        ],
+        "workspace": "team-brake",
+        "page": "车辆与车辆组 → 工作区车辆 → 运行镜像；原型工具 → 车辆模拟器",
+        "pre": "SW06 完成。",
+        "steps": [
+          "business 不能更改 SIM-021 的镜像（页面不提供入口，由引擎回放核对）。",
+          "workspace_manager 在“工作区车辆”停止 SIM-021，打开“运行镜像”，切换到 x89-1.1-sim，模拟器“部署成功”：软件 1.1，已生效配置清空。",
+          "“车辆组”中 SIM-021 应运行“没有适用基线，保持已生效配置”（演示数据中没有适用 1.1 的策略集）；brake_monitor 仍为已验证。",
+          "回滚到 x89-1.0-sim，模拟器“部署成功”，启动实例：车辆组发布内容重新适用。"
+        ],
+        "done": "共享仿真的软件由工作区管理员维护；基线跟随软件版本，下发仍需显式进行。",
+        "fail": "没有适用策略集时，为车辆组指定显式基线或先确认适用性。"
+      },
+      {
+        "id": "SW08",
+        "title": "镜像变化后，旧测试结果不再计入",
+        "actor": "business、brake_tester、workspace_manager",
+        "accounts": [
+          "business",
+          "brake_tester",
+          "workspace_manager"
+        ],
+        "workspace": "team-brake",
+        "page": "研发 Feature → 下发与测试；工作区车辆 → 运行镜像；原型工具 → 车辆模拟器",
+        "pre": "SW07 完成。",
+        "steps": [
+          "business 把 brake_monitor 的急刹车阈值改为 85 并提交 r002；brake_tester 按车辆组下发并回执，在 SIM-021 登记 PASS。",
+          "workspace_manager 为 SIM-021 构建感知模块（https://github.com/example/perception，release-2），构建成功后停止实例、部署，部署成功后启动。",
+          "“下发与测试”中 SIM-021 显示“镜像已变化，需重新测试”；VEH-001 实车登记 PASS 被拒绝（须先有仿真通过）。",
+          "brake_tester 重新下发并回执，SIM-021 与 VEH-001 先仿真后实车 PASS，确认 Verified。"
+        ],
+        "done": "测试结果绑定运行的镜像；镜像变化后旧结果保留为历史，不再计入。已验证的 Feature 不会因此退回。",
+        "fail": "不要用旧镜像上的结果确认 Verified。"
+      },
+      {
+        "id": "N01",
+        "title": "派生镜像不进入集成测试与镜像目录",
+        "actor": "integration_admin、integration_tester；business、workspace_manager",
+        "accounts": [
+          "integration_admin",
+          "integration_tester",
+          "business",
+          "workspace_manager"
+        ],
+        "workspace": "x89-integration",
+        "page": "工作区车辆 → 运行镜像",
+        "pre": "演示数据。",
+        "steps": [
+          "integration_admin 为测试环境仿真 SIM-101 构建模块：被拒绝，派生镜像只用于研发环境（页面显示“测试环境仿真只使用平台镜像”）。",
+          "integration_tester 不能更改仿真镜像（页面不提供入口，由引擎回放核对）。",
+          "个人仿真构建出的派生镜像不出现在创建仿真或切换镜像的镜像列表中；按 ID 使用被拒绝（引擎回放）。"
+        ],
+        "done": "集成和适用性测试只用平台正式镜像。",
+        "fail": "需要测试新软件时，由车辆资源登记正式镜像。"
+      }
+    ]
   }
 ];
 
