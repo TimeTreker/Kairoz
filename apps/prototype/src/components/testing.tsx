@@ -1,16 +1,17 @@
 // Dispatch and test building blocks shared by Feature validation and integration candidates.
 
-import { Button, Checkbox, Form, Input, Modal, Radio, Select, Space, Table, Tag, Typography } from 'antd';
+import { Button, Checkbox, Form, Input, Modal, Radio, Select, Space, Table, Tag, Tooltip, Typography } from 'antd';
 import type { ReactNode } from 'react';
 import { useEffect, useState } from 'react';
 import { navigate } from '../app/router.ts';
 import { useEngineState } from '../app/store.ts';
+import { deliveryState } from '../engine/delivery.ts';
 import { membersOf } from '../engine/fleet.ts';
-import type { Deployment, VehicleGroup } from '../engine/types.ts';
+import type { Deployment, DeploymentTarget, VehicleGroup } from '../engine/types.ts';
 import type { TargetStatus } from '../engine/validation.ts';
 import { useI18n } from '../i18n/i18n.tsx';
 import { issueLabel } from '../i18n/issues.ts';
-import { DEPLOYMENT_STATUS_LABELS, RESOURCE_TYPE_LABELS, TARGET_STATUS_COLORS, TARGET_STATUS_LABELS } from '../i18n/vocab.ts';
+import { DELIVERY_STATE_COLORS, DELIVERY_STATE_LABELS, DEPLOYMENT_STATUS_LABELS, DEPLOYMENT_TRIGGER_LABELS, RESOURCE_TYPE_LABELS } from '../i18n/vocab.ts';
 import { EnvTag, Hint, LabelTag, Mono, configName, when } from './common.tsx';
 
 /** Test targets of one version with their apply state and latest result. */
@@ -67,6 +68,23 @@ export function TargetsTable({ status, action }: { status: TargetStatus[]; actio
   );
 }
 
+/** A target's delivery: dispatched (cloud configuration set), pushed to the vehicle, or answered. */
+export function DeliveryTag({ target }: { target: Pick<DeploymentTarget, 'status' | 'pushedAt'> }) {
+  const { L, B } = useI18n();
+  const st = deliveryState(target);
+  const tip =
+    st === 'NOT_PUSHED'
+      ? L('云端配置已设置；车辆上线（上报）时才推送。', 'The cloud configuration is set; it is pushed when the vehicle comes on and reports.')
+      : st === 'PUSHED'
+        ? L('已推送到车辆，等待车辆回执。', 'Pushed to the vehicle; waiting for its receipt.')
+        : undefined;
+  return (
+    <Tooltip title={tip}>
+      <Tag color={DELIVERY_STATE_COLORS[st]}>{B(DELIVERY_STATE_LABELS[st])}</Tag>
+    </Tooltip>
+  );
+}
+
 /** Dispatches with their frozen member targets. */
 export function DeploymentsTable({ deployments, canCancel, onCancel }: { deployments: Deployment[]; canCancel: (d: Deployment) => boolean; onCancel: (d: Deployment) => void }) {
   const state = useEngineState();
@@ -89,7 +107,7 @@ export function DeploymentsTable({ deployments, canCancel, onCancel }: { deploym
               { title: L('车辆', 'Vehicle'), render: (_, t) => <Mono>{t.resourceId}</Mono> },
               { title: L('车辆组', 'Group'), render: (_, t) => (t.vehicleGroupId ? state.vehicleGroups[t.vehicleGroupId]?.name : <Tag>{L('直投', 'direct')}</Tag>) },
               { title: L('尝试', 'Attempt'), dataIndex: 'attempt' },
-              { title: L('状态', 'Status'), render: (_, t) => <Tag color={TARGET_STATUS_COLORS[t.status]}>{B(TARGET_STATUS_LABELS[t.status])}</Tag> },
+              { title: L('状态', 'Status'), render: (_, t) => <DeliveryTag target={t} /> },
               { title: L('错误', 'Error'), render: (_, t) => (t.error ? B(issueLabel(t.error), t.error) : '—') },
               { title: L('更新', 'Updated'), render: (_, t) => when(t.updatedAt) },
             ]}
@@ -101,7 +119,19 @@ export function DeploymentsTable({ deployments, canCancel, onCancel }: { deploym
         { title: L('配置', 'Configuration'), render: (_, d) => <Mono>{B(configName(state, d.resolvedConfigId))}</Mono> },
         { title: L('环境', 'Env'), render: (_, d) => <EnvTag env={d.env} /> },
         { title: L('状态', 'Status'), render: (_, d) => <LabelTag map={DEPLOYMENT_STATUS_LABELS} value={d.status} /> },
-        { title: L('下发人', 'By'), render: (_, d) => `${state.accounts[d.dispatchedBy]?.displayName} · ${when(d.createdAt)}` },
+        {
+          title: L('下发人', 'By'),
+          render: (_, d) => (
+            <Space size={4} wrap>
+              {d.trigger === 'GROUP_FOLLOW' && (
+                <Tooltip title={L('车辆加入车辆组或更新整车软件后上报，云端推送了已下发给车辆组的配置。', 'The vehicle joined the group or had its software updated; on its report the cloud pushed what was dispatched to the group.')}>
+                  <Tag color="cyan">{B(DEPLOYMENT_TRIGGER_LABELS.GROUP_FOLLOW)}</Tag>
+                </Tooltip>
+              )}
+              <span>{`${state.accounts[d.dispatchedBy]?.displayName ?? d.dispatchedBy} · ${when(d.createdAt)}`}</span>
+            </Space>
+          ),
+        },
         {
           title: '',
           render: (_, d) => (

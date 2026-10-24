@@ -8,6 +8,7 @@ import type { Draft } from 'immer';
 import { conflict, notFound, rule } from '../domain/errors.ts';
 import { newId } from '../domain/ids.ts';
 import type { Ctx } from './engine.ts';
+import { groupPublicationBase } from './delivery.ts';
 import { assertIdle, assertNotLentAway, getResource, pendingSoftwareUpdateOf, softwareKey } from './fleet.ts';
 import { assessPublicationOn } from './software-change.ts';
 import type { PublicationCheck } from './software-change.ts';
@@ -94,13 +95,19 @@ export function answerVehicleSoftware(ctx: Ctx, requestId: string, result: 'APPL
   return q;
 }
 
-/** What the vehicle's group published, checked on `version`, before asking for it (null without a group). */
+/**
+ * What the vehicle's group published, checked on `version`, before asking for it (null without a
+ * group). It is compared with the base the vehicle runs the publication on, or, for a vehicle that
+ * does not run it yet (one that joined the group), with the group's base.
+ */
 export function previewVehicleSoftware(s: State, resourceId: string, version: string): PublicationCheck | null {
   const r = s.resources[resourceId];
   const g = r ? s.vehicleGroups[s.groupMembers[r.id] ?? ''] : undefined;
   if (!r || !g) return null;
-  const running = r.appliedConfigId ? (s.resolvedConfigs[r.appliedConfigId]?.baseReleaseId ?? null) : g.baseReleaseId;
-  return assessPublicationOn(s, r, g, version, running);
+  const p = g.publication;
+  const applied = r.appliedConfigId ? s.resolvedConfigs[r.appliedConfigId] : undefined;
+  const runsIt = p?.kind === 'FEATURE' && applied?.kind === 'FEATURE' && applied.sourceId === p.featureId && !s.groupFollows[r.id];
+  return assessPublicationOn(s, r, g, version, runsIt ? applied.baseReleaseId : groupPublicationBase(s, g));
 }
 
 /** Software updates of a vehicle, newest first. */

@@ -12,12 +12,88 @@ import { advanceEvent, assessEvent, capturablePolicies, captureEvent, deliverCal
 import { personalCapturablePolicies, trialCapture } from '../engine/personal-sim.ts';
 import { answerImageChange, completeBuild } from '../engine/sim-software.ts';
 import type { Quality, TrainingUse } from '../engine/types.ts';
-import { deviceSummary, flushOutbox, pendingForVehicles, reportNow, restartClient, sendFault, sendReceipt, setAgent, simulateSoftwareOta, tick, upgradeClient } from '../engine/simulator.ts';
+import { advanceClock, completeVehicleSoftware, deviceSummary, flushOutbox, pendingForVehicles, reportNow, restartClient, sendFault, sendReceipt, setAgent, simulateSoftwareOta, tick, upgradeClient } from '../engine/simulator.ts';
+import { DAY_MS, todayOf } from '../engine/clock.ts';
+import { pendingSoftwareRequests } from '../engine/vehicle-software.ts';
+import { DeliveryTag } from '../components/testing.tsx';
 import type { ReportFault } from '../engine/simulator.ts';
 import { useI18n } from '../i18n/i18n.tsx';
 import { ERROR_LABELS, EVENT_STATUS_COLORS, IMAGE_CHANGE_KIND_LABELS, EVENT_STATUS_LABELS, QUALITY_LABELS, REPORT_RESULT_LABELS, RESOURCE_TYPE_LABELS, TRAINING_USE_LABELS } from '../i18n/vocab.ts';
 
 let autoTimer: ReturnType<typeof setInterval> | undefined;
+
+/** The vehicle OTA system (整车 OTA, outside the platform): carries out requested software updates. */
+function VehicleOtaCard({ system }: { system: <R>(op: (c: Ctx) => R, ok?: string) => R | undefined }) {
+  const state = useEngineState();
+  const { L } = useI18n();
+  const requests = pendingSoftwareRequests(state);
+  return (
+    <Card title={`${L('整车 OTA 系统：软件更新', 'Vehicle OTA system: software updates')} · ${requests.length}`}>
+      <Typography.Paragraph type="secondary">
+        {L(
+          '这里扮演平台外的整车 OTA 系统。更新成功后车辆运行新版本并重启上报（离线时上报暂存）；平台只从车辆上报得知版本。失败时车辆保持原版本。',
+          'This plays the vehicle OTA system outside the platform. On success the vehicle runs the new version, restarts and reports it (queued while offline); the platform learns the version only from the report. A failure keeps the vehicle’s software.',
+        )}
+      </Typography.Paragraph>
+      {requests.length === 0 ? (
+        <Alert type="info" showIcon title={L('没有待处理的整车软件更新。', 'No software updates are waiting.')} />
+      ) : (
+        <Table
+          rowKey="id"
+          size="small"
+          pagination={false}
+          dataSource={requests}
+          scroll={{ x: 'max-content' }}
+          columns={[
+            { title: L('车辆', 'Vehicle'), render: (_, q) => <Mono>{q.resourceId}</Mono> },
+            { title: L('版本', 'Version'), render: (_, q) => <Mono>{`${q.fromVersion ?? '—'} → ${q.toVersion}`}</Mono> },
+            { title: L('申请', 'Requested'), render: (_, q) => `${state.accounts[q.requestedBy]?.displayName ?? q.requestedBy} · ${when(q.requestedAt)}` },
+            { title: L('原因', 'Reason'), dataIndex: 'reason' },
+            {
+              title: '',
+              render: (_, q) => (
+                <Space size={0}>
+                  <Button type="link" size="small" onClick={() => system((c) => completeVehicleSoftware(c, q.id, 'APPLIED'), L('更新成功：车辆已重启并上报', 'Updated: the vehicle restarted and reported'))}>
+                    {L('更新成功', 'Update succeeds')}
+                  </Button>
+                  <Button type="link" size="small" danger onClick={() => system((c) => completeVehicleSoftware(c, q.id, 'FAILED'), L('更新失败，车辆保持原版本', 'Update failed; the vehicle keeps its software'))}>
+                    {L('更新失败', 'Update fails')}
+                  </Button>
+                </Space>
+              ),
+            },
+          ]}
+        />
+      )}
+    </Card>
+  );
+}
+
+/** Simulated time (模拟时间): moves the platform clock forward so loans can run out. */
+function ClockCard({ system }: { system: <R>(op: (c: Ctx) => R, ok?: string) => R | undefined }) {
+  const state = useEngineState();
+  const { L } = useI18n();
+  const days = Math.round(state.clockOffsetMs / DAY_MS);
+  return (
+    <Card size="small" title={L('模拟时间', 'Simulated time')}>
+      <Space wrap>
+        <Typography.Text>
+          {L('平台日期', 'Platform date')}
+          {L('：', ': ')}
+          <Mono>{todayOf(state)}</Mono>
+          {days > 0 && <Tag style={{ marginLeft: 8 }}>{L(`比真实时间快 ${days} 天`, `${days} days ahead of real time`)}</Tag>}
+        </Typography.Text>
+        <Button size="small" onClick={() => system((c) => advanceClock(c, 1), L('时间已推进 1 天', 'Moved forward 1 day'))}>
+          {L('推进 1 天', '+1 day')}
+        </Button>
+        <Button size="small" onClick={() => system((c) => advanceClock(c, 7), L('时间已推进 7 天', 'Moved forward 7 days'))}>
+          {L('推进 7 天', '+7 days')}
+        </Button>
+        <Typography.Text type="secondary">{L('只能向前推进；借用到期等按平台日期判断。', 'Forward only; loans run out by the platform date.')}</Typography.Text>
+      </Space>
+    </Card>
+  );
+}
 
 /** The mock CI and simulation provider: answers module builds and image changes. */
 function SoftwareProviderCard({ system }: { system: <R>(op: (c: Ctx) => R, ok?: string) => R | undefined }) {
@@ -169,6 +245,7 @@ export function SimulatorPage() {
                 { title: L('车辆', 'Vehicle'), render: (_, p) => <Mono>{p.target.resourceId}</Mono> },
                 { title: L('配置', 'Configuration'), render: (_, p) => <Mono>{B(configName(state, p.deployment.resolvedConfigId))}</Mono> },
                 { title: L('下发', 'Dispatch'), render: (_, p) => <Mono>{p.deployment.id}</Mono> },
+                { title: L('推送', 'Push'), render: (_, p) => <DeliveryTag target={p.target} /> },
                 { title: L('尝试', 'Attempt'), render: (_, p) => p.target.attempt },
                 { title: L('本次尝试开始', 'Attempt since'), render: (_, p) => when(p.target.updatedAt) },
                 {
@@ -201,7 +278,9 @@ export function SimulatorPage() {
             />
           )}
         </Card>
+        <ClockCard system={system} />
         <SoftwareProviderCard system={system} />
+        <VehicleOtaCard system={system} />
         <Card title={L('车端 Agent', 'On-vehicle agents')}>
           <Table
             rowKey="id"

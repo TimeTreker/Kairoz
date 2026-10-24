@@ -74,6 +74,19 @@ export const SCENARIOS: Scenario[] = [
     ],
   },
   {
+    key: 'borrowing',
+    titleZh: '借用车辆与下发、推送',
+    titleEn: 'Borrowing a vehicle; dispatch and push',
+    steps: [
+      { account: 'workspace_manager', workspace: 'team-brake', page: 'fleet/loans', zh: '在“借用”点“借用车辆”，对 VEH-004“申请借用”：制动研发车组，7 天，AEB 联合制动验证', en: 'Under Loans click Borrow a vehicle and ask for VEH-004: 制动研发车组, 7 days, joint AEB brake validation', expectZh: '目录只显示类型、资源池、整车软件、状态和使用方，不显示车上配置', expectEn: 'The catalog shows type, pool, software, status and who uses it, never the configuration' },
+      { account: 'adc_integrator', workspace: 'team-adc-system', page: 'fleet/loans', zh: '在“借出”对 VEH-004 点“同意”', en: 'Under Lent click Agree for VEH-004', expectZh: '使用方先同意，再交给车辆资源', expectEn: 'The workspace using the car agrees first, then vehicle resources decide' },
+      { account: 'resource', page: 'fleet/loans', zh: '在“借用审批”批准', en: 'Approve under Loan approvals', expectZh: 'VEH-004 离开系统应用研发车组，加入制动研发车组，标注“借用 · 至 …”', expectEn: 'VEH-004 leaves its ADC group and joins the brake group, tagged Borrowed · until …' },
+      { account: 'business', workspace: 'team-brake', page: 'fleet/groups', zh: '在车辆模拟器让 VEH-004“上报”，再打开它的“与车辆组不匹配”', en: 'Make VEH-004 report in the simulator, then open its Does not fit tag', expectZh: '软件未知时不推送；两种做法：修改策略并下发，或更新整车版本', expectEn: 'Unknown software is not pushed; two ways: adapt the policies and dispatch, or update the vehicle’s software' },
+      { account: 'business', workspace: 'team-brake', page: 'fleet/groups', zh: '“更新整车版本”到 1.0，在模拟器“整车 OTA 系统”点“更新成功”', en: 'Update vehicle software to 1.0, then Update succeeds in the simulator’s vehicle OTA card', expectZh: '车辆重启上报 1.0，云端推送车辆组的配置（随车辆组推送），回执后生效', expectEn: 'The vehicle restarts and reports 1.0; the cloud pushes the group’s configuration, applied after the receipt' },
+      { account: 'workspace_manager', workspace: 'team-brake', page: 'simulator', zh: '在“模拟时间”推进 7 天两次', en: 'Under Simulated time move forward 7 days twice', expectZh: '借用到期：不能再下发，双方收到提醒；可申请延期或归还', expectEn: 'The loan is overdue: no new dispatches, both sides are warned; extend or return it' },
+    ],
+  },
+  {
     key: 'intake',
     titleZh: 'DCL 接入 · 敏感文件审核',
     titleEn: 'DCL intake · sensitive review',

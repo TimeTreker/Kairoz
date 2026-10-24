@@ -755,6 +755,8 @@ Object.assign(ERROR_LABELS, {
 });
 export const LOAN_STATUS_LABELS: Record<string, Bilingual> = {
   REQUESTED: b('待审批', 'Requested'),
+  TO_AGREE: b('待使用方同意', 'Waiting for lenders'),
+  TO_APPROVE: b('待车辆资源批准', 'Waiting for vehicle resources'),
   APPROVED: b('借用中', 'On loan'),
   OVERDUE: b('已到期', 'Overdue'),
   REJECTED: b('未批准', 'Rejected'),
@@ -764,6 +766,8 @@ export const LOAN_STATUS_LABELS: Record<string, Bilingual> = {
 };
 export const LOAN_STATUS_COLORS: Record<string, string> = {
   REQUESTED: 'processing',
+  TO_AGREE: 'processing',
+  TO_APPROVE: 'processing',
   APPROVED: 'green',
   OVERDUE: 'red',
   REJECTED: 'default',

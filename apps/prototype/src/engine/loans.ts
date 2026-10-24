@@ -92,7 +92,7 @@ export function loanCatalog(s: State, workspaceId: string): CatalogEntry[] {
         openLoanId: open?.id ?? null,
       };
     })
-    .sort((a, b) => a.resourceId.localeCompare(b.resourceId));
+    .sort((a, b) => (a.type === b.type ? a.resourceId.localeCompare(b.resourceId) : a.type === 'PHYSICAL' ? -1 : 1));
 }
 
 function allowBorrower(ctx: Ctx, l: Pick<Loan, 'id' | 'workspaceId'>, r: Resource) {

@@ -15,9 +15,14 @@ import { orphanedOrgObjects } from '../engine/org.ts';
 import { PERSONAL_SIM_QUOTA, personalPending, personalSimsOf } from '../engine/personal-sim.ts';
 import { softwareChangesFor, unrecordedReports } from '../engine/software-change.ts';
 import { OutcomeTag, SoftwareChangeDrawer } from '../components/software-change.tsx';
+import { LoanStatusTag } from '../components/loans.tsx';
+import { CheckOutcomeTag } from '../components/publication-check.tsx';
+import { GroupFitDrawer } from '../components/vehicle-software.tsx';
+import { mismatchesFor } from '../engine/delivery.ts';
+import { borrowedBy, loansToAgree, managedLoans } from '../engine/loans.ts';
 import { otaRollouts } from '../engine/ota.ts';
 import { releaseFor, releasesOf } from '../engine/release.ts';
-import { managedResources, pendingDeploymentOf, vehicleGroupsOf, workspaceVehicles } from '../engine/fleet.ts';
+import { isOverdue, managedResources, pendingDeploymentOf, vehicleGroupsOf, workspaceVehicles } from '../engine/fleet.ts';
 import { referenceRequestsFor } from '../engine/references.ts';
 import { candidateTestStatus, featureTestStatus, testRequestsOf } from '../engine/validation.ts';
 import type { Feature } from '../engine/types.ts';
@@ -54,6 +59,7 @@ export function WorkbenchPage() {
   const { L, B } = useI18n();
   const cards: ReactNode[] = [];
   const [changeOf, setChangeOf] = useState<string | null>(null);
+  const [fitOfId, setFitOf] = useState<string | null>(null);
   const features = workspace ? visibleFeatures(state, actor, workspace.id) : [];
 
   if (roles.includes('BUSINESS_DEV') && workspace) {
@@ -134,6 +140,25 @@ export function WorkbenchPage() {
       </Card>,
     );
   }
+  const misfits = workspace ? mismatchesFor(state, actor, workspace.id) : [];
+  if (misfits.length > 0) {
+    cards.push(
+      <Card key="misfits" title={L('车辆与车辆组的发布不匹配', 'Vehicles that do not fit their group')}>
+        <Typography.Paragraph type="secondary">
+          {L('这些车辆加入车辆组或更新了整车软件，但车辆组已下发的配置不适合它们的软件，云端不会推送。修改策略并下发，或更新车辆的整车版本。', 'These vehicles joined a group or had their software updated, but what was dispatched to the group does not fit their software, so nothing is pushed. Adapt the policies and dispatch, or update the vehicle’s software.')}
+        </Typography.Paragraph>
+        {misfits.map((f) => (
+          <Row2 key={f.resourceId} onClick={() => setFitOf(f.resourceId)}>
+            <Space>
+              <Mono>{f.resourceId}</Mono>
+              <span>{state.vehicleGroups[f.vehicleGroupId]?.name}</span>
+            </Space>
+            <CheckOutcomeTag check={f.check} />
+          </Row2>
+        ))}
+      </Card>,
+    );
+  }
   const changes = workspace ? softwareChangesFor(state, actor, workspace.id) : [];
   if (changes.length > 0) {
     cards.push(
@@ -169,6 +194,27 @@ export function WorkbenchPage() {
             </Badge>
           </Button>
         )}
+        {loansToAgree(state, actor, workspace.id).map((l) => (
+          <Row2 key={l.id} onClick={() => navigate('fleet/loans')}>
+            <Space>
+              <Typography.Text type="warning">{L('借用待同意', 'Loan to agree')}</Typography.Text>
+              <Mono>{l.resourceId}</Mono>
+            </Space>
+            <Typography.Text type="secondary">{state.workspaces[l.workspaceId]?.name}</Typography.Text>
+          </Row2>
+        ))}
+        {borrowedBy(state, workspace.id)
+          .filter((l) => l.status === 'APPROVED' || l.status === 'REQUESTED')
+          .map((l) => (
+            <Row2 key={l.id} onClick={() => navigate('fleet/loans')}>
+              <Space>
+                <span>{L('借入', 'Borrowed')}</span>
+                <Mono>{l.resourceId}</Mono>
+                <span>{L(`至 ${l.dueDate}`, `until ${l.dueDate}`)}</span>
+              </Space>
+              <LoanStatusTag loan={l} />
+            </Row2>
+          ))}
       </Card>,
     );
   }
@@ -308,6 +354,19 @@ export function WorkbenchPage() {
           <Col span={8}><Statistic title={L('软件版本未知', 'Unknown software')} value={managed.filter((r) => r.type === 'PHYSICAL' && !r.integrationVersion).length} /></Col>
           <Col span={8}><Statistic title={L('等待回执', 'Awaiting receipts')} value={managed.filter((r) => pendingDeploymentOf(state, r.id)).length} /></Col>
         </Row>
+        {(() => {
+          const loans = managedLoans(state, actor);
+          const toApprove = loans.filter((l) => l.status === 'REQUESTED' && l.lenders.every((x) => x.decision === 'AGREED'));
+          const extensions = loans.filter((l) => l.status === 'APPROVED' && l.extensions.some((x) => x.status === 'PENDING'));
+          const overdue = loans.filter((l) => isOverdue(state, l));
+          return toApprove.length + extensions.length + overdue.length > 0 ? (
+            <Button type="link" style={{ paddingLeft: 0, marginTop: 8 }} onClick={() => navigate('fleet/loans')}>
+              <Badge count={toApprove.length + extensions.length + overdue.length} size="small" offset={[10, 0]}>
+                {L(`借用待审批 ${toApprove.length} · 延期 ${extensions.length} · 已到期 ${overdue.length}`, `Loans to approve ${toApprove.length} · extensions ${extensions.length} · overdue ${overdue.length}`)}
+              </Badge>
+            </Button>
+          ) : null;
+        })()}
         {unrecordedReports(state, actor).map((c) => (
           <Row2 key={c.id} onClick={() => navigate('fleet/registry')}>
             <Space>
@@ -397,6 +456,7 @@ export function WorkbenchPage() {
         </Row>
       )}
       <SoftwareChangeDrawer changeId={changeOf} onClose={() => setChangeOf(null)} />
+      <GroupFitDrawer resourceId={fitOfId} onClose={() => setFitOf(null)} />
     </div>
   );
 }

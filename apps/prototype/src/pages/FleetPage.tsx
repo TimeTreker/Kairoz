@@ -7,6 +7,10 @@ import { ClientReportDrawer } from '../components/client-report.tsx';
 import { PersonalSims } from '../components/personal-sim.tsx';
 import { SimSoftwareDrawer, isDerivedImage } from '../components/sim-software.tsx';
 import { SoftwareChangeDrawer } from '../components/software-change.tsx';
+import { LoanVehicleTag, LoansPanel } from '../components/loans.tsx';
+import { DeliveryTag } from '../components/testing.tsx';
+import { GroupFitDrawer, SoftwareUpdateTag, UpdateSoftwareModal, useCanUpdateSoftware } from '../components/vehicle-software.tsx';
+import { fitOf } from '../engine/delivery.ts';
 import { openChangeOf, unrecordedReports } from '../engine/software-change.ts';
 import { catalogImages } from '../engine/sim-software.ts';
 import { EnvTag, Hint, LabelTag, Mono, PageHeader, ShortId, configName, when } from '../components/common.tsx';
@@ -35,6 +39,7 @@ import {
   setGroupBase,
   setResourceStatus,
   setSoftwareManifest,
+  simulationWorkspace,
   softwareKey,
   startSimulation,
   stopSimulation,
@@ -50,13 +55,21 @@ import { compareVersions, releasesOf } from '../engine/release.ts';
 import type { Resource, SoftwareVersion, State, TestRequest } from '../engine/types.ts';
 import { sha256Hex } from '../domain/canonical.ts';
 import { useI18n } from '../i18n/i18n.tsx';
-import { CONFIG_ANSWER_LABELS, ENV_LABELS, GROUP_EVENT_LABELS, REQUEST_STATUS_COLORS, REQUEST_STATUS_LABELS, RESOURCE_STATUS_LABELS, RESOURCE_TYPE_LABELS, VEHICLE_GROUP_PURPOSE_LABELS, setName } from '../i18n/vocab.ts';
+import { CHANGE_OUTCOME_LABELS, CONFIG_ANSWER_LABELS, ENV_LABELS, GROUP_EVENT_LABELS, REQUEST_STATUS_COLORS, REQUEST_STATUS_LABELS, RESOURCE_STATUS_LABELS, RESOURCE_TYPE_LABELS, VEHICLE_GROUP_PURPOSE_LABELS, setName } from '../i18n/vocab.ts';
 import { issueLabel } from '../i18n/issues.ts';
 import { navigate } from '../app/router.ts';
 
 const ANSWER_COLORS: Record<string, string> = { PERSONAL: 'purple', GROUP_TARGET: 'blue', REPUBLISH: 'gold', BASE_CONFLICT: 'red', NO_BASE: 'red', HELD: 'purple', TASK: 'processing', APPLIED: 'default', INITIAL: 'default', BLOCKED: 'red' };
 
-function VehicleTable({ vehicles, extra }: { vehicles: Resource[]; extra?: (r: Resource) => React.ReactNode }) {
+/** The delivery state of the vehicle's pending dispatch: not pushed yet, or pushed and awaiting its receipt. */
+function PendingDeliveryTag({ resourceId }: { resourceId: string }) {
+  const state = useEngineState();
+  const id = pendingDeploymentOf(state, resourceId);
+  const t = id ? state.deployments[id]?.targets.find((x) => x.resourceId === resourceId) : undefined;
+  return t ? <DeliveryTag target={t} /> : null;
+}
+
+function VehicleTable({ vehicles, extra, workspaceId = '' }: { vehicles: Resource[]; extra?: (r: Resource) => React.ReactNode; workspaceId?: string }) {
   const state = useEngineState();
   const { L, B } = useI18n();
   return (
@@ -105,11 +118,12 @@ function VehicleTable({ vehicles, extra }: { vehicles: Resource[]; extra?: (r: R
           title: L('车辆组 / 下发', 'Group / dispatch'),
           render: (_, r) => {
             const g = state.vehicleGroups[state.groupMembers[r.id] ?? ''];
-            const pending = pendingDeploymentOf(state, r.id);
             return (
               <Space size={4} wrap>
                 {g ? <Tag>{g.name}</Tag> : !r.personal && <Typography.Text type="secondary">{L('未分组', 'Ungrouped')}</Typography.Text>}
-                {pending && <Tag color="processing">{L('等待回执', 'Awaiting receipt')}</Tag>}
+                <LoanVehicleTag resourceId={r.id} workspaceId={workspaceId} />
+                <PendingDeliveryTag resourceId={r.id} />
+                <SoftwareUpdateTag resourceId={r.id} />
                 {r.instance && <Tag color={r.instance === 'RUNNING' ? 'green' : 'default'}>{r.instance === 'RUNNING' ? L('实例运行中', 'running') : L('实例已停止', 'stopped')}</Tag>}
                 {r.reservation && (
                   <Tooltip title={`${state.accounts[r.reservation.by]?.displayName} · ${when(r.reservation.at)}`}>
@@ -139,13 +153,15 @@ function WorkspaceVehicles() {
   const [purpose, setPurpose] = useState('');
   const [clientOf, setClientOf] = useState<string | null>(null);
   const [imageOf, setImageOf] = useState<string | null>(null);
+  const [updateOf, setUpdateOf] = useState<string | null>(null);
+  const canUpdate = useCanUpdateSoftware();
   const [form] = Form.useForm();
   if (!workspace) return null;
   const vehicles = workspaceVehicles(state, workspace.id);
   const canManage = ENVS.some((env) => can('workspace.resources', { workspaceId: workspace.id, env }));
   const canSim = ENVS.some((env) => can('simulation.manage', { workspaceId: workspace.id, env }));
   const manages = (r: Resource) => can('workspace.resources', { workspaceId: workspace.id, scope: r.pool, env: r.env });
-  const runsSim = (r: Resource) => r.type === 'SIMULATION' && can('simulation.manage', { workspaceId: r.homeWorkspaceId ?? workspace.id, scope: r.pool, env: r.env });
+  const runsSim = (r: Resource) => r.type === 'SIMULATION' && can('simulation.manage', { workspaceId: simulationWorkspace(state, r) ?? workspace.id, scope: r.pool, env: r.env });
   const images = catalogImages(state, workspace.vehicleModelId);
   return (
     <Card
@@ -167,6 +183,7 @@ function WorkspaceVehicles() {
       <Hint>{L('工作区只获得车辆的使用权；车辆的身份、归属资源池与环境由车辆资源管理员维护。', 'A workspace only gains use of vehicles; identity, pool and environment are maintained by vehicle resources.')}</Hint>
       <VehicleTable
         vehicles={vehicles}
+        workspaceId={workspace.id}
         extra={(r) => (
           <Space size={0} wrap>
             {runsSim(r) &&
@@ -194,6 +211,11 @@ function WorkspaceVehicles() {
                 {L('运行镜像', 'Running image')}
               </Button>
             )}
+            {canUpdate(workspace.id, r) && (
+              <Button type="link" size="small" onClick={() => setUpdateOf(r.id)}>
+                {L('更新整车版本', 'Update software')}
+              </Button>
+            )}
             {can('clientReport.read', { workspaceId: workspace.id, env: r.env }) && (
               <Button type="link" size="small" onClick={() => setClientOf(r.id)}>
                 {L('客户端状态', 'Client state')}
@@ -209,6 +231,7 @@ function WorkspaceVehicles() {
       />
       <ClientReportDrawer resourceId={clientOf} workspaceId={workspace.id} onClose={() => setClientOf(null)} />
       <SimSoftwareDrawer resourceId={imageOf} onClose={() => setImageOf(null)} />
+      {updateOf && <UpdateSoftwareModal workspaceId={workspace.id} resourceId={updateOf} onClose={() => setUpdateOf(null)} />}
       <Modal
         open={reserving !== null}
         title={`${L('预约车辆', 'Reserve vehicle')} · ${reserving?.id}`}
@@ -287,6 +310,7 @@ function VehicleGroups() {
   const [creating, setCreating] = useState(false);
   const [member, setMember] = useState<{ groupId: string; action: 'add' | 'remove'; resourceId?: string } | null>(null);
   const [changeOf, setChangeOf] = useState<string | null>(null);
+  const [fitOfId, setFitOf] = useState<string | null>(null);
   const [form] = Form.useForm();
   const [memberForm] = Form.useForm();
   if (!workspace) return null;
@@ -392,14 +416,28 @@ function VehicleGroups() {
                         render: (_, id) => {
                           // A software change the team has not confirmed yet: open its check.
                           const change = openChangeOf(state, id);
+                          // A vehicle waiting to follow the group: pushed on its next report, or it does not fit.
+                          const fit = fitOf(state, id);
                           return (
                             <Space size={4} wrap>
                               <Mono>{id}</Mono>
+                              <LoanVehicleTag resourceId={id} workspaceId={g.workspaceId} />
                               {change && (
                                 <Tag color="orange" style={{ cursor: 'pointer' }} onClick={() => setChangeOf(change.id)}>
                                   {L('软件', 'Software')} {change.fromVersion ?? '—'} → {change.toVersion} · {L('待确认', 'to confirm')}
                                 </Tag>
                               )}
+                              {fit && !fit.fits && fit.check.outcome !== 'NOT_PUBLISHED' && (
+                                <Tag color="red" style={{ cursor: 'pointer' }} onClick={() => setFitOf(id)}>
+                                  {L('与车辆组不匹配', 'Does not fit')} · {B(CHANGE_OUTCOME_LABELS[fit.check.outcome])}
+                                </Tag>
+                              )}
+                              {fit?.fits && (
+                                <Tooltip title={L('车辆下次上报时，云端推送已下发给车辆组的配置。', 'On the vehicle’s next report the cloud pushes what was dispatched to the group.')}>
+                                  <Tag color="cyan">{L('上报后推送', 'Pushed on next report')}</Tag>
+                                </Tooltip>
+                              )}
+                              <SoftwareUpdateTag resourceId={id} />
                             </Space>
                           );
                         },
@@ -421,7 +459,7 @@ function VehicleGroups() {
                                       <Tag color={ANSWER_COLORS[a.reason] ?? 'default'}>{B(CONFIG_ANSWER_LABELS[a.reason])}</Tag>
                                       {a.reason === 'GROUP_TARGET' && <Mono>{B(configName(state, a.configId))}</Mono>}
                                       {/* Not applied: a receipt is on its way, or (after an image change) nothing was sent yet. */}
-                                      {due && (pendingDeploymentOf(state, id) ? <Tag color="gold">{L('待回执', 'awaiting receipt')}</Tag> : <Tag color="gold">{L('需重新下发', 'publish again')}</Tag>)}
+                                      {due && (pendingDeploymentOf(state, id) ? <PendingDeliveryTag resourceId={id} /> : !fitOf(state, id)?.fits && <Tag color="gold">{L('需重新下发', 'publish again')}</Tag>)}
                                     </Space>
                                   </Tooltip>
                                 );
@@ -529,6 +567,7 @@ function VehicleGroups() {
         </Form>
       </Modal>
       <SoftwareChangeDrawer changeId={changeOf} onClose={() => setChangeOf(null)} />
+      <GroupFitDrawer resourceId={fitOfId} onClose={() => setFitOf(null)} />
     </Space>
   );
 }
@@ -1080,6 +1119,7 @@ export function FleetPage({ tab = 'workspace' }: { tab?: string }) {
   const { workspace } = useWorkspace();
   const { L } = useI18n();
   const isResourceAdmin = actor.grants.some((g) => g.role === 'VEHICLE_RESOURCE');
+  const loans = isResourceAdmin || (!!workspace && actor.grants.some((g) => g.role === 'WORKSPACE_ADMIN') && ENVS.some((env) => can('workspace.resources', { workspaceId: workspace.id, env })));
   const personal =
     !!workspace &&
     workspace.groupIds.some((id) => {
@@ -1095,6 +1135,7 @@ export function FleetPage({ tab = 'workspace' }: { tab?: string }) {
         items={[
           { key: 'workspace', label: L('工作区车辆', 'Workspace vehicles'), children: <WorkspaceVehicles /> },
           { key: 'groups', label: L('车辆组', 'Vehicle groups'), children: <VehicleGroups /> },
+          ...(loans ? [{ key: 'loans', label: L('借用', 'Loans'), children: <LoansPanel /> }] : []),
           ...(personal && workspace ? [{ key: 'personal', label: L('我的研发仿真', 'My simulations'), children: <PersonalSims workspaceId={workspace.id} /> }] : []),
           ...(isResourceAdmin ? [{ key: 'registry', label: L('车辆台账', 'Vehicle registry'), children: <Registry /> }] : []),
           { key: 'catalogs', label: L('软件版本与镜像', 'Software & images'), children: <Catalogs /> },

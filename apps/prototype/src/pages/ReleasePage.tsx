@@ -11,6 +11,7 @@ import { ApplicabilityChecks, ReleaseDiffDrawer, SoftwareVersionsCard } from '..
 import { EmergencyStopsCard, RequestStopModal } from '../components/emergency.tsx';
 import { EnvTag, Hint, LabelTag, Mono, PageHeader, ShortId, configName, when } from '../components/common.tsx';
 import { JsonExportModal, downloadJson } from '../components/JsonExport.tsx';
+import { DeliveryTag } from '../components/testing.tsx';
 import type { JsonFile } from '../components/JsonExport.tsx';
 import { displayName } from '../engine/config.ts';
 import { membersOf, ungroupedVehicles, vehicleGroupsOf } from '../engine/fleet.ts';
@@ -21,7 +22,7 @@ import { applicableVersions, compareVersions, nextDclVersion, previousRelease, p
 import type { Candidate, Deployment, Release, State, VehicleGroup } from '../engine/types.ts';
 import { useI18n } from '../i18n/i18n.tsx';
 import { issueLabel } from '../i18n/issues.ts';
-import { CONFIG_ANSWER_LABELS, DEPLOYMENT_STATUS_LABELS, TARGET_STATUS_COLORS, TARGET_STATUS_LABELS, setName } from '../i18n/vocab.ts';
+import { CONFIG_ANSWER_LABELS, DEPLOYMENT_STATUS_LABELS, TARGET_STATUS_LABELS, setName } from '../i18n/vocab.ts';
 
 /** The project workspace holding production vehicle groups for the current workspace. */
 function projectOf(s: State, workspaceId: string | undefined): string | undefined {
@@ -619,7 +620,7 @@ function RolloutCard({ deployment: d, canManage }: { deployment: Deployment; can
         columns={[
           { title: L('车辆', 'Vehicle'), render: (_, t) => <Mono>{t.resourceId}</Mono> },
           { title: L('尝试', 'Attempt'), dataIndex: 'attempt' },
-          { title: L('状态', 'Status'), render: (_, t) => <Tag color={TARGET_STATUS_COLORS[t.status]}>{B(TARGET_STATUS_LABELS[t.status])}</Tag> },
+          { title: L('状态', 'Status'), render: (_, t) => <DeliveryTag target={t} /> },
           { title: L('之前生效', 'Previously'), render: (_, t) => <Mono>{B(configName(state, t.previousConfigId))}</Mono> },
           { title: L('错误', 'Error'), render: (_, t) => (t.error ? B(issueLabel(t.error), t.error) : '—') },
           {
