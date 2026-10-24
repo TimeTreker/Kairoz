@@ -8,6 +8,7 @@ import { useCan, useRun, useWorkspace } from '../app/hooks.ts';
 import { navigate } from '../app/router.ts';
 import { useEngineState } from '../app/store.ts';
 import { ApplicabilityChecks, ReleaseDiffDrawer, SoftwareVersionsCard } from '../components/applicability.tsx';
+import { EmergencyStopsCard, RequestStopModal } from '../components/emergency.tsx';
 import { EnvTag, Hint, LabelTag, Mono, PageHeader, ShortId, configName, when } from '../components/common.tsx';
 import { JsonExportModal, downloadJson } from '../components/JsonExport.tsx';
 import type { JsonFile } from '../components/JsonExport.tsx';
@@ -15,7 +16,8 @@ import { displayName } from '../engine/config.ts';
 import { membersOf, ungroupedVehicles, vehicleGroupsOf } from '../engine/fleet.ts';
 import { answerConfigRequest, cancelOta, createOta, expandOta, otaProblems, otaRollouts, pauseOta, resumeOta, rollbackOta, rollbackProblems } from '../engine/ota.ts';
 import { isOpenCheck } from '../engine/applicability.ts';
-import { applicableVersions, compareVersions, nextDclVersion, previousRelease, promoteCandidate, releaseConfiguration, releaseFor, releasesOf, testedVersions } from '../engine/release.ts';
+import { releaseWorkspace } from '../engine/emergency.ts';
+import { applicableVersions, compareVersions, nextDclVersion, previousRelease, promoteCandidate, releaseConfiguration, releaseFor, releasesOf, setInEffect, testedVersions, versionsInEffect } from '../engine/release.ts';
 import type { Candidate, Deployment, Release, State, VehicleGroup } from '../engine/types.ts';
 import { useI18n } from '../i18n/i18n.tsx';
 import { issueLabel } from '../i18n/issues.ts';
@@ -96,6 +98,7 @@ function ReleasesTab({ modelId, workspaceId }: { modelId: string; workspaceId: s
   const can = useCan();
   const [promoting, setPromoting] = useState<Candidate | null>(null);
   const [comparing, setComparing] = useState<Release | null>(null);
+  const [stopping, setStopping] = useState<{ release: Release; policyId: string } | null>(null);
   const [exported, setExported] = useState<JsonFile | null>(null);
   const exportConfiguration = (releaseId: string) => {
     const r = state.releases[releaseId]!;
@@ -145,21 +148,42 @@ function ReleasesTab({ modelId, workspaceId }: { modelId: string; workspaceId: s
         <Table
           rowKey="id"
           pagination={false}
+          scroll={{ x: 'max-content' }}
           dataSource={releases}
           locale={{ emptyText: L('尚无正式发布；首次正式集成前车辆使用内部初始研发配置。', 'No release yet; before the first formal integration vehicles use the internal initial configuration.') }}
           expandable={{
-            expandedRowRender: (r) => (
-              <Table
-                rowKey="groupId"
-                size="small"
-                pagination={false}
-                dataSource={Object.entries(r.groups).map(([groupId, commitId]) => ({ groupId, commitId }))}
-                columns={[
-                  { title: L('业务分组', 'Group'), render: (_, x) => <Mono>{state.groups[x.groupId]?.code}</Mono> },
-                  { title: L('提交', 'Commit'), render: (_, x) => <Mono>{displayName(state, x.commitId)}</Mono> },
-                ]}
-              />
-            ),
+            expandedRowRender: (r) => {
+              const inEffect = versionsInEffect(state, r).length > 0;
+              return (
+                <Table
+                  rowKey="groupId"
+                  size="small"
+                  pagination={false}
+                  dataSource={Object.entries(r.groups).map(([groupId, commitId]) => ({ groupId, commitId }))}
+                  columns={[
+                    { title: L('业务分组', 'Group'), render: (_, x) => <Mono>{state.groups[x.groupId]?.code}</Mono> },
+                    { title: L('提交', 'Commit'), render: (_, x) => <Mono>{displayName(state, x.commitId)}</Mono> },
+                    {
+                      title: L('策略', 'Policies'),
+                      render: (_, x) => (
+                        <Space size={4} wrap>
+                          {Object.entries(state.commits[x.commitId]!.policies).map(([policyId, versionId]) => (
+                            <Space key={policyId} size={0}>
+                              <Tag>{`${policyId} v${state.policyVersions[versionId]?.version}`}</Tag>
+                              {inEffect && can('emergency.request', { workspaceId: releaseWorkspace(state, r), groupId: x.groupId, scope: 'Vehicle' }) && (
+                                <Button type="link" size="small" danger onClick={() => setStopping({ release: r, policyId })}>
+                                  {L('紧急停用', 'Emergency stop')}
+                                </Button>
+                              )}
+                            </Space>
+                          ))}
+                        </Space>
+                      ),
+                    },
+                  ]}
+                />
+              );
+            },
           }}
           columns={[
             {
@@ -178,11 +202,17 @@ function ReleasesTab({ modelId, workspaceId }: { modelId: string; workspaceId: s
             {
               title: L('适用整车版本（当前）', 'Applies to (now)'),
               render: (_, r) =>
-                applicableVersions(state, r).map((v) => (
-                  <Tag key={v} color={r.vehicleIntegrationVersions.includes(v) ? undefined : 'blue'}>
-                    {`${r.vehicleModelId} ${v}`}
-                  </Tag>
-                )),
+                applicableVersions(state, r).map((v) => {
+                  // A newer set that applies to the version is the one in effect there.
+                  const effective = setInEffect(state, r.vehicleModelId, v)?.id === r.id;
+                  return (
+                    <Tooltip key={v} title={[r.vehicleIntegrationVersions.includes(v) ? null : L('经适用性确认追加', 'added by an applicability check'), effective ? null : L('已由更新的策略集生效', 'a newer set is in effect')].filter(Boolean).join(L('；', '; ')) || undefined}>
+                      <Tag color={r.vehicleIntegrationVersions.includes(v) ? undefined : 'blue'} style={effective ? undefined : { textDecoration: 'line-through', opacity: 0.6 }}>
+                        {`${r.vehicleModelId} ${v}`}
+                      </Tag>
+                    </Tooltip>
+                  );
+                }),
             },
             { title: L('序号', 'Seq'), dataIndex: 'sequence' },
             { title: L('候选', 'Candidate'), render: (_, r) => <Mono>{r.candidateId ? state.candidates[r.candidateId]?.label : '—'}</Mono> },
@@ -209,6 +239,8 @@ function ReleasesTab({ modelId, workspaceId }: { modelId: string; workspaceId: s
       </Card>
       {promoting && <PromoteModal candidate={promoting} onClose={() => setPromoting(null)} />}
       <ReleaseDiffDrawer fromId={comparing ? (previousRelease(state, comparing)?.id ?? null) : null} toId={comparing?.id ?? null} onClose={() => setComparing(null)} />
+      <EmergencyStopsCard modelId={modelId} />
+      <RequestStopModal target={stopping} onClose={() => setStopping(null)} />
       <JsonExportModal title={L('导出配置集合', 'Export configuration')} file={exported} onClose={() => setExported(null)} />
     </Space>
   );

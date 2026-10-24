@@ -506,6 +506,9 @@ Object.assign(ERROR_LABELS, {
   INCOMPATIBLE_POLICIES: b('部分策略需要的信号或数据源在该软件中不存在，需发布修改后的策略集', 'Some policies need signals or sources the software lacks; publish a changed policy set instead'),
   NOT_APPLICABLE: b('该策略集并不适用于这个软件版本', 'The policy set does not apply to this software version'),
   PRODUCTION_GROUP_BASE: b('量产车辆组总是取软件版本当前适用的策略集，不能指定显式基线', 'Production groups always take the set in effect for their software; they have no explicit base'),
+  POLICY_NOT_IN_SET: b('该策略不在这个策略集中', 'The policy is not in this policy set'),
+  SET_NOT_IN_EFFECT: b('该策略集当前不适用于任何软件版本，无需紧急停用', 'The policy set is in effect for no software version; there is nothing to stop'),
+  STOP_PENDING: b('该策略已有待决定的紧急停用申请', 'A stop of this policy is already waiting for a decision'),
   POLICY_NOT_SWITCHABLE: b('只能关闭其他业务分组的策略；本分组的策略只能通过提交修改', 'Only other business groups’ policies can be switched off; a group changes its own policies by commit'),
 });
 
@@ -539,3 +542,11 @@ export const GROUP_EVENT_LABELS: Record<string, Bilingual> = {
   APPROVAL_REQUIRED: b('下发需审批', 'Approval required'),
   APPROVAL_NOT_REQUIRED: b('直接下发', 'Direct dispatch'),
 };
+
+export const STOP_STATUS_LABELS: Record<string, Bilingual> = {
+  REQUESTED: b('待批准', 'Awaiting decision'),
+  APPROVED: b('已批准', 'Approved'),
+  REJECTED: b('已拒绝', 'Rejected'),
+};
+
+export const STOP_STATUS_COLORS: Record<string, string> = { REQUESTED: 'gold', APPROVED: 'red', REJECTED: 'default' };

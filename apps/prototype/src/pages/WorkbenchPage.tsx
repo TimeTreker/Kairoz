@@ -9,6 +9,7 @@ import { visibleFeatures } from '../engine/config.ts';
 import { intakeQueue } from '../engine/intake.ts';
 import { isConfirmed, isMergeWorkspace, verifiedSources } from '../engine/integration.ts';
 import { blockedProductionVehicles } from '../engine/applicability.ts';
+import { emergencyStopsOf } from '../engine/emergency.ts';
 import { otaRollouts } from '../engine/ota.ts';
 import { releaseFor, releasesOf } from '../engine/release.ts';
 import { managedResources, pendingDeploymentOf, vehicleGroupsOf, workspaceVehicles } from '../engine/fleet.ts';
@@ -228,6 +229,17 @@ export function WorkbenchPage() {
             <LabelTag map={CHECK_STATUS_LABELS} value={c.status} color={CHECK_STATUS_COLORS[c.status]} />
           </Row2>
         ))}
+        {emergencyStopsOf(state, workspace.vehicleModelId)
+          .filter((x) => x.status === 'REQUESTED')
+          .map((x) => (
+            <Row2 key={x.id} onClick={() => navigate('release')}>
+              <Space>
+                <Typography.Text type="danger">{L('紧急停用待批准', 'Emergency stop to decide')}</Typography.Text>
+                <Mono>{x.policyId}</Mono>
+              </Space>
+              <Typography.Text type="secondary">{state.accounts[x.requestedBy]?.displayName}</Typography.Text>
+            </Row2>
+          ))}
         {blocked.length > 0 && (
           <Typography.Paragraph type="danger" style={{ marginBottom: 0 }}>
             {L(`${blocked.length} 辆量产车的软件版本没有适用的策略集：`, `${blocked.length} production vehicle(s) run software no policy set applies to: `)}

@@ -83,6 +83,9 @@ export const ACTIONS = {
   'release.promote': { roles: ['CONFIG_RELEASE'], env: 'production' },
   /** Opening, confirming and withdrawing a set's applicability to software versions. */
   'applicability.confirm': { roles: ['CONFIG_RELEASE'], env: 'production' },
+  /** Emergency stop of one policy (紧急停用): asked by DCL or release, decided by another release person. */
+  'emergency.request': { roles: ['DCL_ENGINEER', 'CONFIG_RELEASE'], env: 'production' },
+  'emergency.approve': { roles: ['CONFIG_RELEASE'], env: 'production' },
   /** A domain's subsystem release: an integration input, never a production release. */
   'subsystem.publish': { roles: ['CONFIG_RELEASE'], env: 'testing' },
   'ota.manage': { roles: ['CONFIG_RELEASE'], env: 'production' },
@@ -210,7 +213,7 @@ export const PAGE_ACCESS: Readonly<Record<string, PageAccess>> = {
   processing: { roles: ['DCL_ENGINEER', 'BUSINESS_DEV'] },
   fleet: { roles: ['VEHICLE_RESOURCE', 'WORKSPACE_ADMIN', 'BUSINESS_DEV', 'BUSINESS_TEST', 'INTEGRATION_TEST', 'CONFIG_RELEASE', 'DCL_ENGINEER'] },
   integration: { roles: ['CONFIG_INTEGRATOR', 'INTEGRATION_TEST', 'DCL_ENGINEER', 'CONFIG_RELEASE'] },
-  release: { roles: ['CONFIG_RELEASE'] },
+  release: { roles: ['CONFIG_RELEASE', 'DCL_ENGINEER'] },
   query: { roles: ['BUSINESS_DEV', 'BUSINESS_TEST', 'DCL_ENGINEER', 'CONFIG_INTEGRATOR', 'INTEGRATION_TEST', 'CONFIG_RELEASE'] },
   org: { actions: ['org.manage', 'workspace.manage'] },
   accounts: { actions: ['account.manage'] },
