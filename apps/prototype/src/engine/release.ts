@@ -100,6 +100,7 @@ export function promoteCandidate(ctx: Ctx, candidateId: string, input: { dclVers
     resolvedConfigId,
     sequence: (newest?.sequence ?? 0) + 1,
     notes: input.notes?.trim() ?? '',
+    emergency: null,
     publishedBy: ctx.user().username,
     publishedAt: ctx.now,
   };

@@ -488,3 +488,8 @@ export const SUBSYSTEM_STATUS_LABELS: Record<string, Bilingual> = {
   INTEGRATED: b('已纳入正式版本', 'In a formal release'),
   SUPERSEDED: b('已被新子系统发布替代', 'Superseded by a newer subsystem release'),
 };
+
+// DCL policy sets and software versions
+Object.assign(ERROR_LABELS, {
+  INVALID_MANIFEST: b('软件清单格式不对：信号为点分标识符，数据源为 单元:/绝对目录', 'The software manifest is malformed: signals are dotted identifiers, sources UNIT:/absolute/directory'),
+});

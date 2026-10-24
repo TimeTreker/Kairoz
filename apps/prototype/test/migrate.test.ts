@@ -4,9 +4,38 @@ import { migrate } from '../src/engine/migrate.ts';
 import { demoState } from '../src/engine/seed.ts';
 import { STATE_SCHEMA } from '../src/engine/types.ts';
 
-/** A schema 6 save: today's demo without the fields schema 7 added. */
-function schema6(): Record<string, unknown> {
-  const s = JSON.parse(JSON.stringify(demoState())) as Record<string, any>;
+/** A schema 7 save: a copy of a demo (today's by default) without the fields schema 8 added. */
+function schema7(demo: unknown = demoState()): Record<string, any> {
+  const s = JSON.parse(JSON.stringify(demo)) as Record<string, any>;
+  s.schema = 7;
+  for (const key of ['applicability', 'applicabilityChecks', 'emergencyStops', 'grantRules', 'directory', 'directorySync']) delete s[key];
+  for (const c of Object.values(s.resolvedConfigs) as any[]) delete c.disabledPolicies;
+  for (const r of Object.values(s.releases) as any[]) delete r.emergency;
+  for (const v of Object.values(s.softwareVersions) as any[]) delete v.manifest;
+  for (const g of Object.values(s.vehicleGroups) as any[]) {
+    const p = g.publication;
+    g.targetConfigId =
+      !p ? null
+      : p.kind === 'FEATURE' ? Object.values(s.resolvedConfigs).find((c: any) => c.kind === 'FEATURE' && c.sourceId === p.featureId && Object.values(c.groups).includes(p.commitId))!['id' as never]
+      : p.configId;
+    delete g.publication;
+    delete g.baseReleaseId;
+  }
+  for (const a of Object.values(s.accounts) as any[]) {
+    delete a.orgUnitId;
+    delete a.employeeId;
+    delete a.grantReview;
+  }
+  for (const u of Object.values(s.orgUnits) as any[]) {
+    delete u.source;
+    delete u.externalId;
+  }
+  return s;
+}
+
+/** A schema 6 save: a schema 7 save without the fields schema 7 added. */
+function schema6(): Record<string, any> {
+  const s = schema7();
   s.schema = 6;
   delete s.subsystemReleases;
   delete s.clientReports;
@@ -37,9 +66,26 @@ describe('saved state migration', () => {
     for (const c of Object.values(migrated.candidates)) assert.equal(c.scope, 'Vehicle');
     assert.deepEqual(migrated.subsystemReleases, {});
     // Everything the save had is still there, unchanged.
-    for (const key of ['accounts', 'features', 'commits', 'releases', 'deployments', 'receipts', 'events', 'audit'] as const) {
+    for (const key of ['features', 'commits', 'deployments', 'receipts', 'events', 'audit'] as const) {
       assert.deepEqual((migrated as unknown as Record<string, unknown>)[key], before[key], key);
     }
+  });
+
+  test('a schema 7 save keeps its group bindings as publications and gains empty defaults', () => {
+    const current = JSON.parse(JSON.stringify(demoState()));
+    const migrated = migrate(schema7(current))!;
+    assert.equal(migrated.schema, STATE_SCHEMA);
+    for (const [id, g] of Object.entries(migrated.vehicleGroups)) {
+      assert.deepEqual(g.publication, current.vehicleGroups[id].publication, g.name);
+      assert.equal('targetConfigId' in g, false);
+      assert.equal(g.baseReleaseId, null);
+    }
+    for (const a of Object.values(migrated.accounts)) assert.deepEqual([a.orgUnitId, a.employeeId, a.grantReview], [null, null, null]);
+    for (const u of Object.values(migrated.orgUnits)) assert.equal(u.source, 'PLATFORM');
+    for (const c of Object.values(migrated.resolvedConfigs)) assert.deepEqual(c.disabledPolicies, []);
+    assert.deepEqual(migrated.applicability, []);
+    assert.equal(migrated.directory, null);
+    assert.deepEqual(migrated.releases, current.releases);
   });
 
   test('a current save passes through unchanged', () => {

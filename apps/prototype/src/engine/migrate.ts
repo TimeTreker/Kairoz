@@ -27,7 +27,49 @@ function to7(s: Saved): void {
   s.schema = 7;
 }
 
-const STEPS: Record<number, (s: Saved) => void> = { 6: to7 };
+/**
+ * Schema 8: policy sets apply to software versions by appended records; vehicle groups keep what
+ * was published to them; accounts and team units can come from the company directory.
+ */
+function to8(s: Saved): void {
+  const configs = (s.resolvedConfigs ?? {}) as Rows;
+  const features = (s.features ?? {}) as Rows;
+  for (const c of Object.values(configs)) c.disabledPolicies ??= [];
+  for (const r of Object.values((s.releases ?? {}) as Rows)) r.emergency ??= null;
+  for (const v of Object.values((s.softwareVersions ?? {}) as Rows)) v.manifest ??= null;
+  for (const g of Object.values((s.vehicleGroups ?? {}) as Rows)) {
+    if (!('publication' in g)) {
+      const config = typeof g.targetConfigId === 'string' ? configs[g.targetConfigId] : undefined;
+      const groups = (config?.groups ?? {}) as Record<string, string>;
+      const feature = config?.kind === 'FEATURE' ? features[config.sourceId as string] : undefined;
+      g.publication =
+        !config ? null
+        : config.kind === 'FEATURE' ? { kind: 'FEATURE', featureId: config.sourceId, commitId: groups[feature?.groupId as string] ?? null, disabledPolicies: [] }
+        : config.kind === 'CANDIDATE' ? { kind: 'CANDIDATE', candidateId: config.sourceId, configId: config.id }
+        : { kind: 'RELEASE', releaseId: config.sourceId, configId: config.id };
+    }
+    delete g.targetConfigId;
+    g.baseReleaseId ??= null;
+  }
+  for (const a of Object.values((s.accounts ?? {}) as Rows)) {
+    a.orgUnitId ??= null;
+    a.employeeId ??= null;
+    a.grantReview ??= null;
+  }
+  for (const u of Object.values((s.orgUnits ?? {}) as Rows)) {
+    u.source ??= 'PLATFORM';
+    u.externalId ??= null;
+  }
+  s.applicability ??= [];
+  s.applicabilityChecks ??= {};
+  s.emergencyStops ??= {};
+  s.grantRules ??= {};
+  s.directory ??= null;
+  s.directorySync ??= { revision: 0, syncedAt: null, log: [] };
+  s.schema = 8;
+}
+
+const STEPS: Record<number, (s: Saved) => void> = { 6: to7, 7: to8 };
 
 /** The state at the current schema, or null when it cannot be read or is too old. Mutates `raw`. */
 export function migrate(raw: unknown): State | null {

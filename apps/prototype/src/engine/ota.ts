@@ -11,7 +11,7 @@ import { directTargetProblems, membersOf, openOtaOf, pendingDeploymentOf, record
 
 export { openOtaOf };
 import { getRelease, releaseFor } from './release.ts';
-import type { Deployment, DeploymentTarget, Release, Resource, State } from './types.ts';
+import type { Deployment, DeploymentTarget, GroupPublication, Release, Resource, State } from './types.ts';
 
 /** Why a vehicle cannot take a release now; empty when it can. */
 export function otaProblems(s: State, r: Resource, release: Release, except?: string): string[] {
@@ -108,7 +108,7 @@ export function createOta(
   for (const rid of wave) if (!members.some((m) => m.resourceId === rid)) problems.push(`${rid}: not a vehicle of this rollout`);
   if (problems.length) throw rule('OTA_BLOCKED', 'the rollout would not reach every vehicle safely', { issues: problems });
 
-  for (const g of groups) recordGroupBinding(ctx, g.id, release.resolvedConfigId);
+  for (const g of groups) recordGroupBinding(ctx, g.id, { kind: 'RELEASE', releaseId: release.id, configId: release.resolvedConfigId });
   const id = newId('ota');
   ctx.s.deployments[id] = {
     id,
@@ -261,7 +261,7 @@ export function rollbackOta(ctx: Ctx, deploymentId: string, reason: string): str
   for (const [configId, targets] of byConfig) {
     const previous = ctx.s.resolvedConfigs[configId]!;
     const vehicleGroupIds = [...new Set(targets.map((t) => t.vehicleGroupId!).filter(Boolean))];
-    for (const vg of vehicleGroupIds) recordGroupBinding(ctx, vg, configId);
+    for (const vg of vehicleGroupIds) recordGroupBinding(ctx, vg, { kind: 'RELEASE', releaseId: previous.sourceId, configId });
     const id = newId('ota');
     ctx.s.deployments[id] = {
       id,
@@ -316,8 +316,16 @@ export function answerConfigRequest(s: State, resourceId: string): ConfigAnswer 
     return resolved.release ? { configId: resolved.release.resolvedConfigId, reason: 'LATEST_RELEASE', detail: `DCL ${resolved.release.dclVersion}` } : { configId: null, reason: 'BLOCKED', detail: resolved.problem };
   }
   const group = s.groupMembers[r.id] ? s.vehicleGroups[s.groupMembers[r.id]!] : undefined;
-  if (group?.targetConfigId) return { configId: group.targetConfigId, reason: 'GROUP_TARGET', detail: group.name };
+  const published = group?.publication ? publishedConfig(s, group.publication) : null;
+  if (group && published) return { configId: published, reason: 'GROUP_TARGET', detail: group.name };
   return r.appliedConfigId ? { configId: r.appliedConfigId, reason: 'APPLIED', detail: null } : { configId: null, reason: 'INITIAL', detail: null };
+}
+
+/** The configuration a publication puts on the group's vehicles. */
+function publishedConfig(s: State, p: GroupPublication): string | null {
+  if (p.kind !== 'FEATURE') return p.configId;
+  const configs = Object.values(s.resolvedConfigs).filter((c) => c.kind === 'FEATURE' && c.sourceId === p.featureId && Object.values(c.groups).includes(p.commitId));
+  return configs.sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))[0]?.id ?? null;
 }
 
 export function otaRollouts(s: State, workspaceId?: string): Deployment[] {

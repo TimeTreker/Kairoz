@@ -13,6 +13,8 @@ export interface Grant {
   envs: Env[];
   /** A tester grant that may dispatch configurations but not record results (仅下发). */
   dispatchOnly: boolean;
+  /** Set on a grant derived from an org grant rule (按组织授予); never stored on an account. */
+  ruleId?: string;
 }
 
 /** Roles whose grants may be limited to dispatching. */

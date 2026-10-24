@@ -3,19 +3,45 @@
 
 import type { Grant } from '../domain/authz.ts';
 import type { ClientReportPayload, SignedReport } from '../domain/client-report.ts';
+import type { SoftwareManifest } from '../domain/compatibility.ts';
 import type { FileSpecContent, GroupConfig, PolicyContent } from '../domain/config.ts';
 import type { DataSource } from '../domain/data-source.ts';
 import type { FileType, Privacy } from '../domain/file-types.ts';
 import type { ReviewControls } from '../domain/intake.ts';
-import type { Domain, Env, GroupPurpose, Scope, WorkspaceKind } from '../domain/vocabulary.ts';
+import type { Domain, Env, GroupPurpose, Role, Scope, WorkspaceKind } from '../domain/vocabulary.ts';
 
-export const STATE_SCHEMA = 7;
+export const STATE_SCHEMA = 8;
 
 export interface Account {
   username: string;
   displayName: string;
   status: 'ACTIVE' | 'DISABLED';
+  /** Explicit grants only; grants from org rules are derived when the account acts. */
   grants: Grant[];
+  /** The team org unit the company directory places the person in; null for local accounts. */
+  orgUnitId: string | null;
+  /** The directory's person id. NULL: a local account the directory never touches. */
+  employeeId: string | null;
+  /** Explicit grants to review after the person moved to another unit. */
+  grantReview: { fromUnitId: string | null; toUnitId: string | null; since: string } | null;
+  createdBy: string;
+  createdAt: string;
+}
+
+/**
+ * Base rights for the members of an org unit (按组织授予的基础权限). Each covering rule gives the
+ * member one complete grant; special rights are always granted explicitly.
+ */
+export interface GrantRule {
+  id: string;
+  orgUnitId: string;
+  includeSubunits: boolean;
+  role: Role;
+  workspaces: string[];
+  groups: string[];
+  scopes: string[];
+  envs: Env[];
+  status: 'ACTIVE' | 'ARCHIVED';
   createdBy: string;
   createdAt: string;
 }
@@ -40,6 +66,10 @@ export interface OrgUnit {
   parentId: string | null;
   name: string;
   status: 'ACTIVE' | 'ARCHIVED';
+  /** DIRECTORY: mirrored from the company directory and read-only here. */
+  source: 'PLATFORM' | 'DIRECTORY';
+  /** The directory's department id, for DIRECTORY units. */
+  externalId: string | null;
 }
 
 export interface BusinessGroup {
@@ -229,14 +259,17 @@ export interface ReferenceRequest {
 }
 
 /**
- * A formal DCL release (正式发布): for one vehicle model, the committed configuration of every
- * business group, versioned independently of vehicle software.
+ * A DCL policy set version (DCL 策略集版本, a formal release): for one vehicle model, the committed
+ * configuration of every business group, versioned independently of vehicle software.
  */
 export interface Release {
   id: string;
   vehicleModelId: string;
   dclVersion: string;
-  /** Whole-vehicle software versions this release is approved for. */
+  /**
+   * The software versions listed when it was published. Later applicability records add or
+   * withdraw versions without changing the set or its version.
+   */
   vehicleIntegrationVersions: string[];
   /** group id -> commit id included for that group */
   groups: Record<string, string>;
@@ -246,8 +279,64 @@ export interface Release {
   /** Publication order within the vehicle model. */
   sequence: number;
   notes: string;
+  /** An emergency stop: the source set without one policy. */
+  emergency: { stopId: string; sourceReleaseId: string; policyId: string } | null;
   publishedBy: string;
   publishedAt: string;
+}
+
+/** Append-only applicability (适用关系): a set version starts or stops applying to a software version. */
+export interface ApplicabilityRecord {
+  id: string;
+  seq: number;
+  releaseId: string;
+  vehicleModelId: string;
+  version: string;
+  action: 'ADD' | 'WITHDRAW';
+  /** The check whose evidence the record rests on (ADD). */
+  checkId: string | null;
+  reason: string;
+  by: string;
+  at: string;
+}
+
+/**
+ * An applicability check (适用性确认单): whether an unchanged set works on a software version.
+ * Compatibility is computed from the set and the software manifest, never stored.
+ */
+export interface ApplicabilityCheck {
+  id: string;
+  vehicleModelId: string;
+  version: string;
+  releaseId: string;
+  /** The integration workspace whose testing vehicles verify it. */
+  testWorkspaceId: string;
+  status: 'OPEN' | 'TESTING' | 'VERIFIED' | 'CONFIRMED' | 'SUPERSEDED' | 'CANCELLED';
+  /** Opened by recording a software version no set applies to. */
+  auto: boolean;
+  openedBy: string;
+  openedAt: string;
+  verifiedBy: string | null;
+  verifiedAt: string | null;
+  decidedBy: string | null;
+  decidedAt: string | null;
+  note: string | null;
+}
+
+/** An emergency stop of one policy (紧急停用): requested by one person, decided by another. */
+export interface EmergencyStop {
+  id: string;
+  releaseId: string;
+  policyId: string;
+  groupId: string;
+  reason: string;
+  status: 'REQUESTED' | 'APPROVED' | 'REJECTED';
+  requestedBy: string;
+  requestedAt: string;
+  decidedBy: string | null;
+  decidedAt: string | null;
+  decisionNote: string | null;
+  newReleaseId: string | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -259,6 +348,8 @@ export interface SoftwareVersion {
   vehicleModelId: string;
   version: string;
   source: string;
+  /** The signals and data sources the software provides (mock); null when not known. */
+  manifest: SoftwareManifest | null;
   recordedBy: string;
   createdAt: string;
 }
@@ -338,7 +429,7 @@ export interface Resource {
 
 /**
  * What a vehicle is asked to run: one committed configuration per business group, on top of a
- * base. A Feature dispatch overlays one group's commit on the vehicle model's base.
+ * base. A Feature dispatch overlays one group's commit on the set in effect for the vehicle.
  */
 export interface ResolvedConfig {
   id: string;
@@ -348,12 +439,23 @@ export interface ResolvedConfig {
   baseReleaseId: string | null;
   /** group id -> commit id */
   groups: Record<string, string>;
+  /** Base policies of other business groups a development group switched off (FEATURE only). */
+  disabledPolicies: string[];
   digest: string;
   label: string;
   createdAt: string;
 }
 
 export type VehicleGroupPurpose = 'DEV' | 'TEST' | 'PRODUCTION';
+
+/**
+ * What was last published to a vehicle group. A Feature publication is resolved per vehicle: the
+ * set in effect for its software (or the group's explicit base) plus the commit.
+ */
+export type GroupPublication =
+  | { kind: 'FEATURE'; featureId: string; commitId: string; disabledPolicies: string[] }
+  | { kind: 'CANDIDATE'; candidateId: string; configId: string }
+  | { kind: 'RELEASE'; releaseId: string; configId: string };
 
 /** Persistent configuration routing group, owned by one workspace (and, below production, one business group). */
 export interface VehicleGroup {
@@ -364,7 +466,9 @@ export interface VehicleGroup {
   purpose: VehicleGroupPurpose;
   env: Env;
   status: 'ACTIVE' | 'ARCHIVED';
-  targetConfigId: string | null;
+  publication: GroupPublication | null;
+  /** An explicit base set (显式基线) instead of the set in effect for each vehicle's software. */
+  baseReleaseId: string | null;
   bindingRevision: number;
   /** Dispatches to this group need an approved team test request (团队测试审批). */
   requiresApproval: boolean;
@@ -421,10 +525,13 @@ export interface DeploymentTarget {
   history: TargetAttempt[];
 }
 
-/** One dispatch of a fixed configuration to a frozen list of vehicles. */
+/**
+ * One dispatch of a fixed configuration to a frozen list of vehicles. APPLICABILITY: an unchanged
+ * set tested on vehicles running a software version it does not list yet.
+ */
 export interface Deployment {
   id: string;
-  kind: 'FEATURE' | 'CANDIDATE' | 'OTA';
+  kind: 'FEATURE' | 'CANDIDATE' | 'APPLICABILITY' | 'OTA';
   workspaceId: string;
   groupId: string | null;
   subjectId: string;
@@ -453,11 +560,11 @@ export interface Receipt {
   receivedAt: string;
 }
 
-/** A vehicle a subject (Feature commit, candidate) must be verified on. */
+/** A vehicle a subject (Feature commit, candidate, applicability check) must be verified on. */
 export interface TestTarget {
-  subjectKind: 'FEATURE' | 'CANDIDATE';
+  subjectKind: 'FEATURE' | 'CANDIDATE' | 'APPLICABILITY';
   subjectId: string;
-  /** Feature commit, or candidate resolved config. */
+  /** Feature commit; the candidate or check id itself. */
   versionId: string;
   resourceId: string;
   deploymentId: string;
@@ -466,7 +573,7 @@ export interface TestTarget {
 export interface TestRun {
   id: string;
   seq: number;
-  subjectKind: 'FEATURE' | 'CANDIDATE';
+  subjectKind: 'FEATURE' | 'CANDIDATE' | 'APPLICABILITY';
   subjectId: string;
   versionId: string;
   resourceId: string;
@@ -710,6 +817,55 @@ export interface DeviceState {
   lastSentAt: string | null;
 }
 
+/** A department of the simulated company directory (公司目录). */
+export interface DirectoryDepartment {
+  extId: string;
+  name: string;
+  parentExtId: string | null;
+  status: 'ACTIVE' | 'REMOVED';
+}
+
+export interface DirectoryPerson {
+  employeeId: string;
+  username: string;
+  displayName: string;
+  deptExtId: string;
+  status: 'ACTIVE' | 'LEFT';
+}
+
+/** The company directory (prototype only, like HR or LDAP). The platform reads it only by syncing. */
+export interface CompanyDirectory {
+  revision: number;
+  departments: DirectoryDepartment[];
+  people: DirectoryPerson[];
+}
+
+export interface DirectorySyncEntry {
+  seq: number;
+  at: string;
+  revision: number;
+  kind:
+    | 'UNIT_CREATED'
+    | 'UNIT_RENAMED'
+    | 'UNIT_MOVED'
+    | 'UNIT_ARCHIVED'
+    | 'ACCOUNT_CREATED'
+    | 'ACCOUNT_MOVED'
+    | 'ACCOUNT_DISABLED'
+    | 'ACCOUNT_REACTIVATED'
+    | 'ACCOUNT_SKIPPED';
+  subject: string;
+  detail: string;
+}
+
+export interface DirectorySync {
+  /** The directory revision last applied. */
+  revision: number;
+  syncedAt: string | null;
+  /** Newest first, capped. */
+  log: DirectorySyncEntry[];
+}
+
 export interface State {
   schema: number;
   /** Monotonic counter for ordering (decisions, test runs, audit). */
@@ -735,6 +891,9 @@ export interface State {
   feedback: Feedback[];
   referenceRequests: Record<string, ReferenceRequest>;
   releases: Record<string, Release>;
+  applicability: ApplicabilityRecord[];
+  applicabilityChecks: Record<string, ApplicabilityCheck>;
+  emergencyStops: Record<string, EmergencyStop>;
   softwareVersions: Record<string, SoftwareVersion>;
   images: Record<string, SimulationImage>;
   resources: Record<string, Resource>;
@@ -759,6 +918,10 @@ export interface State {
   clientReports: Record<string, ClientReportLog>;
   /** resource id -> simulated device storage (the simulator's, not the platform's) */
   devices: Record<string, DeviceState>;
+  grantRules: Record<string, GrantRule>;
+  /** The simulated company directory (the simulator's, not the platform's); null when none is connected. */
+  directory: CompanyDirectory | null;
+  directorySync: DirectorySync;
   audit: AuditEvent[];
 }
 
@@ -786,6 +949,9 @@ export function emptyState(): State {
     feedback: [],
     referenceRequests: {},
     releases: {},
+    applicability: [],
+    applicabilityChecks: {},
+    emergencyStops: {},
     softwareVersions: {},
     images: {},
     resources: {},
@@ -806,6 +972,9 @@ export function emptyState(): State {
     subsystemReleases: {},
     clientReports: {},
     devices: {},
+    grantRules: {},
+    directory: null,
+    directorySync: { revision: 0, syncedAt: null, log: [] },
     audit: [],
   };
 }

@@ -24,7 +24,7 @@ export function PrototypeMenu({ compact = false }: { compact?: boolean }) {
   const [exported, setExported] = useState<JsonFile | null>(null);
   const state = useEngineState();
   // Demo data saved by an earlier version keeps working but lacks newer demo objects.
-  const outdatedDemo = state.installation === 'DEMO' && !state.workspaces['x89-adc-integration'];
+  const outdatedDemo = state.installation === 'DEMO' && (!state.workspaces['x89-adc-integration'] || !state.directory);
 
   const confirmReset = (kind: 'demo' | 'clean') =>
     modal.confirm({
@@ -50,7 +50,7 @@ export function PrototypeMenu({ compact = false }: { compact?: boolean }) {
               ? [
                   {
                     key: 'outdated',
-                    label: L('演示数据来自旧版本：重置为演示数据后可看到子系统集成与车辆设备密钥', 'Demo data from an earlier version: reset to demo data to see subsystem integration and vehicle device keys'),
+                    label: L('演示数据来自旧版本：重置为演示数据后可看到公司目录、软件清单等新的演示内容', 'Demo data from an earlier version: reset to demo data to see the company directory, software manifests and other new demo content'),
                     onClick: () => confirmReset('demo'),
                   },
                   { type: 'divider' as const },

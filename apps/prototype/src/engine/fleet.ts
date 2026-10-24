@@ -10,7 +10,8 @@ import { WILDCARD } from '../domain/vocabulary.ts';
 import type { Env, Scope } from '../domain/vocabulary.ts';
 import type { Actor, Ctx } from './engine.ts';
 import { getWorkspace } from './org.ts';
-import type { ControllerState, Resource, State, VehicleGroup, VehicleGroupEvent, VehicleGroupPurpose } from './types.ts';
+import { displayName } from './config.ts';
+import type { ControllerState, GroupPublication, Resource, State, VehicleGroup, VehicleGroupEvent, VehicleGroupPurpose } from './types.ts';
 
 const RESOURCE_ID = /^[A-Z][A-Z0-9-]{2,40}$/;
 const VIN = /^[A-HJ-NPR-Z0-9]{17}$/;
@@ -64,7 +65,7 @@ export function recordSoftwareVersion(ctx: Ctx, input: { vehicleModelId: string;
   if (!input.source.trim()) throw rule('SOURCE_REQUIRED', 'name the trusted source of this version');
   const key = softwareKey(input.vehicleModelId, input.version);
   if (ctx.s.softwareVersions[key]) throw conflict('VERSION_EXISTS', `version ${input.version} is already recorded`);
-  ctx.s.softwareVersions[key] = { vehicleModelId: input.vehicleModelId, version: input.version, source: input.source.trim(), recordedBy: ctx.user().username, createdAt: ctx.now };
+  ctx.s.softwareVersions[key] = { vehicleModelId: input.vehicleModelId, version: input.version, source: input.source.trim(), manifest: null, recordedBy: ctx.user().username, createdAt: ctx.now };
   return key;
 }
 
@@ -355,7 +356,8 @@ export function createVehicleGroup(
     purpose: input.purpose,
     env: input.env,
     status: 'ACTIVE',
-    targetConfigId: null,
+    publication: null,
+    baseReleaseId: null,
     bindingRevision: 0,
     requiresApproval: input.requiresApproval ?? false,
     createdBy: ctx.user().username,
@@ -441,10 +443,17 @@ export function vehicleGroupsOf(s: State, workspaceId: string): VehicleGroup[] {
     .sort((a, b) => (a.status === b.status ? a.name.localeCompare(b.name) : a.status === 'ACTIVE' ? -1 : 1));
 }
 
-export function recordGroupBinding(ctx: Ctx, vehicleGroupId: string, configId: string): number {
+/** Records what was published to a vehicle group; the event names it. */
+export function recordGroupBinding(ctx: Ctx, vehicleGroupId: string, publication: GroupPublication): number {
   const g = ctx.s.vehicleGroups[vehicleGroupId]!;
-  g.targetConfigId = configId;
+  g.publication = publication;
   g.bindingRevision += 1;
-  groupEvent(ctx, g.id, 'BOUND', null, ctx.s.resolvedConfigs[configId]?.label ?? configId);
+  groupEvent(ctx, g.id, 'BOUND', null, publicationLabel(ctx.s, publication));
   return g.bindingRevision;
+}
+
+/** A short name for what was published: the commit's name, or the configuration's label. */
+export function publicationLabel(s: State, p: GroupPublication): string {
+  if (p.kind === 'FEATURE') return s.commits[p.commitId] ? displayName(s, p.commitId) : p.commitId;
+  return s.resolvedConfigs[p.configId]?.label ?? p.configId;
 }

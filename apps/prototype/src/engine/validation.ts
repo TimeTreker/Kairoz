@@ -16,17 +16,28 @@ import type { Candidate, Deployment, DeploymentTarget, Feature, ResolvedConfig, 
 /** Finds or creates the resolved configuration for a base plus group commits. */
 export function resolveConfig(
   ctx: Ctx,
-  input: { vehicleModelId: string; kind: ResolvedConfig['kind']; sourceId: string; baseReleaseId: string | null; groups: Record<string, string>; label: string },
+  input: { vehicleModelId: string; kind: ResolvedConfig['kind']; sourceId: string; baseReleaseId: string | null; groups: Record<string, string>; disabledPolicies?: string[]; label: string },
 ): string {
-  const pairs = Object.keys(input.groups)
-    .sort()
-    .map((g) => [g, ctx.s.commits[input.groups[g]!]!.digest]);
-  const digest = digestOf({ vehicleModelId: input.vehicleModelId, baseReleaseId: input.baseReleaseId, kind: input.kind, sourceId: input.sourceId, groups: pairs });
+  const disabledPolicies = [...new Set(input.disabledPolicies ?? [])].sort();
+  const digest = configDigest(ctx.s, { ...input, disabledPolicies });
   const existing = Object.values(ctx.s.resolvedConfigs).find((c) => c.digest === digest);
   if (existing) return existing.id;
   const id = newId('rc');
-  ctx.s.resolvedConfigs[id] = { id, ...input, groups: { ...input.groups }, digest, createdAt: ctx.now };
+  ctx.s.resolvedConfigs[id] = { id, ...input, groups: { ...input.groups }, disabledPolicies, digest, createdAt: ctx.now };
   return id;
+}
+
+/** The identity of a configuration; computed without creating it. */
+export function configDigest(
+  s: State,
+  input: { vehicleModelId: string; kind: ResolvedConfig['kind']; sourceId: string; baseReleaseId: string | null; groups: Record<string, string>; disabledPolicies: string[] },
+): string {
+  const pairs = Object.keys(input.groups)
+    .sort()
+    .map((g) => [g, s.commits[input.groups[g]!]!.digest]);
+  // Switched-off policies change the identity only when there are some, so earlier configurations keep theirs.
+  const disabled = input.disabledPolicies.length ? { disabledPolicies: [...input.disabledPolicies].sort() } : {};
+  return digestOf({ vehicleModelId: input.vehicleModelId, baseReleaseId: input.baseReleaseId, kind: input.kind, sourceId: input.sourceId, groups: pairs, ...disabled });
 }
 
 /** The Feature's head commit on top of its base: what a test vehicle runs. */
@@ -129,7 +140,7 @@ function dispatchChecked(
   const id = newId('dp');
   const targets: DeploymentTarget[] = [];
   for (const vgId of input.vehicleGroupIds) {
-    recordGroupBinding(ctx, vgId, configId);
+    recordGroupBinding(ctx, vgId, { kind: 'FEATURE', featureId: feature.id, commitId: input.commitId, disabledPolicies: [] });
     for (const rid of membersOf(ctx.s, vgId)) {
       if (targets.some((t) => t.resourceId === rid)) continue;
       targets.push({ resourceId: rid, vehicleGroupId: vgId, attempt: 0, status: 'PENDING', previousConfigId: ctx.s.resources[rid]!.appliedConfigId, error: null, updatedAt: ctx.now, history: [] });
@@ -493,7 +504,7 @@ export function dispatchCandidate(ctx: Ctx, candidateId: string, input: { vehicl
   if (problems.length === 0) for (const rid of direct) checkVehicle(rid, null);
   if (problems.length) throw rule('DISPATCH_BLOCKED', 'the dispatch would not reach every vehicle safely', { issues: problems });
   const id = newId('dp');
-  for (const vgId of vehicleGroupIds) recordGroupBinding(ctx, vgId, c.resolvedConfigId);
+  for (const vgId of vehicleGroupIds) recordGroupBinding(ctx, vgId, { kind: 'CANDIDATE', candidateId: c.id, configId: c.resolvedConfigId });
   for (const m of members) {
     if (!ctx.s.testTargets.some((t) => t.subjectId === c.id && t.resourceId === m.resourceId)) {
       ctx.s.testTargets.push({ subjectKind: 'CANDIDATE', subjectId: c.id, versionId: c.id, resourceId: m.resourceId, deploymentId: id });

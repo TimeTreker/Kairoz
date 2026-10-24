@@ -17,6 +17,7 @@ import {
   managedResources,
   membersOf,
   pendingDeploymentOf,
+  publicationLabel,
   recordSoftwareVersion,
   registerImage,
   registerPhysical,
@@ -332,7 +333,7 @@ function VehicleGroups() {
                 <Space orientation="vertical" style={{ width: '100%' }}>
                   <Typography.Text type="secondary">
                     {g.groupId ? `${L('业务分组', 'Business group')}: ${state.groups[g.groupId]?.name} · ` : ''}
-                    {L('目标配置', 'Target configuration')}: <Mono>{configLabel(state, g.targetConfigId)}</Mono> · {L('绑定修订', 'binding rev.')} {g.bindingRevision}
+                    {L('已发布', 'Published')}: <Mono>{g.publication ? publicationLabel(state, g.publication) : '—'}</Mono> · {L('绑定修订', 'binding rev.')} {g.bindingRevision}
                   </Typography.Text>
                   <Table
                     rowKey={(r) => r}

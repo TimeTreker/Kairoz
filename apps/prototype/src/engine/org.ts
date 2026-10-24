@@ -66,7 +66,7 @@ export function createProject(ctx: Ctx, input: { id: string; name: string; vehic
   if (ctx.s.projects[input.id] || ctx.s.orgUnits[input.id]) throw conflict('ID_TAKEN', `${input.id} already exists`);
   if (input.vehicleModelId && !ctx.s.vehicleModels[input.vehicleModelId]) throw notFound('vehicle model', input.vehicleModelId);
   ctx.s.projects[input.id] = { id: input.id, name: input.name, vehicleModelId: input.vehicleModelId ?? null, status: 'ESTABLISHED' };
-  ctx.s.orgUnits[input.id] = { id: input.id, kind: 'PROJECT', projectId: input.id, parentId: null, name: input.name, status: 'ACTIVE' };
+  ctx.s.orgUnits[input.id] = { id: input.id, kind: 'PROJECT', projectId: input.id, parentId: null, name: input.name, status: 'ACTIVE', source: 'PLATFORM', externalId: null };
   return input.id;
 }
 
@@ -82,7 +82,7 @@ export function createOrgUnit(ctx: Ctx, input: { id: string; name: string; paren
     kind = parent.kind;
     projectId = parent.projectId;
   }
-  ctx.s.orgUnits[input.id] = { id: input.id, kind, projectId, parentId: input.parentId ?? null, name: input.name, status: 'ACTIVE' };
+  ctx.s.orgUnits[input.id] = { id: input.id, kind, projectId, parentId: input.parentId ?? null, name: input.name, status: 'ACTIVE', source: 'PLATFORM', externalId: null };
   return input.id;
 }
 

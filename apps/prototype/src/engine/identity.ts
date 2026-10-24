@@ -30,6 +30,9 @@ export function installAdmin(s: Draft<State>, now: string): void {
         dispatchOnly: false,
       },
     ],
+    orgUnitId: null,
+    employeeId: null,
+    grantReview: null,
     createdBy: 'system',
     createdAt: now,
   };
@@ -85,6 +88,9 @@ export function createAccount(ctx: Ctx, input: AccountInput): string {
     displayName: input.displayName.trim(),
     status: 'ACTIVE',
     grants: toGrants(input.grants),
+    orgUnitId: null,
+    employeeId: null,
+    grantReview: null,
     createdBy: ctx.user().username,
     createdAt: ctx.now,
   };

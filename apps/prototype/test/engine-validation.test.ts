@@ -119,7 +119,7 @@ describe('dispatch, receipts and tests', () => {
     e.run('brake_tester', (c) => v.cancelDeployment(c, d, '车辆离线'));
     const s = e.getState();
     assert.equal(s.deployments[d]!.status, 'CANCELLED');
-    assert.equal(s.vehicleGroups[vg.id]!.targetConfigId, s.deployments[d]!.resolvedConfigId);
+    assert.deepEqual(s.vehicleGroups[vg.id]!.publication, { kind: 'FEATURE', featureId: feature.id, commitId: feature.headCommitId, disabledPolicies: [] });
   });
 });
 
