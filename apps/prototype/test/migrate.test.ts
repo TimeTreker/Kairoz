@@ -4,9 +4,17 @@ import { migrate } from '../src/engine/migrate.ts';
 import { demoState } from '../src/engine/seed.ts';
 import { STATE_SCHEMA } from '../src/engine/types.ts';
 
-/** A schema 10 save: a copy of a demo (today's by default) without the fields schema 11 added. */
-function schema10(demo: unknown = demoState()): Record<string, any> {
+/** A schema 11 save: a copy of a demo (today's by default) without the fields schema 12 added. */
+function schema11(demo: unknown = demoState()): Record<string, any> {
   const s = JSON.parse(JSON.stringify(demo)) as Record<string, any>;
+  s.schema = 11;
+  delete s.notificationReads;
+  return s;
+}
+
+/** A schema 10 save: a schema 11 save without the fields schema 11 added. */
+function schema10(demo: unknown = demoState()): Record<string, any> {
+  const s = schema11(demo);
   s.schema = 10;
   delete s.softwareChanges;
   for (const d of Object.values(s.devices) as any[]) delete d.software;
@@ -117,6 +125,14 @@ describe('saved state migration', () => {
     assert.deepEqual(migrated.applicability, []);
     assert.equal(migrated.directory, null);
     assert.deepEqual(migrated.releases, current.releases);
+  });
+
+  test('a schema 11 save gains empty notification read marks', () => {
+    const current = JSON.parse(JSON.stringify(demoState()));
+    const migrated = migrate(schema11(current))!;
+    assert.equal(migrated.schema, STATE_SCHEMA);
+    assert.deepEqual(migrated.notificationReads, {});
+    assert.deepEqual(migrated, current);
   });
 
   test('a schema 10 save gains device software and an empty change log', () => {

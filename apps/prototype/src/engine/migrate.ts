@@ -101,7 +101,13 @@ function to11(s: Saved): void {
   s.schema = 11;
 }
 
-const STEPS: Record<number, (s: Saved) => void> = { 6: to7, 7: to8, 8: to9, 9: to10, 10: to11 };
+/** Schema 12: what each account marked read in its notification center, per workspace. */
+function to12(s: Saved): void {
+  s.notificationReads ??= {};
+  s.schema = 12;
+}
+
+const STEPS: Record<number, (s: Saved) => void> = { 6: to7, 7: to8, 8: to9, 9: to10, 10: to11, 11: to12 };
 
 /** The state at the current schema, or null when it cannot be read or is too old. Mutates `raw`. */
 export function migrate(raw: unknown): State | null {

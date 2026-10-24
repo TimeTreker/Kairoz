@@ -10,7 +10,7 @@ import type { FileType, Privacy } from '../domain/file-types.ts';
 import type { ReviewControls } from '../domain/intake.ts';
 import type { Domain, Env, GroupPurpose, Role, Scope, WorkspaceKind } from '../domain/vocabulary.ts';
 
-export const STATE_SCHEMA = 11;
+export const STATE_SCHEMA = 12;
 
 export interface Account {
   username: string;
@@ -1073,6 +1073,8 @@ export interface State {
   softwareBuilds: Record<string, SoftwareBuild>;
   imageChanges: Record<string, ImageChange>;
   softwareChanges: Record<string, SoftwareChange>;
+  /** username -> workspace id -> ids of notifications the account marked read (通知已读). */
+  notificationReads: Record<string, Record<string, string[]>>;
   audit: AuditEvent[];
 }
 
@@ -1131,6 +1133,7 @@ export function emptyState(): State {
     softwareBuilds: {},
     imageChanges: {},
     softwareChanges: {},
+    notificationReads: {},
     audit: [],
   };
 }
