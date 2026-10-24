@@ -20,6 +20,7 @@ const PROBLEMS: Pattern[] = [
   [/(\S+) runs another image since its test; test it again/, ([r]) => `${r} 测试后已更换镜像，需重新测试`],
   [/(\S+) runs other software since its test; test it again/, ([r]) => `${r} 测试后整车软件已变化，需重新测试`],
   [/waiting for an image change/, () => '正在等待镜像变更'],
+  [/waiting for a software update/, () => '正在等待整车软件更新'],
   [/simulated health check failure/, () => '模拟的健康检查失败'],
   [/runs a derived development image/, () => '运行研发派生镜像'],
   [/personal simulation of (\S+); only its owner uses it/, ([u]) => `${u} 的个人仿真，只能由本人使用`],

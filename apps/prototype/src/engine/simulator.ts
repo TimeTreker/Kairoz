@@ -10,8 +10,10 @@ import { acceptClientReport, checkClientReport, configurationContents } from './
 import type { Ctx } from './engine.ts';
 import type { AgentState, DeviceState, Resource, State } from './types.ts';
 import { syncIfChanged } from './company-directory.ts';
+import { pushPending } from './delivery.ts';
 import { advanceEvent } from './events.ts';
 import { acceptReceipt } from './validation.ts';
+import { answerVehicleSoftware } from './vehicle-software.ts';
 
 export function setAgent(ctx: Ctx, resourceId: string, patch: Partial<AgentState>): void {
   const r = ctx.s.resources[resourceId] as Draft<Resource> | undefined;
@@ -43,6 +45,8 @@ export function sendReceipt(ctx: Ctx, deploymentId: string, resourceId: string, 
  * (not those of a paused rollout), and in-flight collection events move one processing step. */
 export function tick(ctx: Ctx): number {
   let answered = 0;
+  // Vehicles that are on and connected receive what was dispatched to them (推送).
+  for (const r of Object.values(ctx.s.resources)) if (r.agent.online && clientRunning(r)) pushPending(ctx, r.id);
   for (const { deployment, target } of pendingForVehicles(ctx.s)) {
     // Read the status now: a failure earlier in this step may have paused the rollout.
     if (ctx.s.deployments[deployment.id]!.status !== 'PENDING') continue;
@@ -250,6 +254,19 @@ export function simulateSoftwareOta(ctx: Ctx, resourceId: string, version: strin
   if (!/^[A-Za-z0-9._-]{1,40}$/.test(v)) throw rule('INVALID_VERSION', 'a software version is letters, digits, . _ - (up to 40)');
   provisionDevice(ctx, r.id).software = v;
   return v;
+}
+
+/**
+ * The vehicle OTA system carries out a requested software update: on success the vehicle runs the
+ * version, restarts and reports it (queued while it is offline).
+ */
+export function completeVehicleSoftware(ctx: Ctx, requestId: string, result: 'APPLIED' | 'FAILED'): string {
+  const q = answerVehicleSoftware(ctx, requestId, result);
+  if (result === 'APPLIED') {
+    provisionDevice(ctx, q.resourceId).software = q.toVersion;
+    if (clientRunning(ctx.s.resources[q.resourceId]!)) restartClient(ctx, q.resourceId);
+  }
+  return q.status;
 }
 
 export function upgradeClient(ctx: Ctx, resourceId: string, version: string): void {

@@ -10,7 +10,7 @@ import type { FileType, Privacy } from '../domain/file-types.ts';
 import type { ReviewControls } from '../domain/intake.ts';
 import type { Domain, Env, GroupPurpose, Role, Scope, WorkspaceKind } from '../domain/vocabulary.ts';
 
-export const STATE_SCHEMA = 12;
+export const STATE_SCHEMA = 13;
 
 export interface Account {
   username: string;
@@ -596,6 +596,11 @@ export interface DeploymentTarget {
   previousConfigId: string | null;
   error: string | null;
   updatedAt: string;
+  /**
+   * When the cloud pushed the pending configuration to the vehicle (推送): the vehicle was on and
+   * connected. A dispatch (下发) only sets what the vehicle should run; null until it is pushed.
+   */
+  pushedAt: string | null;
   /** Finished earlier attempts, kept as evidence. */
   history: TargetAttempt[];
 }
@@ -619,6 +624,11 @@ export interface Deployment {
   /** OTA only: the rollout this one rolls back, and why things paused. */
   rollbackOf?: string | null;
   pauseReason?: string | null;
+  /**
+   * DISPATCH: someone dispatched it. GROUP_FOLLOW: a vehicle that joined a vehicle group (or had its
+   * software updated on request) was pushed what was already dispatched to the group.
+   */
+  trigger: 'DISPATCH' | 'GROUP_FOLLOW';
   dispatchedBy: string;
   createdAt: string;
   updatedAt: string;
@@ -959,6 +969,92 @@ export interface SoftwareChange {
   /** Who of the vehicle's team has seen it (确认); the check itself is recomputed when viewed. */
   acknowledgedBy: string | null;
   acknowledgedAt: string | null;
+  /** The software update request (整车软件更新) this change carried out, if any. */
+  requestId: string | null;
+}
+
+/**
+ * A vehicle waiting to follow its vehicle group (跟随车辆组): it joined the group, or its software
+ * was updated on request. On its next accepted report the cloud pushes what was dispatched to the
+ * group, if that fits the vehicle's software; otherwise the team chooses what to do.
+ */
+export interface GroupFollow {
+  vehicleGroupId: string;
+  reason: 'JOINED' | 'SOFTWARE_UPDATED';
+  since: string;
+}
+
+/**
+ * A request to the vehicle OTA system (整车 OTA, outside the platform) to put a physical vehicle on
+ * another recorded whole-vehicle software version. The platform learns the result from the
+ * vehicle's own report after it restarts.
+ */
+export interface VehicleSoftwareRequest {
+  id: string;
+  seq: number;
+  resourceId: string;
+  /** The workspace it was requested in. */
+  workspaceId: string;
+  fromVersion: string | null;
+  toVersion: string;
+  reason: string;
+  status: 'PENDING' | 'APPLIED' | 'FAILED' | 'CANCELLED';
+  error: string | null;
+  requestedBy: string;
+  requestedAt: string;
+  answeredAt: string | null;
+}
+
+export interface LoanLender {
+  workspaceId: string;
+  decision: 'PENDING' | 'AGREED' | 'DECLINED';
+  by: string | null;
+  at: string | null;
+  note: string | null;
+}
+
+export interface LoanExtension {
+  /** The new last day (YYYY-MM-DD). */
+  dueDate: string;
+  reason: string;
+  status: 'PENDING' | 'APPROVED' | 'REJECTED';
+  requestedBy: string;
+  requestedAt: string;
+  decidedBy: string | null;
+  decidedAt: string | null;
+}
+
+/**
+ * A loan (借用): a workspace uses a vehicle it cannot simply add, for a limited time, in one of its
+ * vehicle groups. Ownership, pool and environment stay. Workspaces using the car agree first, then
+ * vehicle resources approve.
+ */
+export interface Loan {
+  id: string;
+  seq: number;
+  resourceId: string;
+  /** The borrowing workspace and the vehicle group the car joins there. */
+  workspaceId: string;
+  vehicleGroupId: string;
+  purpose: string;
+  /** Last day of the loan (YYYY-MM-DD); overdue from the next day. */
+  dueDate: string;
+  status: 'REQUESTED' | 'APPROVED' | 'REJECTED' | 'WITHDRAWN' | 'RETURNED' | 'RECALLED';
+  /** Other workspaces using the car when it was requested. */
+  lenders: LoanLender[];
+  requestedBy: string;
+  requestedAt: string;
+  decidedBy: string | null;
+  decidedAt: string | null;
+  decisionNote: string | null;
+  extensions: LoanExtension[];
+  /** The lender's vehicle group the car left when the loan was approved. */
+  leftGroupId: string | null;
+  softwareAtStart: string | null;
+  softwareAtEnd: string | null;
+  endedBy: string | null;
+  endedAt: string | null;
+  endNote: string | null;
 }
 
 /** A department of the simulated company directory (公司目录). */
@@ -1075,6 +1171,12 @@ export interface State {
   softwareChanges: Record<string, SoftwareChange>;
   /** username -> workspace id -> ids of notifications the account marked read (通知已读). */
   notificationReads: Record<string, Record<string, string[]>>;
+  /** resource id -> the vehicle group it waits to follow */
+  groupFollows: Record<string, GroupFollow>;
+  vehicleSoftwareRequests: Record<string, VehicleSoftwareRequest>;
+  loans: Record<string, Loan>;
+  /** Simulated time (模拟时间): how far the platform clock runs ahead of real time. */
+  clockOffsetMs: number;
   audit: AuditEvent[];
 }
 
@@ -1134,6 +1236,10 @@ export function emptyState(): State {
     imageChanges: {},
     softwareChanges: {},
     notificationReads: {},
+    groupFollows: {},
+    vehicleSoftwareRequests: {},
+    loans: {},
+    clockOffsetMs: 0,
     audit: [],
   };
 }

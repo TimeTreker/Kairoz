@@ -50,11 +50,17 @@ export function pendingImageChangeOf(s: State, resourceId: string): string | und
   return Object.values(s.imageChanges).find((c) => c.resourceId === resourceId && c.status === 'PENDING')?.id;
 }
 
+/** A whole-vehicle software update requested from the vehicle OTA system and not answered yet. */
+export function pendingSoftwareUpdateOf(s: State, resourceId: string): string | undefined {
+  return Object.values(s.vehicleSoftwareRequests).find((q) => q.resourceId === resourceId && q.status === 'PENDING')?.id;
+}
+
 export function assertIdle(s: State, resourceId: string): void {
   const pending = pendingDeploymentOf(s, resourceId) ?? openOtaOf(s, resourceId);
   if (pending) throw rule('VEHICLE_BUSY', `vehicle ${resourceId} is waiting for deployment ${pending}`, { deploymentId: pending });
   const change = pendingImageChangeOf(s, resourceId);
   if (change) throw rule('IMAGE_CHANGE_PENDING', `${resourceId} is waiting for an image change; answer or withdraw it first`);
+  if (pendingSoftwareUpdateOf(s, resourceId)) throw rule('SOFTWARE_UPDATE_PENDING', `${resourceId} is waiting for a software update; wait for it or withdraw it`);
 }
 
 /** Personal simulations never join workspace vehicles, vehicle groups or resource operations. */
@@ -243,6 +249,7 @@ export function recordSoftwareChange(ctx: Ctx, r: Resource, toVersion: string | 
     at: ctx.now,
     acknowledgedBy: null,
     acknowledgedAt: null,
+    requestId: null,
   };
   return id;
 }
@@ -464,8 +471,24 @@ export function addGroupMember(ctx: Ctx, vehicleGroupId: string, resourceId: str
     throw rule('VEHICLE_ALREADY_GROUPED', `vehicle ${r.id} already routes through vehicle group ${ctx.s.vehicleGroups[current]?.name}; remove it there first`);
   }
   assertIdle(ctx.s, r.id);
-  ctx.s.groupMembers[r.id] = g.id;
-  groupEvent(ctx, g.id, 'MEMBER_ADDED', r.id, reason.trim());
+  joinGroup(ctx, g, r.id, reason.trim());
+}
+
+/**
+ * Puts a vehicle in a group. In a development or testing group it waits to follow the group: on
+ * its next report the cloud pushes what was dispatched to the group, if it fits (跟随车辆组).
+ */
+export function joinGroup(ctx: Ctx, g: VehicleGroup, resourceId: string, reason: string): void {
+  ctx.s.groupMembers[resourceId] = g.id;
+  if (g.purpose !== 'PRODUCTION') ctx.s.groupFollows[resourceId] = { vehicleGroupId: g.id, reason: 'JOINED', since: ctx.now };
+  groupEvent(ctx, g.id, 'MEMBER_ADDED', resourceId, reason);
+}
+
+/** Takes a vehicle out of its group; its applied configuration stays. */
+export function leaveGroup(ctx: Ctx, vehicleGroupId: string, resourceId: string, reason: string): void {
+  delete ctx.s.groupMembers[resourceId];
+  delete ctx.s.groupFollows[resourceId];
+  groupEvent(ctx, vehicleGroupId, 'MEMBER_REMOVED', resourceId, reason);
 }
 
 /** Removing a member never rolls back its applied configuration. */
@@ -474,8 +497,7 @@ export function removeGroupMember(ctx: Ctx, vehicleGroupId: string, resourceId: 
   if (ctx.s.groupMembers[resourceId] !== g.id) throw notFound('member', resourceId);
   if (!reason.trim()) throw rule('REASON_REQUIRED', 'give a reason for the membership change');
   assertRemovable(ctx.s, resourceId);
-  delete ctx.s.groupMembers[resourceId];
-  groupEvent(ctx, g.id, 'MEMBER_REMOVED', resourceId, reason.trim());
+  leaveGroup(ctx, g.id, resourceId, reason.trim());
 }
 
 /** Whether dispatches to the group need an approved team test request. */

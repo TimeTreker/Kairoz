@@ -173,6 +173,7 @@ export function dispatchApplicability(ctx: Ctx, checkId: string, input: { vehicl
   const id = newId('dp');
   for (const vgId of vehicleGroupIds) recordGroupBinding(ctx, vgId, { kind: 'RELEASE', releaseId: release.id, configId: release.resolvedConfigId });
   for (const m of members) {
+    delete ctx.s.groupFollows[m.resourceId];
     const existing = ctx.s.testTargets.find((t) => t.subjectId === check.id && t.resourceId === m.resourceId);
     if (existing) existing.deploymentId = id;
     else ctx.s.testTargets.push({ subjectKind: 'APPLICABILITY', subjectId: check.id, versionId: check.id, resourceId: m.resourceId, deploymentId: id });
@@ -196,8 +197,10 @@ export function dispatchApplicability(ctx: Ctx, checkId: string, input: { vehicl
       previousConfigId: ctx.s.resources[m.resourceId]!.appliedConfigId,
       error: null,
       updatedAt: ctx.now,
+      pushedAt: null,
       history: [],
     })),
+    trigger: 'DISPATCH',
     dispatchedBy: ctx.user().username,
     createdAt: ctx.now,
     updatedAt: ctx.now,

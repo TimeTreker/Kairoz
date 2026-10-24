@@ -4,9 +4,25 @@ import { migrate } from '../src/engine/migrate.ts';
 import { demoState } from '../src/engine/seed.ts';
 import { STATE_SCHEMA } from '../src/engine/types.ts';
 
-/** A schema 11 save: a copy of a demo (today's by default) without the fields schema 12 added. */
-function schema11(demo: unknown = demoState()): Record<string, any> {
+/** A schema 12 save: a copy of a demo (today's by default) without the fields schema 13 added. */
+function schema12(demo: unknown = demoState()): Record<string, any> {
   const s = JSON.parse(JSON.stringify(demo)) as Record<string, any>;
+  s.schema = 12;
+  for (const d of Object.values(s.deployments) as any[]) {
+    delete d.trigger;
+    for (const t of d.targets) delete t.pushedAt;
+  }
+  for (const c of Object.values(s.softwareChanges) as any[]) delete c.requestId;
+  delete s.groupFollows;
+  delete s.vehicleSoftwareRequests;
+  delete s.loans;
+  delete s.clockOffsetMs;
+  return s;
+}
+
+/** A schema 11 save: a schema 12 save without the fields schema 12 added. */
+function schema11(demo: unknown = demoState()): Record<string, any> {
+  const s = schema12(demo);
   s.schema = 11;
   delete s.notificationReads;
   return s;
@@ -104,9 +120,16 @@ describe('saved state migration', () => {
     }
     for (const c of Object.values(migrated.candidates)) assert.equal(c.scope, 'Vehicle');
     assert.deepEqual(migrated.subsystemReleases, {});
-    // Everything the save had is still there, unchanged.
-    for (const key of ['features', 'commits', 'deployments', 'receipts', 'events', 'audit'] as const) {
+    // Everything the save had is still there, unchanged; deployments only gain how they were sent.
+    for (const key of ['features', 'commits', 'receipts', 'events', 'audit'] as const) {
       assert.deepEqual((migrated as unknown as Record<string, unknown>)[key], before[key], key);
+    }
+    for (const [id, d] of Object.entries(migrated.deployments)) {
+      const { trigger, targets, ...rest } = d;
+      const { targets: oldTargets, ...oldRest } = (before.deployments as Record<string, any>)[id];
+      assert.equal(trigger, 'DISPATCH');
+      assert.deepEqual(rest, oldRest, id);
+      assert.deepEqual(targets.map(({ pushedAt: _, ...t }) => t), oldTargets, id);
     }
   });
 
@@ -125,6 +148,15 @@ describe('saved state migration', () => {
     assert.deepEqual(migrated.applicability, []);
     assert.equal(migrated.directory, null);
     assert.deepEqual(migrated.releases, current.releases);
+  });
+
+  test('a schema 12 save counts finished targets as pushed and gains empty loans and follows', () => {
+    const current = JSON.parse(JSON.stringify(demoState()));
+    const migrated = migrate(schema12(current))!;
+    assert.equal(migrated.schema, STATE_SCHEMA);
+    assert.deepEqual([migrated.groupFollows, migrated.vehicleSoftwareRequests, migrated.loans, migrated.clockOffsetMs], [{}, {}, {}, 0]);
+    assert.ok(Object.values(migrated.deployments).every((d) => d.trigger === 'DISPATCH'));
+    assert.deepEqual(migrated, current);
   });
 
   test('a schema 11 save gains empty notification read marks', () => {

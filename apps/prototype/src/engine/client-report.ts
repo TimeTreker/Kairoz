@@ -10,6 +10,7 @@ import type { DomainError } from '../domain/errors.ts';
 import type { Actor, Ctx } from './engine.ts';
 import { workspaceVehicles } from './fleet.ts';
 import type { ClientReportLog, DeviceKey, State, StoredReport } from './types.ts';
+import { followGroup, pushPending } from './delivery.ts';
 import { noteReportedSoftware } from './software-change.ts';
 
 /** History kept per vehicle; older reports are dropped. */
@@ -116,8 +117,14 @@ export function acceptClientReport(ctx: Ctx, signed: SignedReport): 'ACCEPTED' |
     log.history.sort((a, b) => (isNewer(a, b) ? -1 : isNewer(b, a) ? 1 : 0));
   }
   log.history.splice(REPORT_HISTORY_LIMIT);
-  // The newest signed report is what the vehicle actually runs: a software change is noted.
-  if (check.kind === 'NEW') noteReportedSoftware(ctx, p.resourceId, p.vehicleIntegrationVersion);
+  if (check.kind === 'NEW') {
+    // The newest signed report is what the vehicle actually runs: a software change is noted. The
+    // vehicle is on and connected, so the cloud pushes what was dispatched to it, and a vehicle
+    // waiting to follow its group gets the group's publication if it fits.
+    noteReportedSoftware(ctx, p.resourceId, p.vehicleIntegrationVersion);
+    pushPending(ctx, p.resourceId);
+    followGroup(ctx, p.resourceId);
+  }
   return check.kind === 'NEW' ? 'ACCEPTED' : 'STALE';
 }
 

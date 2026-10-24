@@ -10,7 +10,7 @@ import { newId } from '../domain/ids.ts';
 import type { Env } from '../domain/vocabulary.ts';
 import { authorizeFeature, displayName, latestRelease } from './config.ts';
 import type { Ctx } from './engine.ts';
-import { authorizePersonal, directTargetProblems, getResource, membersOf, pendingDeploymentOf, pendingImageChangeOf, recordGroupBinding, softwareKey } from './fleet.ts';
+import { authorizePersonal, directTargetProblems, getResource, membersOf, pendingDeploymentOf, pendingImageChangeOf, pendingSoftwareUpdateOf, recordGroupBinding, softwareKey } from './fleet.ts';
 import { getGroup } from './org.ts';
 import { commitSnapshot, resolveFiles } from './snapshots.ts';
 import { setInEffect } from './release.ts';
@@ -154,20 +154,28 @@ function dispatchProblems(s: State, feature: Feature, input: { commitId: string;
     for (const rid of members) {
       if (seen.has(rid)) continue;
       seen.add(rid);
-      const r = s.resources[rid]!;
-      const fail = (problem: string) => problems.push({ resourceId: rid, vehicleGroupId: id, problem });
-      if (r.env !== g.env) fail(`vehicle environment ${r.env} differs from the group`);
-      if (r.env === 'production') fail('production vehicle');
-      if (r.status !== 'AVAILABLE') fail(`vehicle is ${r.status.toLowerCase()}`);
-      if (r.vehicleModelId !== feature.vehicleModelId) fail(`vehicle model ${r.vehicleModelId} differs from the Feature`);
-      if (!(s.workspaceResources[feature.workspaceId] ?? []).includes(rid)) fail('vehicle is not assigned to the workspace');
-      const pending = pendingDeploymentOf(s, rid);
-      if (pending) fail(`vehicle is waiting for deployment ${pending}`);
-      if (pendingImageChangeOf(s, rid)) fail('waiting for an image change');
-      const target = featureTarget(s, feature, input.commitId, g, r, input.disabledPolicies);
-      if (target.problem) fail(target.problem);
+      for (const problem of vehicleDispatchProblems(s, feature, input.commitId, g, s.resources[rid]!, input.disabledPolicies)) {
+        problems.push({ resourceId: rid, vehicleGroupId: id, problem });
+      }
     }
   }
+  return problems;
+}
+
+/** Why one member of a vehicle group cannot take a Feature commit now (empty when it can). */
+export function vehicleDispatchProblems(s: State, feature: Feature, commitId: string, g: VehicleGroup, r: Resource, disabledPolicies: string[]): string[] {
+  const problems: string[] = [];
+  if (r.env !== g.env) problems.push(`vehicle environment ${r.env} differs from the group`);
+  if (r.env === 'production') problems.push('production vehicle');
+  if (r.status !== 'AVAILABLE') problems.push(`vehicle is ${r.status.toLowerCase()}`);
+  if (r.vehicleModelId !== feature.vehicleModelId) problems.push(`vehicle model ${r.vehicleModelId} differs from the Feature`);
+  if (!(s.workspaceResources[feature.workspaceId] ?? []).includes(r.id)) problems.push('vehicle is not assigned to the workspace');
+  const pending = pendingDeploymentOf(s, r.id);
+  if (pending) problems.push(`vehicle is waiting for deployment ${pending}`);
+  if (pendingImageChangeOf(s, r.id)) problems.push('waiting for an image change');
+  if (pendingSoftwareUpdateOf(s, r.id)) problems.push('waiting for a software update');
+  const target = featureTarget(s, feature, commitId, g, r, disabledPolicies);
+  if (target.problem) problems.push(target.problem);
   return problems;
 }
 
@@ -218,48 +226,19 @@ function dispatchChecked(ctx: Ctx, featureId: string, input: DispatchInput, acti
       if (seen.has(rid)) continue;
       seen.add(rid);
       const r = ctx.s.resources[rid]!;
-      const target = featureTarget(ctx.s, feature, input.commitId, group, r, disabled);
-      const configId = resolveConfig(ctx, {
-        vehicleModelId: feature.vehicleModelId,
-        kind: 'FEATURE',
-        sourceId: feature.id,
-        baseReleaseId: target.baseReleaseId,
-        groups: target.groups,
-        disabledPolicies: target.disabledPolicies,
-        label: featureLabel(ctx.s, feature, input.commitId, target),
-      });
+      // An explicit dispatch covers the vehicle: it no longer waits to follow the group.
+      delete ctx.s.groupFollows[rid];
+      const configId = resolveFeatureConfig(ctx, feature, input.commitId, group, r, disabled);
       const entry = byConfig.get(configId) ?? { vehicleGroupIds: new Set<string>(), targets: [] };
       entry.vehicleGroupIds.add(vgId);
-      entry.targets.push({ resourceId: rid, vehicleGroupId: vgId, attempt: 0, status: 'PENDING', previousConfigId: r.appliedConfigId, error: null, updatedAt: ctx.now, history: [] });
+      entry.targets.push(newTarget(ctx, r, vgId));
       byConfig.set(configId, entry);
     }
   }
   const ids: string[] = [];
+  const env = ctx.s.vehicleGroups[input.vehicleGroupIds[0]!]!.env;
   for (const [configId, entry] of byConfig) {
-    const id = newId('dp');
-    ids.push(id);
-    for (const t of entry.targets) {
-      // Every dispatched member joins the vehicles this commit must be verified on, through its latest dispatch.
-      const existing = ctx.s.testTargets.find((x) => x.subjectId === feature.id && x.versionId === input.commitId && x.resourceId === t.resourceId);
-      if (existing) existing.deploymentId = id;
-      else ctx.s.testTargets.push({ subjectKind: 'FEATURE', subjectId: feature.id, versionId: input.commitId, resourceId: t.resourceId, deploymentId: id });
-    }
-    ctx.s.deployments[id] = {
-      id,
-      kind: 'FEATURE',
-      workspaceId: feature.workspaceId,
-      groupId: feature.groupId,
-      subjectId: feature.id,
-      commitId: input.commitId,
-      resolvedConfigId: configId,
-      env: ctx.s.vehicleGroups[input.vehicleGroupIds[0]!]!.env,
-      status: 'PENDING',
-      vehicleGroupIds: [...entry.vehicleGroupIds],
-      targets: entry.targets,
-      dispatchedBy: ctx.user().username,
-      createdAt: ctx.now,
-      updatedAt: ctx.now,
-    };
+    ids.push(createFeatureDeployment(ctx, feature, input.commitId, configId, env, [...entry.vehicleGroupIds], entry.targets, 'DISPATCH', ctx.user().username));
   }
   const f = ctx.s.features[featureId]!;
   if (f.stage === 'DCL_READY' || f.stage === 'VERIFIED') {
@@ -267,6 +246,66 @@ function dispatchChecked(ctx: Ctx, featureId: string, input: DispatchInput, acti
     f.updatedAt = ctx.now;
   }
   return ids;
+}
+
+/** A pending target: dispatched (下发), not yet pushed to the vehicle. */
+export function newTarget(ctx: Ctx, r: Resource, vehicleGroupId: string | null): DeploymentTarget {
+  return { resourceId: r.id, vehicleGroupId, attempt: 0, status: 'PENDING', previousConfigId: r.appliedConfigId, error: null, updatedAt: ctx.now, pushedAt: null, history: [] };
+}
+
+/** The configuration one vehicle runs for a Feature commit published to its group (created if new). */
+export function resolveFeatureConfig(ctx: Ctx, feature: Feature, commitId: string, group: VehicleGroup, r: Resource, disabled: string[]): string {
+  const target = featureTarget(ctx.s, feature, commitId, group, r, disabled);
+  return resolveConfig(ctx, {
+    vehicleModelId: feature.vehicleModelId,
+    kind: 'FEATURE',
+    sourceId: feature.id,
+    baseReleaseId: target.baseReleaseId,
+    groups: target.groups,
+    disabledPolicies: target.disabledPolicies,
+    label: featureLabel(ctx.s, feature, commitId, target),
+  });
+}
+
+/**
+ * Records one Feature deployment of a configuration. Every target joins the vehicles this commit
+ * must be verified on, through its latest deployment.
+ */
+export function createFeatureDeployment(
+  ctx: Ctx,
+  feature: Feature,
+  commitId: string,
+  configId: string,
+  env: Env,
+  vehicleGroupIds: string[],
+  targets: DeploymentTarget[],
+  trigger: Deployment['trigger'],
+  dispatchedBy: string,
+): string {
+  const id = newId('dp');
+  for (const t of targets) {
+    const existing = ctx.s.testTargets.find((x) => x.subjectId === feature.id && x.versionId === commitId && x.resourceId === t.resourceId);
+    if (existing) existing.deploymentId = id;
+    else ctx.s.testTargets.push({ subjectKind: 'FEATURE', subjectId: feature.id, versionId: commitId, resourceId: t.resourceId, deploymentId: id });
+  }
+  ctx.s.deployments[id] = {
+    id,
+    kind: 'FEATURE',
+    workspaceId: feature.workspaceId,
+    groupId: feature.groupId,
+    subjectId: feature.id,
+    commitId,
+    resolvedConfigId: configId,
+    env,
+    status: 'PENDING',
+    vehicleGroupIds,
+    targets,
+    trigger,
+    dispatchedBy,
+    createdAt: ctx.now,
+    updatedAt: ctx.now,
+  };
+  return id;
 }
 
 function settle(d: Draft<Deployment>, now: string): void {
@@ -419,6 +458,8 @@ export function acceptReceipt(
   // that had already started keeps its receipt and sends it again after the resume.
   if (d.status === 'PAUSED') throw rule('OTA_PAUSED', 'the rollout is paused; the vehicle reports again after it is resumed');
   ctx.s.receipts.push({ id: newId('rx'), deploymentId: d.id, resourceId: t.resourceId, attempt: t.attempt, result: input.result, error: input.error ?? null, receivedAt: ctx.now });
+  // A receipt shows the vehicle had the configuration, pushed or not.
+  t.pushedAt ??= ctx.now;
   t.status = input.result;
   t.error = input.result === 'FAILED' ? (input.error ?? 'apply failed') : null;
   t.updatedAt = ctx.now;
@@ -651,6 +692,7 @@ export function dispatchCandidate(ctx: Ctx, candidateId: string, input: { vehicl
   const id = newId('dp');
   for (const vgId of vehicleGroupIds) recordGroupBinding(ctx, vgId, { kind: 'CANDIDATE', candidateId: c.id, configId: c.resolvedConfigId });
   for (const m of members) {
+    delete ctx.s.groupFollows[m.resourceId];
     if (!ctx.s.testTargets.some((t) => t.subjectId === c.id && t.resourceId === m.resourceId)) {
       ctx.s.testTargets.push({ subjectKind: 'CANDIDATE', subjectId: c.id, versionId: c.id, resourceId: m.resourceId, deploymentId: id });
     }
@@ -674,8 +716,10 @@ export function dispatchCandidate(ctx: Ctx, candidateId: string, input: { vehicl
       previousConfigId: ctx.s.resources[m.resourceId]!.appliedConfigId,
       error: null,
       updatedAt: ctx.now,
+      pushedAt: null,
       history: [],
     })),
+    trigger: 'DISPATCH',
     dispatchedBy: ctx.user().username,
     createdAt: ctx.now,
     updatedAt: ctx.now,

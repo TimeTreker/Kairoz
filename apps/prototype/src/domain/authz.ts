@@ -74,6 +74,8 @@ export const ACTIONS = {
   'simulation.manage': { roles: ['WORKSPACE_ADMIN', 'VEHICLE_RESOURCE'], env: 'target' },
   'workspace.resources': { roles: ['WORKSPACE_ADMIN', 'VEHICLE_RESOURCE'], env: 'target' },
   'vehicleGroup.manage': { roles: ['WORKSPACE_ADMIN', 'CONFIG_RELEASE'], env: 'target' },
+  /** Asking the vehicle OTA system to put a vehicle on another software version (整车软件更新). */
+  'vehicle.updateSoftware': { roles: ['BUSINESS_DEV', 'BUSINESS_TEST', 'WORKSPACE_ADMIN', 'VEHICLE_RESOURCE'], env: 'target', excludeDispatchOnly: true },
   /** What a vehicle's client reports it runs: for those who work with the vehicle in a workspace. */
   'clientReport.read': {
     roles: ['VEHICLE_RESOURCE', 'WORKSPACE_ADMIN', 'BUSINESS_DEV', 'BUSINESS_TEST', 'INTEGRATION_TEST', 'CONFIG_RELEASE', 'DCL_ENGINEER'],

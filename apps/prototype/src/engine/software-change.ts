@@ -26,7 +26,20 @@ export function noteReportedSoftware(ctx: Ctx, resourceId: string, reported: str
   const r = ctx.s.resources[resourceId] as Draft<Resource> | undefined;
   if (!r || r.type !== 'PHYSICAL' || !reported || reported === r.integrationVersion) return;
   if (ctx.s.softwareVersions[softwareKey(r.vehicleModelId, reported)]) {
-    recordSoftwareChange(ctx, r, reported, 'CLIENT_REPORT');
+    const changeId = recordSoftwareChange(ctx, r, reported, 'CLIENT_REPORT');
+    const request = Object.values(ctx.s.vehicleSoftwareRequests).find(
+      (q) => q.resourceId === r.id && q.status === 'APPLIED' && q.toVersion === reported && !Object.values(ctx.s.softwareChanges).some((c) => c.requestId === q.id),
+    );
+    if (changeId && request) {
+      // The team asked for this version; it and the changes it answered are seen.
+      ctx.s.softwareChanges[changeId]!.requestId = request.id;
+      for (const c of Object.values(ctx.s.softwareChanges)) {
+        if (c.resourceId === r.id && c.status === 'APPLIED' && !c.acknowledgedBy) {
+          c.acknowledgedBy = request.requestedBy;
+          c.acknowledgedAt = ctx.now;
+        }
+      }
+    }
     r.integrationVersion = reported;
     r.integrationSource = 'DCL client report (signed)';
     r.softwareStatus = 'CONSISTENT';
@@ -47,10 +60,11 @@ export function noteReportedSoftware(ctx: Ctx, resourceId: string, reported: str
     at: ctx.now,
     acknowledgedBy: null,
     acknowledgedAt: null,
+    requestId: null,
   };
 }
 
-export type ChangeOutcome = 'NONE' | 'FIX' | 'REPUBLISH' | 'NEW_FEATURE' | 'NO_BASE' | 'CANNOT_CHECK' | 'PRODUCTION' | 'NOT_PUBLISHED' | 'UNRECORDED';
+export type ChangeOutcome = 'NONE' | 'FIX' | 'REPUBLISH' | 'NEW_FEATURE' | 'NO_BASE' | 'UNKNOWN_SOFTWARE' | 'CANNOT_CHECK' | 'PRODUCTION' | 'NOT_PUBLISHED' | 'UNRECORDED';
 
 export interface FileCheck {
   dataKey: string;
@@ -69,8 +83,8 @@ export interface PolicyCheck {
   problemFiles: string[];
 }
 
-export interface SoftwareAssessment {
-  change: SoftwareChange;
+/** What a vehicle group published, checked on one vehicle's software. */
+export interface PublicationCheck {
   outcome: ChangeOutcome;
   vehicleGroupId: string | null;
   featureId: string | null;
@@ -92,6 +106,10 @@ export interface SoftwareAssessment {
   integrated: boolean;
 }
 
+export interface SoftwareAssessment extends PublicationCheck {
+  change: SoftwareChange;
+}
+
 export function getSoftwareChange(s: State, id: string): SoftwareChange {
   const c = s.softwareChanges[id];
   if (!c) throw notFound('software change', id);
@@ -110,8 +128,7 @@ function versionInSet(s: State, releaseId: string | null, groupId: string, dataK
   return s.manifestVersions[s.commits[commitId]!.manifestVersionId]!.entries.find((e) => e.dataKey === dataKey)?.fileSpecVersionId ?? null;
 }
 
-const empty = (change: SoftwareChange, outcome: ChangeOutcome): SoftwareAssessment => ({
-  change,
+const emptyCheck = (outcome: ChangeOutcome): PublicationCheck => ({
   outcome,
   vehicleGroupId: null,
   featureId: null,
@@ -127,6 +144,7 @@ const empty = (change: SoftwareChange, outcome: ChangeOutcome): SoftwareAssessme
   policies: [],
   integrated: false,
 });
+const empty = (change: SoftwareChange, outcome: ChangeOutcome): SoftwareAssessment => ({ change, ...emptyCheck(outcome) });
 
 /**
  * Checks what the vehicle's group published against the new software, recomputed from the
@@ -139,12 +157,24 @@ export function assessSoftwareChange(s: State, changeId: string): SoftwareAssess
   if (r.env === 'production') return empty(change, 'PRODUCTION');
   const g = groupOf(s, r.id);
   const p = g?.publication;
-  const feature = p?.kind === 'FEATURE' ? s.features[p.featureId] : undefined;
-  if (!g || p?.kind !== 'FEATURE' || !feature) return { ...empty(change, 'NOT_PUBLISHED'), vehicleGroupId: g?.id ?? null };
-
-  const onNew: Resource = { ...r, integrationVersion: change.toVersion };
+  if (!g || p?.kind !== 'FEATURE' || !s.features[p.featureId]) return { ...empty(change, 'NOT_PUBLISHED'), vehicleGroupId: g?.id ?? null };
   const applied = r.appliedConfigId ? s.resolvedConfigs[r.appliedConfigId] : undefined;
   const runningBaseId = applied ? applied.baseReleaseId : (vehicleBase(s, g.baseReleaseId, { ...r, integrationVersion: change.fromVersion }).release?.id ?? null);
+  return { change, ...assessPublicationOn(s, r, g, change.toVersion, runningBaseId) };
+}
+
+/**
+ * Checks the Feature commit published to vehicle group `g` on vehicle `r` running `version`,
+ * recomputed from the current state: the base, then files, then the policies that depend on them.
+ * `runningBaseId` is the base the vehicle (or, for a vehicle joining the group, the group) runs now.
+ */
+export function assessPublicationOn(s: State, r: Resource, g: VehicleGroup, version: string | null, runningBaseId: string | null): PublicationCheck {
+  const p = g.publication;
+  const feature = p?.kind === 'FEATURE' ? s.features[p.featureId] : undefined;
+  if (r.env === 'production') return emptyCheck('PRODUCTION');
+  if (p?.kind !== 'FEATURE' || !feature) return { ...emptyCheck('NOT_PUBLISHED'), vehicleGroupId: g.id };
+
+  const onNew: Resource = { ...r, integrationVersion: version };
   const target = baseTarget(s, feature, g.baseReleaseId, onNew, p.disabledPolicies);
   const conflictBase = target.conflict ? (vehicleBase(s, g.baseReleaseId, onNew).release?.id ?? null) : null;
   const newBaseId = target.problem ? conflictBase : target.baseReleaseId;
@@ -157,7 +187,7 @@ export function assessSoftwareChange(s: State, changeId: string): SoftwareAssess
           .map((x) => s.groups[x.groupId]?.code ?? x.groupId)
       : [];
 
-  const manifest = s.softwareVersions[softwareKey(r.vehicleModelId, change.toVersion)]?.manifest ?? null;
+  const manifest = version ? (s.softwareVersions[softwareKey(r.vehicleModelId, version)]?.manifest ?? null) : null;
   const snapshot = commitSnapshot(s, p.commitId);
   const files = resolveFiles(s, snapshot);
   const fileChecks: FileCheck[] = Object.keys(files)
@@ -192,15 +222,16 @@ export function assessSoftwareChange(s: State, changeId: string): SoftwareAssess
     ? 'NO_BASE'
     : target.conflict
       ? 'NEW_FEATURE'
-      : !manifest
-        ? 'CANNOT_CHECK'
-        : problems
-          ? 'FIX'
-          : baseChanged
-            ? 'REPUBLISH'
-            : 'NONE';
+      : !version
+        ? 'UNKNOWN_SOFTWARE'
+        : !manifest
+          ? 'CANNOT_CHECK'
+          : problems
+            ? 'FIX'
+            : baseChanged
+              ? 'REPUBLISH'
+              : 'NONE';
   return {
-    change,
     outcome,
     vehicleGroupId: g.id,
     featureId: feature.id,

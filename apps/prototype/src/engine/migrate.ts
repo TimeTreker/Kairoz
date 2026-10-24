@@ -107,7 +107,24 @@ function to12(s: Saved): void {
   s.schema = 12;
 }
 
-const STEPS: Record<number, (s: Saved) => void> = { 6: to7, 7: to8, 8: to9, 9: to10, 10: to11, 11: to12 };
+/**
+ * Schema 13: a dispatch and its push are separate states (a finished target counts as pushed);
+ * vehicles following their group, software update requests, loans and simulated time.
+ */
+function to13(s: Saved): void {
+  for (const d of Object.values((s.deployments ?? {}) as Rows)) {
+    d.trigger ??= 'DISPATCH';
+    for (const t of (d.targets ?? []) as Record<string, unknown>[]) t.pushedAt ??= t.status === 'APPLIED' || t.status === 'FAILED' ? t.updatedAt : null;
+  }
+  for (const c of Object.values((s.softwareChanges ?? {}) as Rows)) c.requestId ??= null;
+  s.groupFollows ??= {};
+  s.vehicleSoftwareRequests ??= {};
+  s.loans ??= {};
+  s.clockOffsetMs ??= 0;
+  s.schema = 13;
+}
+
+const STEPS: Record<number, (s: Saved) => void> = { 6: to7, 7: to8, 8: to9, 9: to10, 10: to11, 11: to12, 12: to13 };
 
 /** The state at the current schema, or null when it cannot be read or is too old. Mutates `raw`. */
 export function migrate(raw: unknown): State | null {

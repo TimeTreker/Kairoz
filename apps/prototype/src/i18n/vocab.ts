@@ -175,6 +175,24 @@ export const TARGET_STATUS_LABELS: Record<string, Bilingual> = {
   CANCELLED: b('已取消', 'Cancelled'),
 };
 
+/** Dispatch (下发) and push (推送) are separate: a pending target is pushed once the vehicle is on and connected. */
+export const DELIVERY_STATE_LABELS: Record<string, Bilingual> = {
+  QUEUED: b('待放量', 'Queued'),
+  NOT_PUSHED: b('已下发·待推送', 'Dispatched, not pushed'),
+  PUSHED: b('已推送·待回执', 'Pushed, awaiting receipt'),
+  APPLIED: b('已生效', 'Applied'),
+  FAILED: b('失败', 'Failed'),
+  CANCELLED: b('已取消', 'Cancelled'),
+};
+export const DELIVERY_STATE_COLORS: Record<string, string> = {
+  QUEUED: 'default',
+  NOT_PUSHED: 'default',
+  PUSHED: 'processing',
+  APPLIED: 'success',
+  FAILED: 'error',
+  CANCELLED: 'default',
+};
+
 export const TARGET_STATUS_COLORS: Record<string, string> = {
   QUEUED: 'default',
   PENDING: 'processing',
@@ -649,6 +667,7 @@ export const CHANGE_OUTCOME_LABELS: Record<string, Bilingual> = {
   REPUBLISH: b('基线已变化，需重新下发', 'Base changed; publish again'),
   NEW_FEATURE: b('基线改了本组内容，需在新基线上新建 Feature', 'The new base changed this group; start a Feature on it'),
   NO_BASE: b('新软件没有适用的策略集', 'No policy set applies to the new software'),
+  UNKNOWN_SOFTWARE: b('整车软件版本未知，无法检查', 'Software version unknown; cannot check'),
   CANNOT_CHECK: b('新软件没有软件清单，无法检查', 'The new software has no manifest; cannot check'),
   PRODUCTION: b('量产车按适用的策略集处理', 'Production: the set in effect applies'),
   NOT_PUBLISHED: b('车辆组没有发布 Feature', 'No Feature published to its group'),
@@ -660,6 +679,7 @@ export const CHANGE_OUTCOME_COLORS: Record<string, string> = {
   REPUBLISH: 'gold',
   NEW_FEATURE: 'red',
   NO_BASE: 'red',
+  UNKNOWN_SOFTWARE: 'default',
   CANNOT_CHECK: 'default',
   PRODUCTION: 'default',
   NOT_PUBLISHED: 'default',
@@ -684,3 +704,33 @@ export const SOFTWARE_SOURCE_LABELS: Record<string, Bilingual> = {
   CONFIRMED: b('车辆资源确认', 'Vehicle resources confirmation'),
   CONTROLLERS: b('域控上报', 'Controller report'),
 };
+
+// Delivery and following the group (下发与推送、跟随车辆组)
+Object.assign(ERROR_LABELS, {
+  NOT_IN_VEHICLE_GROUP: b('车辆不在任何车辆组中', 'The vehicle routes through no vehicle group'),
+  NO_FEATURE_PUBLICATION: b('车辆组还没有下发过 Feature，请按车辆组下发', 'Nothing of a Feature was dispatched to the group yet; dispatch to the group'),
+});
+export const FOLLOW_REASON_LABELS: Record<string, Bilingual> = {
+  JOINED: b('加入车辆组', 'Joined the group'),
+  SOFTWARE_UPDATED: b('整车软件已更新', 'Software updated'),
+};
+export const DEPLOYMENT_TRIGGER_LABELS: Record<string, Bilingual> = {
+  DISPATCH: b('下发', 'Dispatch'),
+  GROUP_FOLLOW: b('随车辆组推送', 'Pushed to follow the group'),
+};
+
+// Whole-vehicle software updates (整车软件更新)
+Object.assign(ERROR_LABELS, {
+  SOFTWARE_UPDATE_PENDING: b('车辆正在等待整车软件更新，请等待结果或撤回', 'The vehicle is waiting for a software update; wait for it or withdraw it'),
+  NOT_IN_TEAM_GROUP: b('车辆不在业务组的车辆组中，请由工作区管理员更新', 'The vehicle is in no business group’s vehicle group; ask the workspace admin'),
+  PRODUCTION_SOFTWARE: b('量产车只能通过整车 OTA 计划更换软件', 'Production vehicles change software only through the vehicle OTA program'),
+  SOFTWARE_NOT_RECORDED: b('该整车软件版本尚未登记', 'This software version is not recorded'),
+  SAME_SOFTWARE: b('车辆已经运行这个版本', 'The vehicle already runs this version'),
+});
+export const SOFTWARE_REQUEST_STATUS_LABELS: Record<string, Bilingual> = {
+  PENDING: b('等待整车 OTA', 'Waiting for vehicle OTA'),
+  APPLIED: b('已完成', 'Done'),
+  FAILED: b('失败', 'Failed'),
+  CANCELLED: b('已撤回', 'Withdrawn'),
+};
+export const SOFTWARE_REQUEST_STATUS_COLORS: Record<string, string> = { PENDING: 'processing', APPLIED: 'green', FAILED: 'red', CANCELLED: 'default' };

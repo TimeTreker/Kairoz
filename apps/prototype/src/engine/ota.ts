@@ -58,6 +58,7 @@ function target(ctx: Ctx, resourceId: string, vehicleGroupId: string | null, sta
     previousConfigId: ctx.s.resources[resourceId]!.appliedConfigId,
     error: null,
     updatedAt: ctx.now,
+    pushedAt: null,
     history: [],
   };
 }
@@ -134,6 +135,7 @@ export function createOta(
     targets: members.map((m) => target(ctx, m.resourceId, m.vehicleGroupId, wave.includes(m.resourceId) ? 'PENDING' : 'QUEUED')),
     rollbackOf: null,
     pauseReason: null,
+    trigger: 'DISPATCH',
     dispatchedBy: ctx.user().username,
     createdAt: ctx.now,
     updatedAt: ctx.now,
@@ -163,6 +165,7 @@ export function expandOta(ctx: Ctx, deploymentId: string, resourceIds: string[] 
       t.status = 'PENDING';
       t.previousConfigId = ctx.s.resources[t.resourceId]!.appliedConfigId;
       t.updatedAt = ctx.now;
+      t.pushedAt = null;
     }
   }
   draft.updatedAt = ctx.now;
@@ -196,6 +199,7 @@ export function resumeOta(ctx: Ctx, deploymentId: string): void {
     t.status = 'PENDING';
     t.error = null;
     t.updatedAt = ctx.now;
+    t.pushedAt = null;
   }
   draft.status = 'PENDING';
   draft.pauseReason = null;
@@ -287,6 +291,7 @@ export function rollbackOta(ctx: Ctx, deploymentId: string, reason: string): str
       targets: targets.map((t) => target(ctx, t.resourceId, t.vehicleGroupId!, 'PENDING')),
       rollbackOf: d.id,
       pauseReason: null,
+      trigger: 'DISPATCH',
       dispatchedBy: ctx.user().username,
       createdAt: ctx.now,
       updatedAt: ctx.now,
