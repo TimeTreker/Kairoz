@@ -1,8 +1,8 @@
 {
-  "runAt": "2026-10-24T06:29:48.817Z",
+  "runAt": "2026-10-24T07:34:08.939Z",
   "layer": "engine",
   "counts": {
-    "PASS": 137,
+    "PASS": 144,
     "FAIL": 0,
     "GAP": 0,
     "BLOCKED": 0,
@@ -1101,6 +1101,75 @@
           "id": "N01",
           "title": "派生镜像不进入集成测试与镜像目录",
           "actor": "integration_admin、integration_tester；business、workspace_manager",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        }
+      ]
+    },
+    {
+      "script": "software-change",
+      "name": "整车软件版本变化 · 通知、两层检查与四种处理",
+      "rows": [
+        {
+          "id": "VC01",
+          "title": "前置：策略集 1.0.0 确认适用于 X89 1.1",
+          "actor": "release、integration_admin、resource、integration_tester",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "VC02",
+          "title": "A：同一策略集、全部可运行——确认即可",
+          "actor": "车辆模拟器；business / 陈明",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "VC03",
+          "title": "未登记的版本，以及新软件没有适用的策略集",
+          "actor": "车辆模拟器；resource / 车辆资源；business",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "VC04",
+          "title": "B：同一基线，本组文件与策略需要修改",
+          "actor": "workspace_manager；business；brake_tester",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "VC05",
+          "title": "C：新软件对应另一个策略集，本组内容未变——重新下发",
+          "actor": "dcl、release；workspace_manager；车辆模拟器；brake_tester",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "VC06",
+          "title": "D：新基线改了本组内容——在新基线上新建 Feature",
+          "actor": "车辆模拟器；steering / 吴泽宇",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "N01",
+          "title": "谁会收到、谁不会",
+          "actor": "steering；release；车辆模拟器",
           "adaptation": null,
           "status": "PASS",
           "detail": null,

@@ -1,10 +1,10 @@
 # 验收结果（引擎层逐幕回放）
 
-运行时间：2026-10-24T06:29:48.817Z。由 `npm run acceptance` 生成；每次重新执行，不沿用历史结果。
+运行时间：2026-10-24T07:34:08.939Z。由 `npm run acceptance` 生成；每次重新执行，不沿用历史结果。
 
 状态：PASS 通过；FAIL 失败；GAP 设计要求尚未实现；BLOCKED 前置幕未通过；NOT_APPLICABLE 浏览器原型不适用（如服务端部署）。
 
-合计：PASS 137 · FAIL 0 · GAP 0 · BLOCKED 0 · NOT_APPLICABLE 3 · NOT_WRITTEN 0
+合计：PASS 144 · FAIL 0 · GAP 0 · BLOCKED 0 · NOT_APPLICABLE 3 · NOT_WRITTEN 0
 
 ## 从零启动 · 角色协作
 
@@ -166,6 +166,18 @@
 | SW07 共享仿真：工作区管理员切换基础镜像 | workspace_manager / 工作区管理员；business | PASS |  |
 | SW08 镜像变化后，旧测试结果不再计入 | business、brake_tester、workspace_manager | PASS |  |
 | N01 派生镜像不进入集成测试与镜像目录 | integration_admin、integration_tester；business、workspace_manager | PASS |  |
+
+## 整车软件版本变化 · 通知、两层检查与四种处理
+
+| 幕 | 执行人 | 状态 | 说明 |
+|---|---|---|---|
+| VC01 前置：策略集 1.0.0 确认适用于 X89 1.1 | release、integration_admin、resource、integration_tester | PASS |  |
+| VC02 A：同一策略集、全部可运行——确认即可 | 车辆模拟器；business / 陈明 | PASS |  |
+| VC03 未登记的版本，以及新软件没有适用的策略集 | 车辆模拟器；resource / 车辆资源；business | PASS |  |
+| VC04 B：同一基线，本组文件与策略需要修改 | workspace_manager；business；brake_tester | PASS |  |
+| VC05 C：新软件对应另一个策略集，本组内容未变——重新下发 | dcl、release；workspace_manager；车辆模拟器；brake_tester | PASS |  |
+| VC06 D：新基线改了本组内容——在新基线上新建 Feature | 车辆模拟器；steering / 吴泽宇 | PASS |  |
+| N01 谁会收到、谁不会 | steering；release；车辆模拟器 | PASS |  |
 
 ## 反向用例 T-N01–T-N24
 

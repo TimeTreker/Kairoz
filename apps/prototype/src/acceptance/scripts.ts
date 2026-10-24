@@ -2416,6 +2416,149 @@ export const SCRIPTS: Script[] = [
         "fail": "需要测试新软件时，由车辆资源登记正式镜像。"
       }
     ]
+  },
+  {
+    "id": "software-change",
+    "name": "整车软件版本变化 · 通知、两层检查与四种处理",
+    "start": "demo",
+    "scenes": [
+      {
+        "id": "VC01",
+        "title": "前置：策略集 1.0.0 确认适用于 X89 1.1",
+        "actor": "release、integration_admin、resource、integration_tester",
+        "accounts": [
+          "release",
+          "integration_admin",
+          "resource",
+          "integration_tester"
+        ],
+        "workspace": "x89-integration",
+        "page": "发布与配置 OTA → 软件版本与适用性；工作区车辆 → 运行镜像；车辆台账；配置集成 → 适用性测试",
+        "pre": "演示数据。",
+        "steps": [
+          "release 为 X89 1.1 开启适用性确认（策略集 1.0.0）。",
+          "integration_admin 停止 SIM-101，“运行镜像”切换到 x89-1.1-sim，模拟器“部署成功”后启动；resource 把 VEH-031 的软件确认为 1.1（DIP 上报）。",
+          "integration_tester 向 X89 集成测试车组下发适用性测试，回执后先仿真后实车登记 PASS，确认验证；release 确认适用。"
+        ],
+        "done": "策略集 1.0.0 同时适用 1.0 与 1.1，版本号不变。",
+        "fail": "运行 1.0 的车辆不能用于 1.1 的适用性测试。"
+      },
+      {
+        "id": "VC02",
+        "title": "A：同一策略集、全部可运行——确认即可",
+        "actor": "车辆模拟器；business / 陈明",
+        "accounts": [
+          "business"
+        ],
+        "workspace": "team-brake",
+        "page": "原型工具 → 车辆模拟器；工作台；研发 Feature → 下发与测试",
+        "pre": "VC01 完成。",
+        "steps": [
+          "在车辆模拟器对 VEH-001“更多 → 模拟整车软件 OTA…”刷写 1.1，再“上报”：平台从签名上报中得知 VEH-001 运行 1.1。",
+          "business 工作台出现“车辆软件已变化 VEH-001 1.0 → 1.1 · 无需修改”；打开：基线 策略集 1.0.0 → 策略集 1.0.0，文件与策略都可用。点“确认”。",
+          "brake_monitor 仍为已验证；VEH-001 的测试结果标注“在 1.0 上测试，车辆现为 1.1”并继续计入。"
+        ],
+        "done": "版本变了但策略集与本组内容都没变：不建分支、不重新下发。",
+        "fail": "需要修改时不要只点确认。"
+      },
+      {
+        "id": "VC03",
+        "title": "未登记的版本，以及新软件没有适用的策略集",
+        "actor": "车辆模拟器；resource / 车辆资源；business",
+        "accounts": [
+          "resource",
+          "business"
+        ],
+        "workspace": "team-brake",
+        "page": "原型工具 → 车辆模拟器；工作台；车辆与车辆组 → 软件版本与镜像、车辆台账",
+        "pre": "VC02 完成。",
+        "steps": [
+          "把 VEH-001 刷写为 1.3 并上报：平台仍记录 1.1；resource 工作台出现“上报了未登记的软件版本 VEH-001 · 1.3”。",
+          "resource 登记 X89 1.3：软件清单从上一版本复制，把 ADC:/var/log 改为 ADC:/var/log/chassis；在车辆台账“确认软件版本”（已按上报预填 1.3、来源客户端上报）。",
+          "business 打开 VEH-001 的变化：“新软件没有适用的策略集”；文件“制动监测日志 · 来源缺失”；两条制动策略“有问题 · 文件有问题：制动监测日志”。"
+        ],
+        "done": "平台不认未登记的版本；登记后才更新车辆并检查。",
+        "fail": "没有适用策略集时，车辆保持已生效配置。"
+      },
+      {
+        "id": "VC04",
+        "title": "B：同一基线，本组文件与策略需要修改",
+        "actor": "workspace_manager；business；brake_tester",
+        "accounts": [
+          "workspace_manager",
+          "business",
+          "brake_tester"
+        ],
+        "workspace": "team-brake",
+        "page": "车辆与车辆组 → 车辆组；研发 Feature；原型工具 → 车辆模拟器",
+        "pre": "VC03 完成。",
+        "steps": [
+          "workspace_manager 把制动研发车组设为显式基线 策略集 1.0.0：VEH-001 的变化变为“需修改本组文件或策略”。",
+          "business 在 brake_monitor 新增文件 ADC /var/log/chassis/brake monitor.log（制动监测日志（新路径）），两条策略改为采集它，移除旧文件，提交 r002。",
+          "brake_tester 按车辆组下发 r002，模拟器回执：变化重新检查为“无需修改”；business 点“确认”。"
+        ],
+        "done": "先改文件、再改依赖它的策略；同一基线不需要新分支。",
+        "fail": "只改策略不改文件，文件来源仍然缺失。"
+      },
+      {
+        "id": "VC05",
+        "title": "C：新软件对应另一个策略集，本组内容未变——重新下发",
+        "actor": "dcl、release；workspace_manager；车辆模拟器；brake_tester",
+        "accounts": [
+          "dcl",
+          "release",
+          "workspace_manager",
+          "brake_tester"
+        ],
+        "workspace": "team-brake",
+        "page": "发布与配置 OTA；车辆组；原型工具 → 车辆模拟器；研发 Feature → 下发与测试",
+        "pre": "VC04 完成。",
+        "steps": [
+          "dcl 对策略集 1.0.0 的 chassis.steering.angle_jump 申请紧急停用，release 批准：策略集 1.0.1 适用 1.0 与 1.1。",
+          "workspace_manager 把制动研发车组改回“跟随每辆车的软件版本”；VEH-001 刷写回 1.1 并上报。",
+          "变化显示“基线已变化，需重新下发”：策略集 1.0.0 → 1.0.1，有变化的分组 chassis.steering；制动文件与策略都可用。brake_tester 重新下发 r002，回执后检查为“无需修改”，确认。"
+        ],
+        "done": "基线变化但未改本组：重新下发同一提交即可。",
+        "fail": "车辆运行的组合变了，需要重新测试。"
+      },
+      {
+        "id": "VC06",
+        "title": "D：新基线改了本组内容——在新基线上新建 Feature",
+        "actor": "车辆模拟器；steering / 吴泽宇",
+        "accounts": [
+          "steering"
+        ],
+        "workspace": "team-steering",
+        "page": "原型工具 → 车辆模拟器；工作台；研发 Feature",
+        "pre": "VC05 完成。",
+        "steps": [
+          "VEH-003（转向研发车组，运行 steering_return_rate）刷写为 1.1 并上报。",
+          "steering 工作台出现变化：“基线改了本组内容，需在新基线上新建 Feature”；抽屉列出本 Feature 相对基线的修改。",
+          "点“在新基线上新建 Feature”，名称 steering_return_rate_v2：新 Feature 基线为策略集 1.0.1，草稿中没有已停用的 angle_jump。确认这次变化。"
+        ],
+        "done": "新分支跟着策略集走：只有新基线改了本组内容时才新建 Feature。",
+        "fail": "平台不自动建分支或下发，由团队决定。"
+      },
+      {
+        "id": "N01",
+        "title": "谁会收到、谁不会",
+        "actor": "steering；release；车辆模拟器",
+        "accounts": [
+          "steering",
+          "release"
+        ],
+        "workspace": null,
+        "page": "工作台",
+        "pre": "VC06 完成。",
+        "steps": [
+          "steering 不能确认制动车辆的变化（页面不出现，由引擎回放核对）。",
+          "量产车 VEH-201 刷写为 1.1 并上报：记录变化，但没有团队待办；量产按适用策略集与适用性确认处理。",
+          "仿真不能“模拟整车软件 OTA”：仿真的软件由运行镜像决定（菜单中不出现，由引擎回放核对）。"
+        ],
+        "done": "只通知往该车辆组发布的团队。",
+        "fail": "仿真换软件请使用“运行镜像”。"
+      }
+    ]
   }
 ];
 

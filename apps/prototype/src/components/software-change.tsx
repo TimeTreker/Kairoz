@@ -113,12 +113,17 @@ export function SoftwareChangeDrawer({ changeId, onClose }: { changeId: string |
             <Card size="small" title={L('基线', 'Base')}>
               <Space orientation="vertical">
                 <span>
-                  {L('车上配置的基线', 'Base the vehicle runs')}：{baseName(state, a.runningBaseId, L, B)} → {L('新软件对应的基线', 'base for the new software')}：
+                  {L('车上配置的基线', 'Base the vehicle runs')}
+                  {L('：', ': ')}
+                  {baseName(state, a.runningBaseId, L, B)} → {L('新软件对应的基线', 'base for the new software')}
+                  {L('：', ': ')}
                   {a.baseProblem ? <Typography.Text type="danger"> {B(issueLabel(a.baseProblem), a.baseProblem)}</Typography.Text> : ` ${baseName(state, a.newBaseId, L, B)}`}
                 </span>
                 {a.baseChanged && a.changedGroups.length > 0 && (
                   <span>
-                    {L('有变化的业务分组', 'Groups that changed')}：{a.changedGroups.map((g) => <Tag key={g}>{g}</Tag>)}
+                    {L('有变化的业务分组', 'Groups that changed')}
+                    {L('：', ': ')}
+                    {a.changedGroups.map((g) => <Tag key={g}>{g}</Tag>)}
                   </span>
                 )}
               </Space>
@@ -158,7 +163,7 @@ export function SoftwareChangeDrawer({ changeId, onClose }: { changeId: string |
                     render: (_, p) =>
                       [
                         ...p.missingSignals.map((x) => `${L('缺少信号', 'missing signal')} ${x}`),
-                        ...p.problemFiles.map((x) => `${L('文件有问题', 'file problem')}：${x}`),
+                        ...p.problemFiles.map((x) => `${L('文件有问题', 'file problem')}${L('：', ': ')}${x}`),
                       ].join(L('；', '; ')) || '—',
                   },
                 ]}
@@ -188,7 +193,9 @@ export function SoftwareChangeDrawer({ changeId, onClose }: { changeId: string |
         }}
       >
         <Typography.Paragraph type="secondary">
-          {L('基线', 'Base')}：{baseName(state, a.newBaseId, L, B)}
+          {L('基线', 'Base')}
+          {L('：', ': ')}
+          {baseName(state, a.newBaseId, L, B)}
         </Typography.Paragraph>
         <Input value={name} onChange={(e) => setName(e.target.value)} />
       </Modal>
