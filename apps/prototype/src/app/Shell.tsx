@@ -36,6 +36,8 @@ import { QueryPage } from '../pages/QueryPage.tsx';
 import { ReleasePage } from '../pages/ReleasePage.tsx';
 import { SimulatorPage } from '../pages/SimulatorPage.tsx';
 import { WorkbenchPage } from '../pages/WorkbenchPage.tsx';
+import { NotificationsPage } from '../pages/NotificationsPage.tsx';
+import { NotificationBell } from '../components/notifications.tsx';
 import { useActor, useCanOpen, useWorkspace } from './hooks.ts';
 import { PrototypeMenu } from './PrototypeMenu.tsx';
 import { navigate, useRoute } from './router.ts';
@@ -137,6 +139,7 @@ export function Shell() {
       accounts: <AccountsPage />,
       audit: <AuditPage />,
       guide: <GuidePage />,
+      notifications: <NotificationsPage />,
       acceptance: <AcceptancePage />,
     }[page] ?? <WorkbenchPage />;
 
@@ -169,6 +172,7 @@ export function Shell() {
           <div style={{ flex: 1 }} />
           <Segmented size="small" value={lang} onChange={(v) => setLang(v as 'zh' | 'en')} options={[{ label: '中', value: 'zh' }, { label: 'EN', value: 'en' }]} />
           <PrototypeMenu compact />
+          {workspace && <NotificationBell />}
           <Dropdown
             menu={{
               items: [
