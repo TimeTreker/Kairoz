@@ -92,8 +92,8 @@ function setup() {
 /** Takes a DCL Ready brake Feature through dispatch, receipts and tests to Verified. */
 function verifyBrake(e: Engine, featureId: string, vg: string) {
   const head = e.getState().features[featureId]!.headCommitId!;
-  const d = e.run('brake_tester', (c) => v.dispatchFeature(c, featureId, { commitId: head, vehicleGroupIds: [vg] }));
-  for (const r of ['SIM-021', 'VEH-001']) e.run(null, (c) => sendReceipt(c, d, r, 'APPLIED'));
+  const [d] = e.run('brake_tester', (c) => v.dispatchFeature(c, featureId, { commitId: head, vehicleGroupIds: [vg] }));
+  for (const r of ['SIM-021', 'VEH-001']) e.run(null, (c) => sendReceipt(c, d!, r, 'APPLIED'));
   for (const r of ['SIM-021', 'VEH-001']) e.run('brake_tester', (c) => v.recordFeatureTest(c, featureId, { commitId: head, resourceId: r, result: 'PASS', summary: 'ok' }));
   e.run('brake_tester', (c) => v.verifyFeature(c, featureId));
 }
@@ -162,8 +162,8 @@ describe('integration', () => {
       config.putPolicy(c, wider, 'chassis.steering.angle_jump', { name: '转角突变', trigger: 'steering_angle_rate > 300 AND vehicle_speed > 20', captures: [eps], preSeconds: 110, postSeconds: 10 }),
     );
     const head = e.run('steering', (c) => config.submitFeature(c, wider, { message: '更长的事前窗口' })).commitId;
-    const d = e.run('steering_tester', (c) => v.dispatchFeature(c, wider, { commitId: head, vehicleGroupIds: [vehicleGroup('转向研发车组')] }));
-    for (const r of ['SIM-022', 'VEH-003']) e.run(null, (c) => sendReceipt(c, d, r, 'APPLIED'));
+    const [d] = e.run('steering_tester', (c) => v.dispatchFeature(c, wider, { commitId: head, vehicleGroupIds: [vehicleGroup('转向研发车组')] }));
+    for (const r of ['SIM-022', 'VEH-003']) e.run(null, (c) => sendReceipt(c, d!, r, 'APPLIED'));
     for (const r of ['SIM-022', 'VEH-003']) e.run('steering_tester', (c) => v.recordFeatureTest(c, wider, { commitId: head, resourceId: r, result: 'PASS', summary: 'ok' }));
     e.run('steering_tester', (c) => v.verifyFeature(c, wider));
 

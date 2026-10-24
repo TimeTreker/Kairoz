@@ -134,7 +134,7 @@ export function configurationContents(s: State, resolvedConfigId: string | null)
     const commit = s.commits[commitId];
     if (!commit) continue;
     for (const [policyId, versionId] of Object.entries(commit.policies)) {
-      policies.push({ id: policyId, version: `v${s.policyVersions[versionId]?.version ?? '?'}`, status: 'CONFIGURED' });
+      policies.push({ id: policyId, version: `v${s.policyVersions[versionId]?.version ?? '?'}`, status: config.disabledPolicies.includes(policyId) ? 'DISABLED' : 'CONFIGURED' });
     }
     for (const e of s.manifestVersions[commit.manifestVersionId]?.entries ?? []) {
       if (s.dataItems[e.dataKey]?.ownerGroupId !== groupId) continue; // references are collected by their owner
@@ -147,7 +147,7 @@ export function configurationContents(s: State, resolvedConfigId: string | null)
   }
   const byId = (a: VersionItem, b: VersionItem) => a.id.localeCompare(b.id);
   return {
-    version: config.label,
+    version: config.kind === 'RELEASE' ? (s.releases[config.sourceId]?.dclVersion ?? config.label) : config.label,
     releaseId: config.kind === 'RELEASE' ? config.sourceId : null,
     digest: config.digest,
     policies: policies.sort(byId),

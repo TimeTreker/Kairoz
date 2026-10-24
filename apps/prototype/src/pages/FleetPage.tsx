@@ -27,6 +27,7 @@ import {
   reportControllers,
   reserveVehicle,
   setGroupApproval,
+  setGroupBase,
   setResourceStatus,
   setSoftwareManifest,
   startSimulation,
@@ -38,12 +39,16 @@ import { registerDeviceKey } from '../engine/client-report.ts';
 import { displayName } from '../engine/config.ts';
 import { devicePublicKey, provisionDevice } from '../engine/simulator.ts';
 import { decideTestRequest, testRequestsOf } from '../engine/validation.ts';
-import { compareVersions } from '../engine/release.ts';
+import { answerConfigRequest } from '../engine/ota.ts';
+import { compareVersions, releasesOf } from '../engine/release.ts';
 import type { Resource, SoftwareVersion, State, TestRequest } from '../engine/types.ts';
 import { sha256Hex } from '../domain/canonical.ts';
 import { useI18n } from '../i18n/i18n.tsx';
-import { ENV_LABELS, REQUEST_STATUS_COLORS, REQUEST_STATUS_LABELS, RESOURCE_STATUS_LABELS, RESOURCE_TYPE_LABELS, VEHICLE_GROUP_PURPOSE_LABELS } from '../i18n/vocab.ts';
+import { CONFIG_ANSWER_LABELS, ENV_LABELS, GROUP_EVENT_LABELS, REQUEST_STATUS_COLORS, REQUEST_STATUS_LABELS, RESOURCE_STATUS_LABELS, RESOURCE_TYPE_LABELS, VEHICLE_GROUP_PURPOSE_LABELS, setName } from '../i18n/vocab.ts';
+import { issueLabel } from '../i18n/issues.ts';
 import { navigate } from '../app/router.ts';
+
+const ANSWER_COLORS: Record<string, string> = { GROUP_TARGET: 'blue', REPUBLISH: 'gold', BASE_CONFLICT: 'red', NO_BASE: 'red', HELD: 'purple', TASK: 'processing', APPLIED: 'default', INITIAL: 'default', BLOCKED: 'red' };
 
 function VehicleTable({ vehicles, extra }: { vehicles: Resource[]; extra?: (r: Resource) => React.ReactNode }) {
   const state = useEngineState();
@@ -333,6 +338,30 @@ function VehicleGroups() {
                     {g.groupId ? `${L('业务分组', 'Business group')}: ${state.groups[g.groupId]?.name} · ` : ''}
                     {L('已发布', 'Published')}: <Mono>{g.publication ? publicationLabel(state, g.publication) : '—'}</Mono> · {L('绑定修订', 'binding rev.')} {g.bindingRevision}
                   </Typography.Text>
+                  {g.publication?.kind === 'FEATURE' && g.publication.disabledPolicies.length > 0 && (
+                    <Typography.Text type="secondary">
+                      {L('已关闭的策略', 'Switched off')}: {g.publication.disabledPolicies.map((p) => <Tag key={p}>{p}</Tag>)}
+                    </Typography.Text>
+                  )}
+                  {g.purpose !== 'PRODUCTION' && (
+                    <Space size={8} wrap>
+                      <Typography.Text type="secondary">{L('基线', 'Base')}:</Typography.Text>
+                      {canManage ? (
+                        <Select
+                          size="small"
+                          style={{ minWidth: 220 }}
+                          value={g.baseReleaseId ?? ''}
+                          onChange={(v) => run((c) => setGroupBase(c, g.id, v || null), v ? L('已指定显式基线，下次下发生效', 'Explicit base set; it applies from the next publish') : L('已恢复按车辆软件取基线', 'Back to each vehicle’s software'))}
+                          options={[
+                            { value: '', label: L('跟随每辆车的软件版本', 'Follow each vehicle’s software') },
+                            ...releasesOf(state, workspace.vehicleModelId).map((r) => ({ value: r.id, label: `${L('显式基线', 'Explicit base')}: ${B(setName(r.dclVersion))}` })),
+                          ]}
+                        />
+                      ) : (
+                        <Typography.Text>{g.baseReleaseId ? `${L('显式基线', 'Explicit base')}: ${B(setName(state.releases[g.baseReleaseId]!.dclVersion))}` : L('跟随每辆车的软件版本', 'Follows each vehicle’s software')}</Typography.Text>
+                      )}
+                    </Space>
+                  )}
                   <Table
                     rowKey={(r) => r}
                     size="small"
@@ -342,7 +371,28 @@ function VehicleGroups() {
                     columns={[
                       { title: L('车辆', 'Vehicle'), render: (_, id) => <Mono>{id}</Mono> },
                       { title: L('类型', 'Type'), render: (_, id) => B(RESOURCE_TYPE_LABELS[state.resources[id]!.type]) },
+                      { title: L('软件', 'Software'), render: (_, id) => state.resources[id]!.integrationVersion ?? <Tag color="orange">{L('未知', 'unknown')}</Tag> },
                       { title: L('已生效', 'Applied'), render: (_, id) => <Mono>{B(configName(state, state.resources[id]!.appliedConfigId))}</Mono> },
+                      ...(g.purpose === 'PRODUCTION'
+                        ? []
+                        : [
+                            {
+                              title: L('应运行', 'Should run'),
+                              render: (_: unknown, id: string) => {
+                                const a = answerConfigRequest(state, id);
+                                const due = a.reason === 'GROUP_TARGET' && a.configId !== state.resources[id]!.appliedConfigId;
+                                return (
+                                  <Tooltip title={a.detail ? B(issueLabel(a.detail), a.detail) : undefined}>
+                                    <Space size={4} wrap>
+                                      <Tag color={ANSWER_COLORS[a.reason] ?? 'default'}>{B(CONFIG_ANSWER_LABELS[a.reason])}</Tag>
+                                      {a.reason === 'GROUP_TARGET' && <Mono>{B(configName(state, a.configId))}</Mono>}
+                                      {due && <Tag color="gold">{L('待回执', 'awaiting receipt')}</Tag>}
+                                    </Space>
+                                  </Tooltip>
+                                );
+                              },
+                            },
+                          ]),
                       {
                         title: '',
                         render: (_, id) =>
@@ -365,7 +415,7 @@ function VehicleGroups() {
                             items={events.map((e) => ({
                               content: (
                                 <span>
-                                  <Tag>{e.kind}</Tag>
+                                  <LabelTag map={GROUP_EVENT_LABELS} value={e.kind} />
                                   {e.resourceId && <Mono>{e.resourceId}</Mono>} {e.reason} · {state.accounts[e.actor]?.displayName} · {when(e.createdAt)}
                                 </span>
                               ),
@@ -478,7 +528,19 @@ function TestRequests({ workspaceId }: { workspaceId: string }) {
             ),
           },
           { title: L('车辆组 / 车辆', 'Groups / vehicles'), render: (_, r) => `${r.vehicleGroupIds.map((g) => state.vehicleGroups[g]?.name).join(', ')} · ${r.members.join(', ')}` },
-          { title: L('目标', 'Goal'), dataIndex: 'goal' },
+          {
+            title: L('目标', 'Goal'),
+            render: (_, r) => (
+              <Space orientation="vertical" size={0}>
+                <span>{r.goal}</span>
+                {r.disabledPolicies.length > 0 && (
+                  <Typography.Text type="secondary">
+                    {L('关闭', 'Off')}: {r.disabledPolicies.join(', ')}
+                  </Typography.Text>
+                )}
+              </Space>
+            ),
+          },
           { title: L('申请人', 'By'), render: (_, r) => `${state.accounts[r.requestedBy]?.displayName} · ${when(r.requestedAt)}` },
           { title: L('状态', 'Status'), render: (_, r) => <Tooltip title={r.decisionNote}><Tag color={REQUEST_STATUS_COLORS[r.status]}>{B(REQUEST_STATUS_LABELS[r.status])}</Tag></Tooltip> },
           {

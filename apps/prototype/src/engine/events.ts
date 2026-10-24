@@ -15,8 +15,11 @@ export function capturablePolicies(s: State, resourceId: string): { groupId: str
   const r = s.resources[resourceId];
   const config = r?.appliedConfigId ? s.resolvedConfigs[r.appliedConfigId] : undefined;
   if (!config) return [];
+  // Policies a development group switched off do not run on the vehicle.
   return Object.entries(config.groups).flatMap(([groupId, commitId]) =>
-    Object.entries(s.commits[commitId]!.policies).map(([policyId, versionId]) => ({ groupId, commitId, policyId, name: s.policyVersions[versionId]!.content.name })),
+    Object.entries(s.commits[commitId]!.policies)
+      .filter(([policyId]) => !config.disabledPolicies.includes(policyId))
+      .map(([policyId, versionId]) => ({ groupId, commitId, policyId, name: s.policyVersions[versionId]!.content.name })),
   );
 }
 

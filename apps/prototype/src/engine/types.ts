@@ -485,6 +485,8 @@ export interface TestRequest {
   vehicleGroupIds: string[];
   /** The vehicles the approval covers; a different list needs a new request. */
   members: string[];
+  /** Policies of other business groups the test switches off. */
+  disabledPolicies: string[];
   goal: string;
   status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'EXECUTED' | 'WITHDRAWN';
   requestedBy: string;
@@ -492,13 +494,14 @@ export interface TestRequest {
   decidedBy: string | null;
   decidedAt: string | null;
   decisionNote: string | null;
-  deploymentId: string | null;
+  /** The dispatches it was carried out as (one per distinct vehicle configuration). */
+  deploymentIds: string[];
 }
 
 export interface VehicleGroupEvent {
   id: string;
   vehicleGroupId: string;
-  kind: 'CREATED' | 'MEMBER_ADDED' | 'MEMBER_REMOVED' | 'BOUND' | 'ARCHIVED' | 'APPROVAL_REQUIRED' | 'APPROVAL_NOT_REQUIRED';
+  kind: 'CREATED' | 'MEMBER_ADDED' | 'MEMBER_REMOVED' | 'BOUND' | 'BASE_SET' | 'ARCHIVED' | 'APPROVAL_REQUIRED' | 'APPROVAL_NOT_REQUIRED';
   resourceId: string | null;
   reason: string | null;
   actor: string;

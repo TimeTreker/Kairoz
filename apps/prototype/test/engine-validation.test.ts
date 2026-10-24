@@ -18,6 +18,12 @@ function fails(fn: () => unknown, code: string): DomainError {
   throw new Error(`expected ${code}, but it succeeded`);
 }
 
+/** The one dispatch a group of vehicles on the same base gets. */
+function one(ids: string[]): string {
+  assert.equal(ids.length, 1);
+  return ids[0]!;
+}
+
 function setup() {
   const e = new Engine(demoState());
   const s = e.getState();
@@ -30,7 +36,7 @@ describe('dispatch, receipts and tests', () => {
   test('dispatch changes what vehicles should run; only receipts change what they run', () => {
     const { e, feature, vg } = setup();
     const before = e.getState();
-    const d = e.run('brake_tester', (c) => v.dispatchFeature(c, feature.id, { commitId: feature.headCommitId!, vehicleGroupIds: [vg.id] }));
+    const d = one(e.run('brake_tester', (c) => v.dispatchFeature(c, feature.id, { commitId: feature.headCommitId!, vehicleGroupIds: [vg.id] })));
     const s = e.getState();
     assert.equal(s.features[feature.id]!.stage, 'TESTING');
     assert.deepEqual(
@@ -62,7 +68,7 @@ describe('dispatch, receipts and tests', () => {
   test('simulation first, dispatch-only cannot record, Verified needs every target', () => {
     const { e, feature, vg } = setup();
     const head = feature.headCommitId!;
-    const d1 = e.run('dispatch_operator', (c) => v.dispatchFeature(c, feature.id, { commitId: head, vehicleGroupIds: [vg.id] }));
+    const d1 = one(e.run('dispatch_operator', (c) => v.dispatchFeature(c, feature.id, { commitId: head, vehicleGroupIds: [vg.id] })));
     e.run(null, (c) => sendReceipt(c, d1, 'SIM-021', 'APPLIED'));
     e.run(null, (c) => sendReceipt(c, d1, 'VEH-001', 'APPLIED'));
     const err = fails(
@@ -104,7 +110,7 @@ describe('dispatch, receipts and tests', () => {
     const s = e.getState();
     assert.equal(s.resources['VEH-001']!.appliedConfigId, old);
     assert.equal(s.resources['VEH-001']!.agent.failNext, false);
-    const d2 = e.run('brake_tester', (c) => v.dispatchFeature(c, feature.id, { commitId: feature.headCommitId!, vehicleGroupIds: [vg.id] }));
+    const d2 = one(e.run('brake_tester', (c) => v.dispatchFeature(c, feature.id, { commitId: feature.headCommitId!, vehicleGroupIds: [vg.id] })));
     e.run(null, (c) => tick(c));
     assert.equal(e.getState().deployments[d2]!.status, 'COMPLETED');
     assert.equal(v.featureTestStatus(e.getState(), e.getState().features[feature.id]!).every((t) => t.applied), true);
@@ -113,7 +119,7 @@ describe('dispatch, receipts and tests', () => {
   test('offline vehicles keep their targets pending; cancelling keeps the group binding', () => {
     const { e, feature, vg } = setup();
     e.run(null, (c) => setAgent(c, 'VEH-001', { online: false, autoAck: true }));
-    const d = e.run('brake_tester', (c) => v.dispatchFeature(c, feature.id, { commitId: feature.headCommitId!, vehicleGroupIds: [vg.id] }));
+    const d = one(e.run('brake_tester', (c) => v.dispatchFeature(c, feature.id, { commitId: feature.headCommitId!, vehicleGroupIds: [vg.id] })));
     e.run(null, (c) => tick(c));
     assert.equal(e.getState().deployments[d]!.targets.find((t) => t.resourceId === 'VEH-001')!.status, 'PENDING');
     e.run('brake_tester', (c) => v.cancelDeployment(c, d, '车辆离线'));

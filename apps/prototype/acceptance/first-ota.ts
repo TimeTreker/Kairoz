@@ -120,11 +120,11 @@ export const scenes: Record<string, SceneSpec> = {
       w.denied('business', (c) => v.decideTestRequest(c, w.ref.request!, { decision: 'APPROVED', note: '自批' }));
       w.fails('APPROVAL_REQUIRED', () => w.as('brake_tester', (c) => v.dispatchFeature(c, w.ref.feature!, { commitId: w.ref.r1!, vehicleGroupIds: [w.ref.group!] })));
       w.as('workspace_manager', (c) => v.decideTestRequest(c, w.ref.request!, { decision: 'APPROVED', note: '首版封闭Mock验证' }));
-      const d = w.as('brake_tester', (c) => v.executeTestRequest(c, w.ref.request!));
+      const [d] = w.as('brake_tester', (c) => v.executeTestRequest(c, w.ref.request!));
       w.fails('REQUEST_USED', () => w.as('brake_tester', (c) => v.executeTestRequest(c, w.ref.request!)));
       w.eq(w.s.resources['SIM-901']!.appliedConfigId, null, 'the target is set; nothing applied yet');
-      for (const r of ['SIM-901', 'VEH-901']) w.sys((c) => sendReceipt(c, d, r, 'APPLIED'));
-      w.eq([w.s.deployments[d]!.status, w.s.deployments[d]!.targets.map((t) => t.resourceId)], ['COMPLETED', ['SIM-901', 'VEH-901']], 'both vehicles confirmed; the task keeps its member snapshot');
+      for (const r of ['SIM-901', 'VEH-901']) w.sys((c) => sendReceipt(c, d!, r, 'APPLIED'));
+      w.eq([w.s.deployments[d!]!.status, w.s.deployments[d!]!.targets.map((t) => t.resourceId)], ['COMPLETED', ['SIM-901', 'VEH-901']], 'both vehicles confirmed; the task keeps its member snapshot');
     },
   },
   E08: {

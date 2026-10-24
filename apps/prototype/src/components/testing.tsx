@@ -1,6 +1,6 @@
 // Dispatch and test building blocks shared by Feature validation and integration candidates.
 
-import { Button, Checkbox, Form, Input, Modal, Radio, Space, Table, Tag, Typography } from 'antd';
+import { Button, Checkbox, Form, Input, Modal, Radio, Select, Space, Table, Tag, Typography } from 'antd';
 import type { ReactNode } from 'react';
 import { useEffect, useState } from 'react';
 import { navigate } from '../app/router.ts';
@@ -113,6 +113,7 @@ export function DispatchModal({
   open,
   groups,
   vehicles = [],
+  switchable = [],
   emptyText,
   request = false,
   onClose,
@@ -122,21 +123,25 @@ export function DispatchModal({
   groups: VehicleGroup[];
   /** Vehicles that route through no group and may be chosen one by one; `blocked` says why one cannot. */
   vehicles?: { id: string; label: string; blocked?: string }[];
+  /** Base policies of other business groups that may be switched off for this dispatch. */
+  switchable?: { policyId: string; group: string }[];
   emptyText: string;
   /** Ask for an approved team test instead of dispatching. */
   request?: boolean;
   onClose: () => void;
-  onDispatch: (vehicleGroupIds: string[], goal: string, resourceIds: string[]) => boolean;
+  onDispatch: (vehicleGroupIds: string[], goal: string, resourceIds: string[], disabledPolicies: string[]) => boolean;
 }) {
   const state = useEngineState();
   const { L } = useI18n();
   const [chosen, setChosen] = useState<string[]>([]);
   const [direct, setDirect] = useState<string[]>([]);
+  const [disabled, setDisabled] = useState<string[]>([]);
   const [goal, setGoal] = useState('');
   useEffect(() => {
     if (open) {
       setChosen([]);
       setDirect([]);
+      setDisabled([]);
       setGoal('');
     }
   }, [open]);
@@ -146,7 +151,7 @@ export function DispatchModal({
       title={request ? L('申请团队测试', 'Request a team test') : groups.length === 0 && vehicles.length > 0 ? L('下发到车辆', 'Dispatch to vehicles') : L('按车辆组下发', 'Dispatch to vehicle groups')}
       okText={request ? L('提交申请', 'Submit request') : L('下发', 'Dispatch')}
       onCancel={onClose}
-      onOk={() => onDispatch(chosen, goal, direct) && onClose()}
+      onOk={() => onDispatch(chosen, goal, direct, disabled) && onClose()}
     >
       <Hint>
         {request
@@ -190,6 +195,27 @@ export function DispatchModal({
         </>
       )}
       {groups.length === 0 && vehicles.length === 0 && <Typography.Text type="secondary">{emptyText}</Typography.Text>}
+      {switchable.length > 0 && (
+        <>
+          <Typography.Paragraph strong style={{ marginTop: 12, marginBottom: 4 }}>
+            {L('关闭其他分组的策略（可选）', 'Switch off other groups’ policies (optional)')}
+          </Typography.Paragraph>
+          <Typography.Paragraph type="secondary" style={{ marginBottom: 4 }}>
+            {L(
+              '每辆车运行它的基线（软件版本当前适用的策略集，或车辆组的显式基线）加本分组提交。可关闭基线中其他分组的策略以减少干扰；开关随本次发布记录，测试证据绑定实际运行的组合。',
+              'Each vehicle runs its base (the set in effect for its software, or the group’s explicit base) plus this group’s commit. Other groups’ base policies can be switched off to reduce noise; the switches are recorded with this publish and test evidence binds to the combination actually run.',
+            )}
+          </Typography.Paragraph>
+          <Select
+            mode="multiple"
+            style={{ width: '100%' }}
+            value={disabled}
+            onChange={setDisabled}
+            placeholder={L('不关闭', 'Keep all on')}
+            options={switchable.map((p) => ({ value: p.policyId, label: `${p.policyId} · ${p.group}` }))}
+          />
+        </>
+      )}
       {request && <Input.TextArea style={{ marginTop: 12 }} rows={2} value={goal} onChange={(e) => setGoal(e.target.value)} placeholder={L('测试目标', 'What the test should show')} />}
     </Modal>
   );

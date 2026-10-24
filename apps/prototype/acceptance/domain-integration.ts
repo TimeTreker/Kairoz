@@ -78,10 +78,11 @@ export const scenes: Record<string, SceneSpec> = {
       w.fails('APPROVAL_REQUIRED', () => w.as('adc_parking_tester', (c) => v.dispatchFeature(c, f, { commitId: head, vehicleGroupIds: [vg] })));
       const req = w.as('adc_parking_tester', (c) => v.requestTeamTest(c, f, { commitId: head, vehicleGroupIds: [vg], goal: '泊车车位丢失场景验证' }));
       w.as('adc_integrator', (c) => v.decideTestRequest(c, req, { decision: 'APPROVED', note: '同意团队测试' }));
-      const d = w.as('adc_parking_tester', (c) => v.executeTestRequest(c, req));
+      // SIM-041 runs software 1.0 and VEH-002's is unknown: two bases, so two dispatches.
+      const ds = w.as('adc_parking_tester', (c) => v.executeTestRequest(c, req));
       w.fails('REQUEST_USED', () => w.as('adc_parking_tester', (c) => v.executeTestRequest(c, req)));
-      answerAll(w, d);
-      w.ref.parkingDispatch = d;
+      for (const d of ds) answerAll(w, d);
+      w.ref.parkingDispatch = ds[0]!;
     },
   },
   S04: {

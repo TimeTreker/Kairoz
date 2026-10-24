@@ -160,8 +160,8 @@ export const cases: Record<string, SceneSpec> = {
   'T-N13': {
     run: (w) => {
       const brake = feature(w, 'guided_brake');
-      const d = w.as('dispatch_operator', (c) => v.dispatchFeature(c, brake.id, { commitId: brake.headCommitId!, vehicleGroupIds: [group(w, '制动研发车组')] }));
-      answerAll(w, d);
+      const [d] = w.as('dispatch_operator', (c) => v.dispatchFeature(c, brake.id, { commitId: brake.headCommitId!, vehicleGroupIds: [group(w, '制动研发车组')] }));
+      answerAll(w, d!);
       w.denied('dispatch_operator', (c) => v.recordFeatureTest(c, brake.id, { commitId: brake.headCommitId!, resourceId: 'SIM-021', result: 'PASS', summary: 'x' }));
       const { release } = nextRelease(w);
       const cand = w.s.releases[release]!.candidateId!;
@@ -199,8 +199,8 @@ export const cases: Record<string, SceneSpec> = {
         const key = Object.keys(w.s.features[f]!.draft.files)[0]!;
         w.as('steering', (c) => config.putPolicy(c, f, 'chassis.steering.lane_drift', { name: '跑偏', trigger: 'lane_offset > 0.5', captures: [key], preSeconds: 5, postSeconds: post }));
         w.as('steering', (c) => config.submitFeature(c, f, {}));
-        const d = w.as('steering_tester', (c) => v.dispatchFeature(c, f, { commitId: w.s.features[f]!.headCommitId!, vehicleGroupIds: [group(w, '转向研发车组')] }));
-        answerAll(w, d);
+        const [d] = w.as('steering_tester', (c) => v.dispatchFeature(c, f, { commitId: w.s.features[f]!.headCommitId!, vehicleGroupIds: [group(w, '转向研发车组')] }));
+        answerAll(w, d!);
         for (const r of ['SIM-022', 'VEH-003']) w.as('steering_tester', (c) => v.recordFeatureTest(c, f, { commitId: w.s.features[f]!.headCommitId!, resourceId: r, result: 'PASS', summary: 'ok' }));
         w.as('steering_tester', (c) => v.verifyFeature(c, f));
         return f;

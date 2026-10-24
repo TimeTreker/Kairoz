@@ -7,12 +7,12 @@ import { digestOf } from '../domain/canonical.ts';
 import { notFound, rule } from '../domain/errors.ts';
 import { newId } from '../domain/ids.ts';
 import type { Env } from '../domain/vocabulary.ts';
-import { authorizeFeature, displayName } from './config.ts';
+import { authorizeFeature, displayName, latestRelease } from './config.ts';
 import type { Ctx } from './engine.ts';
 import { directTargetProblems, getResource, membersOf, pendingDeploymentOf, recordGroupBinding } from './fleet.ts';
 import { getGroup } from './org.ts';
-import { appliesTo } from './release.ts';
-import type { Candidate, Deployment, DeploymentTarget, Feature, ResolvedConfig, State, TestRequest, TestRun } from './types.ts';
+import { setInEffect } from './release.ts';
+import type { Candidate, Deployment, DeploymentTarget, Feature, Release, ResolvedConfig, Resource, State, TestRequest, TestRun, VehicleGroup } from './types.ts';
 
 /** Finds or creates the resolved configuration for a base plus group commits. */
 export function resolveConfig(
@@ -41,17 +41,60 @@ export function configDigest(
   return digestOf({ vehicleModelId: input.vehicleModelId, baseReleaseId: input.baseReleaseId, kind: input.kind, sourceId: input.sourceId, groups: pairs, ...disabled });
 }
 
-/** The Feature's head commit on top of its base: what a test vehicle runs. */
-export function featureConfig(ctx: Ctx, feature: Feature): string {
-  const base = feature.baseReleaseId ? ctx.s.releases[feature.baseReleaseId]!.groups : {};
-  return resolveConfig(ctx, {
-    vehicleModelId: feature.vehicleModelId,
-    kind: 'FEATURE',
-    sourceId: feature.id,
-    baseReleaseId: feature.baseReleaseId,
-    groups: { ...base, [feature.groupId]: feature.headCommitId! },
-    label: displayName(ctx.s, feature.headCommitId!),
-  });
+/**
+ * The base a vehicle of a development or testing group builds on: the group's explicit base, or
+ * the policy set in effect for the vehicle's software. Unknown software, or a model with no set
+ * yet, takes the initial development configuration (no base). Known software no set applies to
+ * has none: the group names an explicit base rather than silently dropping the formal policies.
+ */
+export function vehicleBase(s: State, group: VehicleGroup, r: Resource): { release: Release | null; problem: string | null } {
+  if (group.baseReleaseId) return { release: s.releases[group.baseReleaseId] ?? null, problem: null };
+  if (!r.integrationVersion || !latestRelease(s, r.vehicleModelId)) return { release: null, problem: null };
+  const set = setInEffect(s, r.vehicleModelId, r.integrationVersion);
+  return set ? { release: set, problem: null } : { release: null, problem: `no policy set applies to software ${r.integrationVersion}; give the group an explicit base` };
+}
+
+export interface FeatureTarget {
+  baseReleaseId: string | null;
+  groups: Record<string, string>;
+  disabledPolicies: string[];
+  /** The base already changed the Feature's own business group. */
+  conflict: boolean;
+  problem: string | null;
+}
+
+/**
+ * What one vehicle runs for a Feature commit published to its group: its base, the commit in place
+ * of the Feature's business group, and the base policies of other groups switched off.
+ */
+export function featureTarget(s: State, feature: Feature, commitId: string, group: VehicleGroup, r: Resource, disabledPolicies: string[]): FeatureTarget {
+  const none = { baseReleaseId: null, groups: {}, disabledPolicies: [] };
+  const base = vehicleBase(s, group, r);
+  if (base.problem) return { ...none, conflict: false, problem: base.problem };
+  const baseGroups = base.release?.groups ?? {};
+  // A Feature changes only its own group, so the base must still hold what the Feature started from.
+  const started = feature.baseReleaseId ? s.releases[feature.baseReleaseId]?.groups[feature.groupId] : undefined;
+  if (base.release && baseGroups[feature.groupId] !== started) {
+    return { ...none, conflict: true, problem: `policy set ${base.release.dclVersion} changed ${s.groups[feature.groupId]?.code ?? feature.groupId} after the Feature started; start a Feature on it` };
+  }
+  const present = new Set(
+    Object.entries(baseGroups)
+      .filter(([g]) => g !== feature.groupId)
+      .flatMap(([, c]) => Object.keys(s.commits[c]!.policies)),
+  );
+  return { baseReleaseId: base.release?.id ?? null, groups: { ...baseGroups, [feature.groupId]: commitId }, disabledPolicies: disabledPolicies.filter((p) => present.has(p)).sort(), conflict: false, problem: null };
+}
+
+/** The commit's name, plus the base when it differs from the Feature's and how many policies are off. */
+function featureLabel(s: State, feature: Feature, commitId: string, t: FeatureTarget): string {
+  const base = t.baseReleaseId !== feature.baseReleaseId ? ` @${t.baseReleaseId ? s.releases[t.baseReleaseId]!.dclVersion : 'initial'}` : '';
+  const off = t.disabledPolicies.length ? ` −${t.disabledPolicies.length}` : '';
+  return `${displayName(s, commitId)}${base}${off}`;
+}
+
+/** The identity of the configuration a Feature target resolves to (nothing is created). */
+export function featureTargetDigest(s: State, feature: Feature, t: FeatureTarget): string {
+  return configDigest(s, { vehicleModelId: feature.vehicleModelId, kind: 'FEATURE', sourceId: feature.id, baseReleaseId: t.baseReleaseId, groups: t.groups, disabledPolicies: t.disabledPolicies });
 }
 
 export interface DispatchProblem {
@@ -64,7 +107,8 @@ export interface DispatchProblem {
  * Checks every member of the chosen vehicle groups before anything changes; any problem rejects
  * the whole dispatch.
  */
-function dispatchProblems(s: State, feature: Feature, vehicleGroupIds: string[], env: Env): DispatchProblem[] {
+function dispatchProblems(s: State, feature: Feature, input: { commitId: string; vehicleGroupIds: string[]; disabledPolicies: string[] }, env: Env): DispatchProblem[] {
+  const vehicleGroupIds = input.vehicleGroupIds;
   const problems: DispatchProblem[] = [];
   const seen = new Set<string>();
   for (const id of vehicleGroupIds) {
@@ -92,24 +136,25 @@ function dispatchProblems(s: State, feature: Feature, vehicleGroupIds: string[],
       if (!(s.workspaceResources[feature.workspaceId] ?? []).includes(rid)) fail('vehicle is not assigned to the workspace');
       const pending = pendingDeploymentOf(s, rid);
       if (pending) fail(`vehicle is waiting for deployment ${pending}`);
-      if (feature.baseReleaseId) {
-        const release = s.releases[feature.baseReleaseId]!;
-        if (r.integrationVersion !== null && !appliesTo(s, release, r.integrationVersion)) {
-          fail(`vehicle software ${r.integrationVersion} is not compatible with base ${release.dclVersion}`);
-        }
-      }
+      const target = featureTarget(s, feature, input.commitId, g, r, input.disabledPolicies);
+      if (target.problem) fail(target.problem);
     }
   }
   return problems;
 }
 
-/** Business development or testing dispatches the Feature's head commit to vehicle groups. */
-export function dispatchFeature(ctx: Ctx, featureId: string, input: { commitId: string; vehicleGroupIds: string[] }): string {
+type DispatchInput = { commitId: string; vehicleGroupIds: string[]; disabledPolicies?: string[] };
+
+/**
+ * Business development or testing publishes the Feature's head commit to vehicle groups. Each
+ * vehicle runs its own base plus the commit; vehicles on different bases get separate dispatches.
+ */
+export function dispatchFeature(ctx: Ctx, featureId: string, input: DispatchInput): string[] {
   return dispatchChecked(ctx, featureId, input, 'feature.dispatch', null);
 }
 
 /** Authorization, stage and per-vehicle checks shared by dispatches and team test requests. */
-function checkDispatch(ctx: Ctx, featureId: string, input: { commitId: string; vehicleGroupIds: string[] }, action: 'feature.dispatch' | 'feature.requestTest'): Feature {
+function checkDispatch(ctx: Ctx, featureId: string, input: DispatchInput, action: 'feature.dispatch' | 'feature.requestTest'): Feature {
   const groups = input.vehicleGroupIds.map((id) => ctx.s.vehicleGroups[id]).filter(Boolean);
   if (groups.length === 0) throw rule('NO_VEHICLE_GROUPS', 'choose at least one vehicle group');
   const env = groups[0]!.env;
@@ -119,60 +164,81 @@ function checkDispatch(ctx: Ctx, featureId: string, input: { commitId: string; v
   ctx.allow(action, { type: 'feature', id: featureId, workspaceId: feature.workspaceId, groupId: group.id, scope: group.domain, env });
   if (!['DCL_READY', 'TESTING', 'VERIFIED'].includes(feature.stage)) throw rule('NOT_DCL_READY', 'only DCL Ready Features can be dispatched');
   if (input.commitId !== feature.headCommitId) throw rule('STALE_COMMIT', 'the Feature has a newer commit; dispatch that one', { headCommitId: feature.headCommitId });
-  const problems = dispatchProblems(ctx.s, feature, input.vehicleGroupIds, env);
+  // Switches turn off other business groups' policies; a group's own policies change only by commit.
+  const notSwitchable = (input.disabledPolicies ?? []).filter((p) => !ctx.s.policyOwners[p] || ctx.s.policyOwners[p] === feature.groupId);
+  if (notSwitchable.length) throw rule('POLICY_NOT_SWITCHABLE', 'only policies of other business groups can be switched off', { issues: notSwitchable });
+  const problems = dispatchProblems(ctx.s, feature, { ...input, disabledPolicies: input.disabledPolicies ?? [] }, env);
   if (problems.length) throw rule('DISPATCH_BLOCKED', 'the dispatch would not reach every vehicle safely', { issues: problems.map((p) => `${p.resourceId ?? p.vehicleGroupId}: ${p.problem}`) });
   return feature;
 }
 
-function dispatchChecked(
-  ctx: Ctx,
-  featureId: string,
-  input: { commitId: string; vehicleGroupIds: string[] },
-  action: 'feature.dispatch',
-  approvedRequest: string | null,
-): string {
+function dispatchChecked(ctx: Ctx, featureId: string, input: DispatchInput, action: 'feature.dispatch', approvedRequest: string | null): string[] {
   const feature = checkDispatch(ctx, featureId, input, action);
   if (!approvedRequest) {
     const gated = input.vehicleGroupIds.map((id) => ctx.s.vehicleGroups[id]!).filter((g) => g.requiresApproval);
     if (gated.length) throw rule('APPROVAL_REQUIRED', 'these vehicle groups take approved team test requests', { issues: gated.map((g) => g.name) });
   }
+  const disabled = [...new Set(input.disabledPolicies ?? [])].sort();
 
-  const configId = featureConfig(ctx, feature);
-  const id = newId('dp');
-  const targets: DeploymentTarget[] = [];
+  // Each vehicle's configuration: its base plus the commit. One dispatch per distinct configuration.
+  const byConfig = new Map<string, { vehicleGroupIds: Set<string>; targets: DeploymentTarget[] }>();
+  const seen = new Set<string>();
   for (const vgId of input.vehicleGroupIds) {
-    recordGroupBinding(ctx, vgId, { kind: 'FEATURE', featureId: feature.id, commitId: input.commitId, disabledPolicies: [] });
+    const group = ctx.s.vehicleGroups[vgId]!;
+    recordGroupBinding(ctx, vgId, { kind: 'FEATURE', featureId: feature.id, commitId: input.commitId, disabledPolicies: disabled });
     for (const rid of membersOf(ctx.s, vgId)) {
-      if (targets.some((t) => t.resourceId === rid)) continue;
-      targets.push({ resourceId: rid, vehicleGroupId: vgId, attempt: 0, status: 'PENDING', previousConfigId: ctx.s.resources[rid]!.appliedConfigId, error: null, updatedAt: ctx.now, history: [] });
-      // Every dispatched member joins the vehicles this commit must be verified on.
-      if (!ctx.s.testTargets.some((t) => t.subjectId === feature.id && t.versionId === input.commitId && t.resourceId === rid)) {
-        ctx.s.testTargets.push({ subjectKind: 'FEATURE', subjectId: feature.id, versionId: input.commitId, resourceId: rid, deploymentId: id });
-      }
+      if (seen.has(rid)) continue;
+      seen.add(rid);
+      const r = ctx.s.resources[rid]!;
+      const target = featureTarget(ctx.s, feature, input.commitId, group, r, disabled);
+      const configId = resolveConfig(ctx, {
+        vehicleModelId: feature.vehicleModelId,
+        kind: 'FEATURE',
+        sourceId: feature.id,
+        baseReleaseId: target.baseReleaseId,
+        groups: target.groups,
+        disabledPolicies: target.disabledPolicies,
+        label: featureLabel(ctx.s, feature, input.commitId, target),
+      });
+      const entry = byConfig.get(configId) ?? { vehicleGroupIds: new Set<string>(), targets: [] };
+      entry.vehicleGroupIds.add(vgId);
+      entry.targets.push({ resourceId: rid, vehicleGroupId: vgId, attempt: 0, status: 'PENDING', previousConfigId: r.appliedConfigId, error: null, updatedAt: ctx.now, history: [] });
+      byConfig.set(configId, entry);
     }
   }
-  ctx.s.deployments[id] = {
-    id,
-    kind: 'FEATURE',
-    workspaceId: feature.workspaceId,
-    groupId: feature.groupId,
-    subjectId: feature.id,
-    commitId: input.commitId,
-    resolvedConfigId: configId,
-    env: ctx.s.vehicleGroups[input.vehicleGroupIds[0]!]!.env,
-    status: 'PENDING',
-    vehicleGroupIds: [...input.vehicleGroupIds],
-    targets,
-    dispatchedBy: ctx.user().username,
-    createdAt: ctx.now,
-    updatedAt: ctx.now,
-  };
+  const ids: string[] = [];
+  for (const [configId, entry] of byConfig) {
+    const id = newId('dp');
+    ids.push(id);
+    for (const t of entry.targets) {
+      // Every dispatched member joins the vehicles this commit must be verified on, through its latest dispatch.
+      const existing = ctx.s.testTargets.find((x) => x.subjectId === feature.id && x.versionId === input.commitId && x.resourceId === t.resourceId);
+      if (existing) existing.deploymentId = id;
+      else ctx.s.testTargets.push({ subjectKind: 'FEATURE', subjectId: feature.id, versionId: input.commitId, resourceId: t.resourceId, deploymentId: id });
+    }
+    ctx.s.deployments[id] = {
+      id,
+      kind: 'FEATURE',
+      workspaceId: feature.workspaceId,
+      groupId: feature.groupId,
+      subjectId: feature.id,
+      commitId: input.commitId,
+      resolvedConfigId: configId,
+      env: ctx.s.vehicleGroups[input.vehicleGroupIds[0]!]!.env,
+      status: 'PENDING',
+      vehicleGroupIds: [...entry.vehicleGroupIds],
+      targets: entry.targets,
+      dispatchedBy: ctx.user().username,
+      createdAt: ctx.now,
+      updatedAt: ctx.now,
+    };
+  }
   const f = ctx.s.features[featureId]!;
   if (f.stage === 'DCL_READY' || f.stage === 'VERIFIED') {
     f.stage = 'TESTING';
     f.updatedAt = ctx.now;
   }
-  return id;
+  return ids;
 }
 
 function settle(d: Draft<Deployment>, now: string): void {
@@ -192,7 +258,7 @@ function settle(d: Draft<Deployment>, now: string): void {
 // Team test requests (团队测试申请): fixed commit + vehicle list, approved by the workspace admin
 // ---------------------------------------------------------------------------
 
-export function requestTeamTest(ctx: Ctx, featureId: string, input: { commitId: string; vehicleGroupIds: string[]; goal: string }): string {
+export function requestTeamTest(ctx: Ctx, featureId: string, input: DispatchInput & { goal: string }): string {
   const feature = checkDispatch(ctx, featureId, input, 'feature.requestTest');
   if (!input.goal.trim()) throw rule('GOAL_REQUIRED', 'say what the team test should show');
   const id = newId('tq');
@@ -203,6 +269,7 @@ export function requestTeamTest(ctx: Ctx, featureId: string, input: { commitId: 
     commitId: input.commitId,
     vehicleGroupIds: [...input.vehicleGroupIds],
     members: requestMembers(ctx.s, input.vehicleGroupIds),
+    disabledPolicies: [...new Set(input.disabledPolicies ?? [])].sort(),
     goal: input.goal.trim(),
     status: 'PENDING',
     requestedBy: ctx.user().username,
@@ -210,7 +277,7 @@ export function requestTeamTest(ctx: Ctx, featureId: string, input: { commitId: 
     decidedBy: null,
     decidedAt: null,
     decisionNote: null,
-    deploymentId: null,
+    deploymentIds: [],
   };
   return id;
 }
@@ -244,18 +311,18 @@ export function decideTestRequest(ctx: Ctx, requestId: string, input: { decision
 }
 
 /** Carries out an approved request once; version, members, environment and occupancy are checked again. */
-export function executeTestRequest(ctx: Ctx, requestId: string): string {
+export function executeTestRequest(ctx: Ctx, requestId: string): string[] {
   const req = getRequest(ctx.s, requestId);
   if (req.status === 'EXECUTED') throw rule('REQUEST_USED', 'an approval is used once; ask again for another test');
   if (req.status !== 'APPROVED') throw rule('REQUEST_NOT_APPROVED', 'the request is not approved');
   if (requestMembers(ctx.s, req.vehicleGroupIds).join() !== req.members.join()) {
     throw rule('MEMBERS_CHANGED', 'the vehicle list changed since the approval; ask for a new request');
   }
-  const deploymentId = dispatchChecked(ctx, req.featureId, { commitId: req.commitId, vehicleGroupIds: req.vehicleGroupIds }, 'feature.dispatch', req.id);
+  const deploymentIds = dispatchChecked(ctx, req.featureId, { commitId: req.commitId, vehicleGroupIds: req.vehicleGroupIds, disabledPolicies: req.disabledPolicies }, 'feature.dispatch', req.id);
   const draft = ctx.s.testRequests[req.id]!;
   draft.status = 'EXECUTED';
-  draft.deploymentId = deploymentId;
-  return deploymentId;
+  draft.deploymentIds = deploymentIds;
+  return deploymentIds;
 }
 
 export function withdrawTestRequest(ctx: Ctx, requestId: string): void {

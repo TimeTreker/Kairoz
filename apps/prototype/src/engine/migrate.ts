@@ -51,6 +51,11 @@ function to8(s: Saved): void {
     delete g.targetConfigId;
     g.baseReleaseId ??= null;
   }
+  for (const r of Object.values((s.testRequests ?? {}) as Rows)) {
+    r.disabledPolicies ??= [];
+    if (!('deploymentIds' in r)) r.deploymentIds = typeof r.deploymentId === 'string' ? [r.deploymentId] : [];
+    delete r.deploymentId;
+  }
   for (const a of Object.values((s.accounts ?? {}) as Rows)) {
     a.orgUnitId ??= null;
     a.employeeId ??= null;

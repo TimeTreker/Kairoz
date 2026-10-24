@@ -357,8 +357,8 @@ export function demoState(): State {
     }),
   );
   const steeringCommit = as<{ commitId: string }>('steering', (c) => submitFeature(c, steering, { message: '转角突变首版' })).commitId;
-  const steeringDispatch = as<string>('steering_tester', (c) => dispatchFeature(c, steering, { commitId: steeringCommit, vehicleGroupIds: [steeringGroup] }));
-  for (const vehicle of ['SIM-022', 'VEH-003']) engine.run(null, (c) => sendReceipt(c, steeringDispatch, vehicle, 'APPLIED'));
+  const [steeringDispatch] = as<string[]>('steering_tester', (c) => dispatchFeature(c, steering, { commitId: steeringCommit, vehicleGroupIds: [steeringGroup] }));
+  for (const vehicle of ['SIM-022', 'VEH-003']) engine.run(null, (c) => sendReceipt(c, steeringDispatch!, vehicle, 'APPLIED'));
   as('steering_tester', (c) => recordFeatureTest(c, steering, { commitId: steeringCommit, resourceId: 'SIM-022', result: 'PASS', summary: '仿真回放 20 段转角突变场景，均正确触发' }));
   as('steering_tester', (c) => recordFeatureTest(c, steering, { commitId: steeringCommit, resourceId: 'VEH-003', result: 'PASS', summary: '实车封闭场地触发 5 次，数据完整' }));
   as('steering_tester', (c) => verifyFeature(c, steering));
@@ -401,8 +401,8 @@ export function demoState(): State {
     putPolicy(c, returnRate, 'chassis.steering.return_rate', { name: '回正过慢', trigger: 'steering_return_rate < 20 AND vehicle_speed > 40', captures: [epsKey], preSeconds: 10, postSeconds: 10 }),
   );
   const returnCommit = as<{ commitId: string }>('steering', (c) => submitFeature(c, returnRate, { message: '回正速率与更长的事后窗口' })).commitId;
-  const returnDispatch = as<string>('steering_tester', (c) => dispatchFeature(c, returnRate, { commitId: returnCommit, vehicleGroupIds: [steeringGroup] }));
-  for (const vehicle of ['SIM-022', 'VEH-003']) engine.run(null, (c) => sendReceipt(c, returnDispatch, vehicle, 'APPLIED'));
+  const [returnDispatch] = as<string[]>('steering_tester', (c) => dispatchFeature(c, returnRate, { commitId: returnCommit, vehicleGroupIds: [steeringGroup] }));
+  for (const vehicle of ['SIM-022', 'VEH-003']) engine.run(null, (c) => sendReceipt(c, returnDispatch!, vehicle, 'APPLIED'));
   as('steering_tester', (c) => recordFeatureTest(c, returnRate, { commitId: returnCommit, resourceId: 'SIM-022', result: 'PASS', summary: '仿真回放回正场景 12 段，均正确触发' }));
   as('steering_tester', (c) => recordFeatureTest(c, returnRate, { commitId: returnCommit, resourceId: 'VEH-003', result: 'PASS', summary: '实车低附路面回正测试通过' }));
   as('steering_tester', (c) => verifyFeature(c, returnRate));
@@ -420,8 +420,8 @@ export function demoState(): State {
     putPolicy(c, monitor, 'chassis.brake.failure_diag', { name: '处理失败诊断', trigger: 'brake_fault_code > 0', captures: [monitorKey], preSeconds: 5, postSeconds: 5 }),
   );
   const monitorCommit = as<{ commitId: string }>('business', (c) => submitFeature(c, monitor, { message: '急刹车监测' })).commitId;
-  const monitorDispatch = as<string>('brake_tester', (c) => dispatchFeature(c, monitor, { commitId: monitorCommit, vehicleGroupIds: [brakeGroup] }));
-  for (const vehicle of ['SIM-021', 'VEH-001']) engine.run(null, (c) => sendReceipt(c, monitorDispatch, vehicle, 'APPLIED'));
+  const [monitorDispatch] = as<string[]>('brake_tester', (c) => dispatchFeature(c, monitor, { commitId: monitorCommit, vehicleGroupIds: [brakeGroup] }));
+  for (const vehicle of ['SIM-021', 'VEH-001']) engine.run(null, (c) => sendReceipt(c, monitorDispatch!, vehicle, 'APPLIED'));
   for (const vehicle of ['SIM-021', 'VEH-001']) {
     as('brake_tester', (c) => recordFeatureTest(c, monitor, { commitId: monitorCommit, resourceId: vehicle, result: 'PASS', summary: '急刹车与故障码场景触发正确' }));
   }

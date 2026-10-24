@@ -429,6 +429,23 @@ export function setGroupApproval(ctx: Ctx, vehicleGroupId: string, requiresAppro
   groupEvent(ctx, g.id, requiresApproval ? 'APPROVAL_REQUIRED' : 'APPROVAL_NOT_REQUIRED', null, null);
 }
 
+/**
+ * An explicit base (显式基线) for a development or testing group: its vehicles build on this set
+ * instead of the set in effect for their software, e.g. to try software no set applies to yet.
+ * Null returns to following each vehicle's software. Nothing is sent until the next publish.
+ */
+export function setGroupBase(ctx: Ctx, vehicleGroupId: string, releaseId: string | null): void {
+  const g = authorizeGroup(ctx, vehicleGroupId);
+  if (g.purpose === 'PRODUCTION') throw rule('PRODUCTION_GROUP_BASE', 'production vehicles always take the set in effect for their software');
+  if (releaseId !== null) {
+    const release = ctx.s.releases[releaseId];
+    if (!release) throw notFound('policy set', releaseId);
+    if (release.vehicleModelId !== getWorkspace(ctx.s, g.workspaceId).vehicleModelId) throw rule('MODEL_MISMATCH', 'the policy set is for another vehicle model');
+  }
+  g.baseReleaseId = releaseId;
+  groupEvent(ctx, g.id, 'BASE_SET', null, releaseId ? ctx.s.releases[releaseId]!.dclVersion : null);
+}
+
 export function archiveVehicleGroup(ctx: Ctx, vehicleGroupId: string, reason: string): void {
   const g = authorizeGroup(ctx, vehicleGroupId);
   if (membersOf(ctx.s, g.id).length > 0) throw rule('GROUP_HAS_MEMBERS', 'move all vehicles out first');

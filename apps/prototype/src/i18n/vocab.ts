@@ -434,7 +434,10 @@ export const CONFIG_ANSWER_LABELS: Record<string, Bilingual> = {
   HELD: b('保持已确认（同步暂停）', 'Held (sync paused)'),
   TASK: b('当前任务目标', 'Rollout target'),
   LATEST_RELEASE: b('软件版本当前适用的策略集', 'Policy set in effect for its software'),
-  GROUP_TARGET: b('车辆组固定目标', 'Group target'),
+  GROUP_TARGET: b('车辆组发布内容（本车基线）', 'Group publication (on this vehicle’s base)'),
+  REPUBLISH: b('软件或策略集已变化，需重新下发', 'Software or policy set changed; publish again'),
+  BASE_CONFLICT: b('与新基线冲突，保持已生效配置', 'Conflicts with the new base; keeps the applied configuration'),
+  NO_BASE: b('没有适用基线，保持已生效配置', 'No base applies; keeps the applied configuration'),
   APPLIED: b('已生效配置', 'Applied configuration'),
   INITIAL: b('初始研发配置', 'Initial configuration'),
   BLOCKED: b('阻止', 'Blocked'),
@@ -464,6 +467,7 @@ export const REPORT_RESULT_LABELS: Record<string, Bilingual> = {
 /** Statuses a client reports for its controllers, nodes, policies and files. */
 export const CLIENT_ITEM_STATUS_LABELS: Record<string, Bilingual> = {
   CONFIGURED: b('已配置', 'Configured'),
+  DISABLED: b('已关闭（车辆组开关）', 'Switched off (group switch)'),
   RUNNING: b('运行中', 'Running'),
   STOPPED: b('已停止', 'Stopped'),
   PASS: b('通过', 'Pass'),
@@ -501,6 +505,8 @@ Object.assign(ERROR_LABELS, {
   CHECK_NOT_VERIFIED: b('集成测试尚未确认该策略集在此软件上通过', 'Integration testing has not verified the set on this software'),
   INCOMPATIBLE_POLICIES: b('部分策略需要的信号或数据源在该软件中不存在，需发布修改后的策略集', 'Some policies need signals or sources the software lacks; publish a changed policy set instead'),
   NOT_APPLICABLE: b('该策略集并不适用于这个软件版本', 'The policy set does not apply to this software version'),
+  PRODUCTION_GROUP_BASE: b('量产车辆组总是取软件版本当前适用的策略集，不能指定显式基线', 'Production groups always take the set in effect for their software; they have no explicit base'),
+  POLICY_NOT_SWITCHABLE: b('只能关闭其他业务分组的策略；本分组的策略只能通过提交修改', 'Only other business groups’ policies can be switched off; a group changes its own policies by commit'),
 });
 
 /** How a DCL policy set version reads: 策略集 1.0.0 / Policy set 1.0.0. */
@@ -521,4 +527,15 @@ export const COMPATIBILITY_LABELS: Record<string, Bilingual> = {
   OK: b('可运行', 'Runs'),
   MISSING: b('缺少信号或数据源', 'Missing signals or sources'),
   UNKNOWN: b('无软件清单，无法检查', 'No manifest, cannot check'),
+};
+
+export const GROUP_EVENT_LABELS: Record<string, Bilingual> = {
+  CREATED: b('创建', 'Created'),
+  MEMBER_ADDED: b('加入车辆', 'Vehicle added'),
+  MEMBER_REMOVED: b('移出车辆', 'Vehicle removed'),
+  BOUND: b('发布', 'Published'),
+  BASE_SET: b('设置基线', 'Base set'),
+  ARCHIVED: b('归档', 'Archived'),
+  APPROVAL_REQUIRED: b('下发需审批', 'Approval required'),
+  APPROVAL_NOT_REQUIRED: b('直接下发', 'Direct dispatch'),
 };

@@ -11,7 +11,8 @@ import { directTargetProblems, membersOf, openOtaOf, pendingDeploymentOf, record
 
 export { openOtaOf };
 import { appliesTo, getRelease, releaseFor } from './release.ts';
-import type { Deployment, DeploymentTarget, GroupPublication, Release, Resource, State } from './types.ts';
+import type { Deployment, DeploymentTarget, Release, Resource, State } from './types.ts';
+import { featureTarget, featureTargetDigest } from './validation.ts';
 
 /** Why a vehicle cannot take a release now; empty when it can. */
 export function otaProblems(s: State, r: Resource, release: Release, except?: string): string[] {
@@ -291,10 +292,13 @@ export interface ConfigAnswer {
   /**
    * HELD: a paused, cancelled or rolled-back rollout stops chasing newer configurations; the
    * vehicle keeps what it confirmed. TASK: a running rollout's fixed target. LATEST_RELEASE: the
-   * newest matching formal release. GROUP_TARGET: a development or testing group's pinned
-   * configuration. APPLIED / INITIAL: nothing newer is assigned. BLOCKED: no configuration may run.
+   * policy set in effect for the vehicle's software. GROUP_TARGET: what was published to a development
+   * or testing group, on the vehicle's own base. REPUBLISH: the vehicle's software or its set changed
+   * since; BASE_CONFLICT: the new base changed the Feature's own group; NO_BASE: no set applies to the
+   * software and the group names no base. These three keep the applied configuration until someone
+   * publishes again. APPLIED / INITIAL: nothing newer is assigned. BLOCKED: no configuration may run.
    */
-  reason: 'HELD' | 'TASK' | 'LATEST_RELEASE' | 'GROUP_TARGET' | 'APPLIED' | 'INITIAL' | 'BLOCKED';
+  reason: 'HELD' | 'TASK' | 'LATEST_RELEASE' | 'GROUP_TARGET' | 'REPUBLISH' | 'BASE_CONFLICT' | 'NO_BASE' | 'APPLIED' | 'INITIAL' | 'BLOCKED';
   detail: string | null;
 }
 
@@ -316,16 +320,21 @@ export function answerConfigRequest(s: State, resourceId: string): ConfigAnswer 
     return resolved.release ? { configId: resolved.release.resolvedConfigId, reason: 'LATEST_RELEASE', detail: `policy set ${resolved.release.dclVersion}` } : { configId: null, reason: 'BLOCKED', detail: resolved.problem };
   }
   const group = s.groupMembers[r.id] ? s.vehicleGroups[s.groupMembers[r.id]!] : undefined;
-  const published = group?.publication ? publishedConfig(s, group.publication) : null;
-  if (group && published) return { configId: published, reason: 'GROUP_TARGET', detail: group.name };
+  const p = group?.publication;
+  if (group && p) {
+    if (p.kind !== 'FEATURE') return { configId: p.configId, reason: 'GROUP_TARGET', detail: group.name };
+    const feature = s.features[p.featureId];
+    if (feature) {
+      // A Feature publication is resolved on the vehicle's own base; nothing is created by asking.
+      const t = featureTarget(s, feature, p.commitId, group, r, p.disabledPolicies);
+      if (t.problem) return { configId: r.appliedConfigId, reason: t.conflict ? 'BASE_CONFLICT' : 'NO_BASE', detail: t.problem };
+      const digest = featureTargetDigest(s, feature, t);
+      const config = Object.values(s.resolvedConfigs).find((c) => c.digest === digest);
+      if (config) return { configId: config.id, reason: 'GROUP_TARGET', detail: group.name };
+      return { configId: r.appliedConfigId, reason: 'REPUBLISH', detail: 'the software or its policy set changed; publish to the group again' };
+    }
+  }
   return r.appliedConfigId ? { configId: r.appliedConfigId, reason: 'APPLIED', detail: null } : { configId: null, reason: 'INITIAL', detail: null };
-}
-
-/** The configuration a publication puts on the group's vehicles. */
-function publishedConfig(s: State, p: GroupPublication): string | null {
-  if (p.kind !== 'FEATURE') return p.configId;
-  const configs = Object.values(s.resolvedConfigs).filter((c) => c.kind === 'FEATURE' && c.sourceId === p.featureId && Object.values(c.groups).includes(p.commitId));
-  return configs.sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))[0]?.id ?? null;
 }
 
 export function otaRollouts(s: State, workspaceId?: string): Deployment[] {

@@ -271,11 +271,11 @@ export const scenes: Record<string, SceneSpec> = {
   B04: {
     run: (w) => {
       const f = w.ref.firstBrake!;
-      const d = w.as('brake_tester', (c) => v.dispatchFeature(c, f, { commitId: w.ref.firstBrakeR1!, vehicleGroupIds: [w.ref.devGroup!] }));
-      w.eq(w.s.deployments[d]!.targets.map((t) => [t.resourceId, t.status]), [['SIM-901', 'PENDING']], 'a frozen member snapshot, pending');
+      const [d] = w.as('brake_tester', (c) => v.dispatchFeature(c, f, { commitId: w.ref.firstBrakeR1!, vehicleGroupIds: [w.ref.devGroup!] }));
+      w.eq(w.s.deployments[d!]!.targets.map((t) => [t.resourceId, t.status]), [['SIM-901', 'PENDING']], 'a frozen member snapshot, pending');
       w.eq(w.s.resources['SIM-901']!.appliedConfigId, null, 'nothing applied before the receipt');
       w.fails('NOT_APPLIED', () => w.as('brake_tester', (c) => v.recordFeatureTest(c, f, { commitId: w.ref.firstBrakeR1!, resourceId: 'SIM-901', result: 'PASS', summary: 'x' })));
-      answerAll(w, d);
+      answerAll(w, d!);
       recordPasses(w, 'brake_tester', f, ['SIM-901'], '仿真制动压力场景通过');
       const run = w.s.testRuns.at(-1)!;
       w.eq([run.versionId, run.resolvedConfigId], [w.ref.firstBrakeR1, w.s.resources['SIM-901']!.appliedConfigId], 'evidence names the commit and the applied configuration');
@@ -600,9 +600,9 @@ export const scenes: Record<string, SceneSpec> = {
     needs: ['F03'],
     run: (w) => {
       const fix = w.ref.firstBrakeFix!;
-      const d = w.as('brake_tester', (c) => v.dispatchFeature(c, fix, { commitId: w.s.features[fix]!.headCommitId!, vehicleGroupIds: [w.ref.devGroup!] }));
+      const [d] = w.as('brake_tester', (c) => v.dispatchFeature(c, fix, { commitId: w.s.features[fix]!.headCommitId!, vehicleGroupIds: [w.ref.devGroup!] }));
       w.fails('VEHICLE_BUSY', () => w.as('workspace_manager', (c) => fleet.removeGroupMember(c, w.ref.devGroup!, 'SIM-901', '回收')));
-      answerAll(w, d);
+      answerAll(w, d!);
       w.fails('SIMULATION_RUNNING', () => w.as('workspace_manager', (c) => fleet.removeGroupMember(c, w.ref.devGroup!, 'SIM-901', '回收')));
       w.as('workspace_manager', (c) => fleet.stopSimulation(c, 'SIM-901'));
       w.as('workspace_manager', (c) => fleet.removeGroupMember(c, w.ref.devGroup!, 'SIM-901', '研发结束，回收'));

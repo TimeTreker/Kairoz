@@ -6,6 +6,7 @@ import { Hint, Mono, when } from '../../components/common.tsx';
 import { DeploymentsTable, DispatchModal, RecordTestModal, TargetsTable } from '../../components/testing.tsx';
 import { displayName } from '../../engine/config.ts';
 import { vehicleGroupsOf } from '../../engine/fleet.ts';
+import { releasesOf } from '../../engine/release.ts';
 import type { Feature } from '../../engine/types.ts';
 import {
   cancelDeployment,
@@ -44,6 +45,16 @@ export function ValidationTab({ feature }: { feature: Feature }) {
   const requests = Object.values(state.testRequests)
     .filter((r) => r.featureId === feature.id)
     .sort((a, b) => b.id.localeCompare(a.id));
+  // Other groups' policies in the model's policy sets: what a dispatch may switch off.
+  const switchable = [
+    ...new Map(
+      releasesOf(state, feature.vehicleModelId).flatMap((r) =>
+        Object.entries(r.groups)
+          .filter(([g]) => g !== feature.groupId)
+          .flatMap(([g, commitId]) => Object.keys(state.commits[commitId]!.policies).map((policyId) => [policyId, { policyId, group: state.groups[g]?.code ?? g }] as const)),
+      ),
+    ).values(),
+  ].sort((a, b) => a.policyId.localeCompare(b.policyId));
   const status = featureTestStatus(state, feature);
   const blockers = verifyBlockers(state, feature);
   const canVerify = feature.stage === 'TESTING' && can('feature.verify', { workspaceId: feature.workspaceId, groupId: group.id });
@@ -108,7 +119,7 @@ export function ValidationTab({ feature }: { feature: Feature }) {
             columns={[
               { title: L('提交', 'Commit'), render: (_, r) => <Mono>{displayName(state, r.commitId)}</Mono> },
               { title: L('车辆组 / 车辆', 'Groups / vehicles'), render: (_, r) => `${r.vehicleGroupIds.map((g) => state.vehicleGroups[g]?.name).join(', ')} · ${r.members.join(', ')}` },
-              { title: L('目标', 'Goal'), dataIndex: 'goal' },
+              { title: L('目标', 'Goal'), render: (_, r) => (r.disabledPolicies.length ? `${r.goal} · ${L('关闭', 'off')} ${r.disabledPolicies.join(', ')}` : r.goal) },
               { title: L('申请人', 'By'), render: (_, r) => `${state.accounts[r.requestedBy]?.displayName} · ${when(r.requestedAt)}` },
               {
                 title: L('状态', 'Status'),
@@ -152,19 +163,21 @@ export function ValidationTab({ feature }: { feature: Feature }) {
         open={requesting}
         request
         groups={approvalGroups}
+        switchable={switchable}
         emptyText=""
         onClose={() => setRequesting(false)}
-        onDispatch={(ids, goal) =>
-          run((c) => requestTeamTest(c, feature.id, { commitId: feature.headCommitId!, vehicleGroupIds: ids, goal }), L('已提交申请，等待工作区管理员审批', 'Request submitted; waiting for the workspace admin')) !== undefined
+        onDispatch={(ids, goal, _direct, disabledPolicies) =>
+          run((c) => requestTeamTest(c, feature.id, { commitId: feature.headCommitId!, vehicleGroupIds: ids, disabledPolicies, goal }), L('已提交申请，等待工作区管理员审批', 'Request submitted; waiting for the workspace admin')) !== undefined
         }
       />
       <DispatchModal
         open={dispatching}
         groups={directGroups}
+        switchable={switchable}
         emptyText={L('本工作区没有服务该分组的车辆组；请联系工作区管理员。', 'No vehicle group serves this group here; ask the workspace admin.')}
         onClose={() => setDispatching(false)}
-        onDispatch={(ids) =>
-          run((c) => dispatchFeature(c, feature.id, { commitId: feature.headCommitId!, vehicleGroupIds: ids }), L('已下发，等待车辆回执', 'Dispatched; waiting for vehicle receipts')) !== undefined
+        onDispatch={(ids, _goal, _direct, disabledPolicies) =>
+          run((c) => dispatchFeature(c, feature.id, { commitId: feature.headCommitId!, vehicleGroupIds: ids, disabledPolicies }), L('已下发，等待车辆回执', 'Dispatched; waiting for vehicle receipts')) !== undefined
         }
       />
       <RecordTestModal

@@ -27,19 +27,19 @@ export function answerAll(w: World, deploymentId: string, result: 'APPLIED' | 'F
  * Dispatches the Feature's head commit to vehicle groups and lets every vehicle apply it. Groups
  * that need approval go through a team test request decided by the workspace admin.
  */
-export function dispatchApplied(w: World, tester: string, featureId: string, vehicleGroupIds: string[]): string {
+export function dispatchApplied(w: World, tester: string, featureId: string, vehicleGroupIds: string[]): string[] {
   const head = w.s.features[featureId]!.headCommitId!;
   const gated = vehicleGroupIds.some((g) => w.s.vehicleGroups[g]!.requiresApproval);
-  let d: string;
+  let ds: string[];
   if (gated) {
     const req = w.as(tester, (c) => v.requestTeamTest(c, featureId, { commitId: head, vehicleGroupIds, goal: '团队验证' }));
     w.as('workspace_manager', (c) => v.decideTestRequest(c, req, { decision: 'APPROVED', note: '同意' }));
-    d = w.as(tester, (c) => v.executeTestRequest(c, req));
+    ds = w.as(tester, (c) => v.executeTestRequest(c, req));
   } else {
-    d = w.as(tester, (c) => v.dispatchFeature(c, featureId, { commitId: head, vehicleGroupIds }));
+    ds = w.as(tester, (c) => v.dispatchFeature(c, featureId, { commitId: head, vehicleGroupIds }));
   }
-  answerAll(w, d);
-  return d;
+  for (const d of ds) answerAll(w, d);
+  return ds;
 }
 
 /** Records PASS on the given vehicles in order (simulation first). */
