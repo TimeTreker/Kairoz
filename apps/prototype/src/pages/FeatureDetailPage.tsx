@@ -5,6 +5,7 @@ import { useActor, useCan, useRun } from '../app/hooks.ts';
 import { navigate } from '../app/router.ts';
 import { engine, useEngineState } from '../app/store.ts';
 import { Mono, StageTag, when } from '../components/common.tsx';
+import { draftSelfTest } from '../components/personal-sim.tsx';
 import { canReadFeature, displayName, draftReviewRequired, EDITABLE_STAGES, featureChanges, submitFeature } from '../engine/config.ts';
 import { returnFeature } from '../engine/intake.ts';
 import { isCollectible } from '../engine/integration.ts';
@@ -41,6 +42,7 @@ export function FeatureDetailPage({ featureId }: { featureId: string }) {
   const latestFeedback = state.feedback.filter((f) => f.featureId === feature.id && f.commitId === feature.headCommitId).at(-1);
   const integratedIn = Object.values(state.candidates).filter((c) => c.sources.some((x) => x.featureId === feature.id));
   const review = draftReviewRequired(state, feature);
+  const selfTest = draftSelfTest(state, feature);
 
   return (
     <div className="kz-page">
@@ -153,6 +155,13 @@ export function FeatureDetailPage({ featureId }: { featureId: string }) {
           {review.length
             ? L(`草稿含 ${review.length} 个需敏感审核的文件；没有现行批准时会进入 DCL 接入队列。`, `${review.length} file(s) need sensitive review; without a current approval the Feature goes to DCL intake.`)
             : L('普通内容提交后直接 DCL Ready。', 'Ordinary content becomes DCL Ready right away.')}
+        </Typography.Paragraph>
+        <Typography.Paragraph type="secondary">
+          {selfTest === 'PASS'
+            ? L('这份草稿在个人仿真上自测 PASS（仅供参考，团队测试仍需进行）。', 'This draft passed a self-test on a personal simulation (for reference; team testing still applies).')
+            : selfTest === 'FAIL'
+              ? L('这份草稿最近一次个人自测为 FAIL（仅供参考，不阻止提交）。', 'This draft’s latest personal self-test failed (for reference; it does not block submitting).')
+              : L('这份草稿还没有个人自测（可选）。', 'This draft has no personal self-test (optional).')}
         </Typography.Paragraph>
         <Input.TextArea rows={2} placeholder={L('提交说明（可选）', 'Commit message (optional)')} value={text} onChange={(e) => setText(e.target.value)} />
       </Modal>

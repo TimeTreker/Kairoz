@@ -129,7 +129,7 @@ export function Shell() {
       data: <DataCatalogPage />,
       intake: <IntakePage />,
       processing: <ProcessingPage />,
-      fleet: <FleetPage />,
+      fleet: <FleetPage key={workspace?.id} tab={route[1]} />,
       release: <ReleasePage key={workspace?.id} tab={route[1]} />,
       query: <QueryPage key={workspace?.id} tab={route[1]} />,
       simulator: <SimulatorPage />,

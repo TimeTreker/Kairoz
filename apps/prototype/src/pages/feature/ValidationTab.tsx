@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { useActor, useCan, useRun } from '../../app/hooks.ts';
 import { useEngineState } from '../../app/store.ts';
 import { Hint, Mono, when } from '../../components/common.tsx';
+import { PersonalTestsCard } from '../../components/personal-sim.tsx';
 import { DeploymentsTable, DispatchModal, RecordTestModal, TargetsTable } from '../../components/testing.tsx';
 import { displayName } from '../../engine/config.ts';
 import { vehicleGroupsOf } from '../../engine/fleet.ts';
@@ -158,6 +159,8 @@ export function ValidationTab({ feature }: { feature: Feature }) {
           onCancel={(d) => run((c) => cancelDeployment(c, d.id, L('手动取消', 'Cancelled manually')), L('已取消', 'Cancelled'))}
         />
       </Card>
+
+      <PersonalTestsCard feature={feature} />
 
       <DispatchModal
         open={requesting}

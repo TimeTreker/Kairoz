@@ -9,6 +9,7 @@ import { EnvTag, LabelTag, Mono, PageHeader, configName, when } from '../compone
 import { CompanyDirectoryCard } from '../components/company-directory.tsx';
 import type { Ctx } from '../engine/engine.ts';
 import { advanceEvent, assessEvent, capturablePolicies, captureEvent, deliverCallback, receiveChunk, setFailParse } from '../engine/events.ts';
+import { personalCapturablePolicies, trialCapture } from '../engine/personal-sim.ts';
 import type { Quality, TrainingUse } from '../engine/types.ts';
 import { deviceSummary, flushOutbox, pendingForVehicles, reportNow, restartClient, sendFault, sendReceipt, setAgent, tick, upgradeClient } from '../engine/simulator.ts';
 import type { ReportFault } from '../engine/simulator.ts';
@@ -49,7 +50,9 @@ export function SimulatorPage() {
   const [vehicle, setVehicle] = useState<string | undefined>(undefined);
   const [policy, setPolicy] = useState<string | undefined>(undefined);
   const [failParse, setFailParseNext] = useState(false);
-  const policies = vehicle ? capturablePolicies(state, vehicle) : [];
+  const personal = vehicle ? !!state.resources[vehicle]?.personal : false;
+  // A personal simulation fires its draft's policies as trials for its owner, never as events.
+  const policies = vehicle ? (personal ? personalCapturablePolicies(state, vehicle) : capturablePolicies(state, vehicle)) : [];
   const events = Object.values(state.events)
     .sort((a, b) => b.seq - a.seq)
     .slice(0, 15);
@@ -229,7 +232,7 @@ export function SimulatorPage() {
               placeholder={L('选择车辆', 'Vehicle')}
               value={vehicle}
               onChange={(v) => (setVehicle(v), setPolicy(undefined))}
-              options={running.map((r) => ({ value: r.id, label: `${r.id} · ${B(configName(state, r.appliedConfigId))}` }))}
+              options={running.map((r) => ({ value: r.id, label: `${r.id}${r.personal ? ` · ${L('个人', 'personal')}` : ''} · ${B(configName(state, r.appliedConfigId))}` }))}
             />
             <Select
               style={{ width: 260 }}
@@ -238,12 +241,20 @@ export function SimulatorPage() {
               onChange={setPolicy}
               options={policies.map((p) => ({ value: p.policyId, label: `${p.policyId} · ${p.name}` }))}
             />
-            <Checkbox checked={failParse} onChange={(e) => setFailParseNext(e.target.checked)}>
-              {L('云端解析将失败', 'Cloud parsing will fail')}
-            </Checkbox>
-            <Button type="primary" disabled={!vehicle || !policy} onClick={() => system((c) => captureEvent(c, { resourceId: vehicle!, policyId: policy!, failParse }), L('事件已触发，开始上传', 'Event fired; uploading'))}>
-              {L('触发事件', 'Fire event')}
-            </Button>
+            {personal ? (
+              <Button type="primary" disabled={!policy} onClick={() => system((c) => trialCapture(c, vehicle!, policy!), L('已试触发，仅创建人可见', 'Trial capture made; only the owner sees it'))}>
+                {L('试触发（个人，仅本人可见）', 'Trial capture (personal, owner only)')}
+              </Button>
+            ) : (
+              <>
+                <Checkbox checked={failParse} onChange={(e) => setFailParseNext(e.target.checked)}>
+                  {L('云端解析将失败', 'Cloud parsing will fail')}
+                </Checkbox>
+                <Button type="primary" disabled={!vehicle || !policy} onClick={() => system((c) => captureEvent(c, { resourceId: vehicle!, policyId: policy!, failParse }), L('事件已触发，开始上传', 'Event fired; uploading'))}>
+                  {L('触发事件', 'Fire event')}
+                </Button>
+              </>
+            )}
           </Space>
           <Table
             rowKey="id"

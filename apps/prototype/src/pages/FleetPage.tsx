@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useActor, useCan, useRun, useWorkspace } from '../app/hooks.ts';
 import { engine, useEngineState } from '../app/store.ts';
 import { ClientReportDrawer } from '../components/client-report.tsx';
+import { PersonalSims } from '../components/personal-sim.tsx';
 import { EnvTag, Hint, LabelTag, Mono, PageHeader, ShortId, configName, when } from '../components/common.tsx';
 import { ENVS, SCOPES } from '../domain/vocabulary.ts';
 import {
@@ -48,7 +49,7 @@ import { CONFIG_ANSWER_LABELS, ENV_LABELS, GROUP_EVENT_LABELS, REQUEST_STATUS_CO
 import { issueLabel } from '../i18n/issues.ts';
 import { navigate } from '../app/router.ts';
 
-const ANSWER_COLORS: Record<string, string> = { GROUP_TARGET: 'blue', REPUBLISH: 'gold', BASE_CONFLICT: 'red', NO_BASE: 'red', HELD: 'purple', TASK: 'processing', APPLIED: 'default', INITIAL: 'default', BLOCKED: 'red' };
+const ANSWER_COLORS: Record<string, string> = { PERSONAL: 'purple', GROUP_TARGET: 'blue', REPUBLISH: 'gold', BASE_CONFLICT: 'red', NO_BASE: 'red', HELD: 'purple', TASK: 'processing', APPLIED: 'default', INITIAL: 'default', BLOCKED: 'red' };
 
 function VehicleTable({ vehicles, extra }: { vehicles: Resource[]; extra?: (r: Resource) => React.ReactNode }) {
   const state = useEngineState();
@@ -67,6 +68,7 @@ function VehicleTable({ vehicles, extra }: { vehicles: Resource[]; extra?: (r: R
             <Space orientation="vertical" size={0}>
               <Mono>{r.id}</Mono>
               <Typography.Text type="secondary">{r.displayName}</Typography.Text>
+              {r.personal && <Tag color="purple">{L('个人', 'Personal')} · {state.accounts[r.personal.owner]?.displayName ?? r.personal.owner}</Tag>}
             </Space>
           ),
         },
@@ -98,7 +100,7 @@ function VehicleTable({ vehicles, extra }: { vehicles: Resource[]; extra?: (r: R
             const pending = pendingDeploymentOf(state, r.id);
             return (
               <Space size={4} wrap>
-                {g ? <Tag>{g.name}</Tag> : <Typography.Text type="secondary">{L('未分组', 'Ungrouped')}</Typography.Text>}
+                {g ? <Tag>{g.name}</Tag> : !r.personal && <Typography.Text type="secondary">{L('未分组', 'Ungrouped')}</Typography.Text>}
                 {pending && <Tag color="processing">{L('等待回执', 'Awaiting receipt')}</Tag>}
                 {r.instance && <Tag color={r.instance === 'RUNNING' ? 'green' : 'default'}>{r.instance === 'RUNNING' ? L('实例运行中', 'running') : L('实例已停止', 'stopped')}</Tag>}
                 {r.reservation && (
@@ -110,7 +112,7 @@ function VehicleTable({ vehicles, extra }: { vehicles: Resource[]; extra?: (r: R
             );
           },
         },
-        { title: L('状态', 'Status'), render: (_, r) => B(RESOURCE_STATUS_LABELS[r.status]) },
+        { title: L('状态', 'Status'), render: (_, r) => (r.personal && r.status === 'RETIRED' ? L('已释放', 'Released') : B(RESOURCE_STATUS_LABELS[r.status])) },
         ...(extra ? [{ title: '', render: (_: unknown, r: Resource) => extra(r) }] : []),
       ]}
     />
@@ -602,7 +604,9 @@ function Registry() {
       <Hint>{L('实车登记时整车版本为空，由 DIP / OTA 等可信来源上报后确认；仿真车的版本由镜像决定。', 'Physical vehicles start with unknown software, confirmed later from a trusted source (DIP, OTA); a simulation’s version comes from its image.')}</Hint>
       <VehicleTable
         vehicles={vehicles}
-        extra={(r) => (
+        extra={(r) => r.personal ? (
+          <Typography.Text type="secondary">{L('仅创建人可操作', 'Owner only')}</Typography.Text>
+        ) : (
           <Space size={0}>
             {r.type === 'PHYSICAL' && (
               <Button type="link" size="small" onClick={() => (vf.setFieldsValue({ version: r.integrationVersion, source: '' }), setConfirming(r))}>
@@ -1010,17 +1014,29 @@ function Catalogs() {
   );
 }
 
-export function FleetPage() {
+export function FleetPage({ tab = 'workspace' }: { tab?: string }) {
+  const state = useEngineState();
   const actor = useActor()!;
+  const can = useCan();
+  const { workspace } = useWorkspace();
   const { L } = useI18n();
   const isResourceAdmin = actor.grants.some((g) => g.role === 'VEHICLE_RESOURCE');
+  const personal =
+    !!workspace &&
+    workspace.groupIds.some((id) => {
+      const g = state.groups[id];
+      return !!g && can('personalSim.use', { workspaceId: workspace.id, groupId: g.id, scope: g.domain, env: 'development' });
+    });
   return (
     <div className="kz-page">
       <PageHeader title={L('车辆与车辆组', 'Vehicles & vehicle groups')} subtitle={L('车辆的真实状态（实际软件、已生效配置）与配置路由（车辆组）分别管理。', 'Actual vehicle state (software, applied configuration) and configuration routing (vehicle groups) are managed separately.')} />
       <Tabs
+        activeKey={tab}
+        onChange={(k) => navigate(`fleet/${k}`)}
         items={[
           { key: 'workspace', label: L('工作区车辆', 'Workspace vehicles'), children: <WorkspaceVehicles /> },
           { key: 'groups', label: L('车辆组', 'Vehicle groups'), children: <VehicleGroups /> },
+          ...(personal && workspace ? [{ key: 'personal', label: L('我的研发仿真', 'My simulations'), children: <PersonalSims workspaceId={workspace.id} /> }] : []),
           ...(isResourceAdmin ? [{ key: 'registry', label: L('车辆台账', 'Vehicle registry'), children: <Registry /> }] : []),
           { key: 'catalogs', label: L('软件版本与镜像', 'Software & images'), children: <Catalogs /> },
         ]}

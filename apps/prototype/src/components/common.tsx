@@ -76,5 +76,7 @@ export function configName(s: State, id: string | null | undefined): Bilingual {
   const c = s.resolvedConfigs[id];
   if (!c) return { zh: id, en: id };
   const release = c.kind === 'RELEASE' ? s.releases[c.sourceId] : undefined;
-  return release ? setName(release.dclVersion) : { zh: c.label, en: c.label };
+  if (release) return setName(release.dclVersion);
+  // A personal configuration names the Feature's draft, not a commit.
+  return c.kind === 'PERSONAL' ? { zh: c.label.replace(/ \/ draft/, ' / 草稿'), en: c.label } : { zh: c.label, en: c.label };
 }

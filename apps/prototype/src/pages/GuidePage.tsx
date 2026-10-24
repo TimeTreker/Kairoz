@@ -37,6 +37,20 @@ export const SCENARIOS: Scenario[] = [
     ],
   },
   {
+    key: 'personal-sim',
+    titleZh: '个人研发仿真：草稿自测',
+    titleEn: 'Personal simulation: self-testing a draft',
+    steps: [
+      { account: 'business', workspace: 'team-brake', page: 'fleet', zh: '在“车辆与车辆组 → 我的研发仿真”新建个人仿真：制动组、镜像 x89-dev-sim', en: 'Under Vehicles & groups → My simulations create one: brake group, image x89-dev-sim', expectZh: '得到 SIM-P001，整车软件未知，基线为初始配置；它不出现在工作区车辆或车辆组里', expectEn: 'SIM-P001 with unknown software on the initial configuration; it is in no workspace vehicles or groups' },
+      { account: 'business', workspace: 'team-brake', page: 'features', zh: '在 brake_monitor 的草稿里修改“急刹车”的触发条件，不提交', en: 'Change the 急刹车 trigger in the brake_monitor draft without submitting', expectZh: 'Feature 回到草稿', expectEn: 'The Feature is a draft again' },
+      { account: 'business', workspace: 'team-brake', page: 'fleet', zh: '打开 SIM-P001，选择 brake_monitor，“配置草稿”', en: 'Open SIM-P001, choose brake_monitor and Send draft', expectZh: '等待回执；回执前什么都不运行', expectEn: 'Awaiting the receipt; nothing runs before it' },
+      { account: 'business', page: 'simulator', zh: '在原型工具 → 车辆模拟器为 SIM-P001 发送成功回执，再对它的草稿策略“试触发”', en: 'In Prototype → Vehicle simulator send SIM-P001 a successful receipt, then make a trial capture of its draft policy', expectZh: '草稿生效；试触发只在个人仿真里看到，不产生采集事件', expectEn: 'The draft runs; the trial shows only on the personal simulation and makes no collection event' },
+      { account: 'business', workspace: 'team-brake', page: 'fleet', zh: '在 SIM-P001 记录个人自测 PASS', en: 'Record a PASS self-test on SIM-P001', expectZh: 'brake_monitor 的“下发与测试”显示个人自测（不计入验证），阶段不变', expectEn: 'brake_monitor’s Dispatch & tests lists the self-test (not team evidence); the stage is unchanged' },
+      { account: 'business', workspace: 'team-brake', page: 'features', zh: '提交 brake_monitor', en: 'Submit brake_monitor', expectZh: '提交对话框提示草稿已自测 PASS；自测标注“与提交一致”；团队测试照常按车辆组进行', expectEn: 'The submit dialog notes the PASS self-test; the self-test shows Matches commit; team testing still goes through vehicle groups' },
+      { account: 'business', workspace: 'team-brake', page: 'fleet', zh: '释放 SIM-P001', en: 'Release SIM-P001', expectZh: '配额空出一个，自测与试触发历史保留', expectEn: 'One quota slot frees; self-tests and trial captures stay' },
+    ],
+  },
+  {
     key: 'intake',
     titleZh: 'DCL 接入 · 敏感文件审核',
     titleEn: 'DCL intake · sensitive review',

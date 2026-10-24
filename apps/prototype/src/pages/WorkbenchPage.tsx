@@ -11,6 +11,7 @@ import { isConfirmed, isMergeWorkspace, verifiedSources } from '../engine/integr
 import { blockedProductionVehicles } from '../engine/applicability.ts';
 import { emergencyStopsOf } from '../engine/emergency.ts';
 import { orphanedOrgObjects } from '../engine/org.ts';
+import { PERSONAL_SIM_QUOTA, personalPending, personalSimsOf } from '../engine/personal-sim.ts';
 import { otaRollouts } from '../engine/ota.ts';
 import { releaseFor, releasesOf } from '../engine/release.ts';
 import { managedResources, pendingDeploymentOf, vehicleGroupsOf, workspaceVehicles } from '../engine/fleet.ts';
@@ -102,6 +103,30 @@ export function WorkbenchPage() {
           <Col span={8}><Statistic title={L('等待车辆回执', 'Awaiting receipts')} value={waiting.length} /></Col>
         </Row>
         <FeatureList items={features.filter((f) => ['DCL_READY', 'TESTING'].includes(f.stage))} empty={L('暂无待测 Feature', 'Nothing to test')} />
+      </Card>,
+    );
+  }
+  const personalGroups = workspace
+    ? workspace.groupIds.filter((id) => {
+        const g = state.groups[id];
+        return !!g && authorize(actor.grants, 'personalSim.use', { workspaceId: workspace.id, groupId: g.id, scope: g.domain, env: 'development' }).ok;
+      })
+    : [];
+  if (personalGroups.length > 0 && workspace) {
+    const sims = personalSimsOf(state, actor.username, workspace.id).filter((r) => r.status !== 'RETIRED');
+    const latest = Object.values(state.personalTests)
+      .filter((t) => t.owner === actor.username && t.workspaceId === workspace.id)
+      .sort((a, b) => b.seq - a.seq)[0];
+    cards.push(
+      <Card key="personal" title={L('我的研发仿真', 'My simulations')} extra={<Button size="small" onClick={() => navigate('fleet/personal')}>{L('打开', 'Open')}</Button>}>
+        <Row gutter={16} style={{ marginBottom: 12 }}>
+          <Col span={8}><Statistic title={L('个人仿真', 'Personal simulations')} value={sims.length} suffix={`/ ${PERSONAL_SIM_QUOTA}`} /></Col>
+          <Col span={8}><Statistic title={L('等待回执', 'Awaiting receipt')} value={sims.filter((r) => personalPending(state, r.id)).length} /></Col>
+          <Col span={8}><Statistic title={L('最近自测', 'Latest self-test')} value={latest?.result ?? '—'} /></Col>
+        </Row>
+        <Typography.Text type="secondary">
+          {L('在自己的仿真上运行本组 Feature 草稿、试触发并自测；不计入团队测试。', 'Run your group’s Feature drafts on your own simulations, fire trials and self-test; never team evidence.')}
+        </Typography.Text>
       </Card>,
     );
   }
