@@ -10,7 +10,7 @@ import type { FileType, Privacy } from '../domain/file-types.ts';
 import type { ReviewControls } from '../domain/intake.ts';
 import type { Domain, Env, GroupPurpose, Role, Scope, WorkspaceKind } from '../domain/vocabulary.ts';
 
-export const STATE_SCHEMA = 8;
+export const STATE_SCHEMA = 9;
 
 export interface Account {
   username: string;
@@ -418,6 +418,12 @@ export interface Resource {
   imageId: string | null;
   /** The workspace that created a simulation instance. */
   homeWorkspaceId: string | null;
+  /**
+   * A personal simulation instance (个人仿真): the one account that configures, self-tests and
+   * releases it, for drafts of one business group. It never joins workspace vehicles, vehicle
+   * groups or team tests.
+   */
+  personal: { owner: string; groupId: string } | null;
   /** Confirmed only by an APPLIED receipt. */
   appliedConfigId: string | null;
   agent: AgentState;
@@ -434,16 +440,26 @@ export interface Resource {
 export interface ResolvedConfig {
   id: string;
   vehicleModelId: string;
-  kind: 'FEATURE' | 'CANDIDATE' | 'RELEASE';
+  kind: 'FEATURE' | 'CANDIDATE' | 'RELEASE' | 'PERSONAL';
   sourceId: string;
   baseReleaseId: string | null;
   /** group id -> commit id */
   groups: Record<string, string>;
-  /** Base policies of other business groups a development group switched off (FEATURE only). */
+  /** Base policies of other business groups a development group switched off (FEATURE and PERSONAL). */
   disabledPolicies: string[];
+  /** PERSONAL only: the Feature draft run in place of its business group's commit. */
+  draft: PersonalDraft | null;
   digest: string;
   label: string;
   createdAt: string;
+}
+
+/** An uncommitted Feature draft as a personal simulation runs it; never a version of anything. */
+export interface PersonalDraft {
+  groupId: string;
+  featureId: string;
+  snapshot: GroupConfig;
+  digest: string;
 }
 
 export type VehicleGroupPurpose = 'DEV' | 'TEST' | 'PRODUCTION';
@@ -534,7 +550,7 @@ export interface DeploymentTarget {
  */
 export interface Deployment {
   id: string;
-  kind: 'FEATURE' | 'CANDIDATE' | 'APPLICABILITY' | 'OTA';
+  kind: 'FEATURE' | 'CANDIDATE' | 'APPLICABILITY' | 'OTA' | 'PERSONAL';
   workspaceId: string;
   groupId: string | null;
   subjectId: string;
@@ -561,6 +577,49 @@ export interface Receipt {
   result: 'APPLIED' | 'FAILED';
   error: string | null;
   receivedAt: string;
+}
+
+/**
+ * A policy of a personal configuration fired on a personal simulation (试触发). It is the owner's
+ * trial only: no upload, no processing, never part of data query, training or the catalog.
+ */
+export interface PersonalCapture {
+  id: string;
+  seq: number;
+  resourceId: string;
+  owner: string;
+  configId: string;
+  featureId: string;
+  policyId: string;
+  policyName: string;
+  trigger: string;
+  files: { dataKey: string; name: string; format: string; sizeBytes: number }[];
+  occurredAt: string;
+}
+
+/**
+ * The owner's own verdict on a draft run on a personal simulation (个人自测). It never counts as
+ * a team test, never changes a Feature's stage and gates nothing.
+ */
+export interface PersonalTest {
+  id: string;
+  seq: number;
+  resourceId: string;
+  owner: string;
+  workspaceId: string;
+  featureId: string;
+  configId: string;
+  /** The digest of the draft snapshot that ran. */
+  draftDigest: string;
+  imageId: string | null;
+  integrationVersion: string | null;
+  baseReleaseId: string | null;
+  disabledPolicies: string[];
+  /** Trial captures on this configuration before the verdict. */
+  captureIds: string[];
+  result: 'PASS' | 'FAIL';
+  note: string;
+  createdAt: string;
 }
 
 /** A vehicle a subject (Feature commit, candidate, applicability check) must be verified on. */
@@ -857,7 +916,8 @@ export interface DirectorySyncEntry {
     | 'ACCOUNT_MOVED'
     | 'ACCOUNT_DISABLED'
     | 'ACCOUNT_REACTIVATED'
-    | 'ACCOUNT_SKIPPED';
+    | 'ACCOUNT_SKIPPED'
+    | 'PERSONAL_SIMS_RELEASED';
   subject: string;
   detail: string;
 }
@@ -926,6 +986,8 @@ export interface State {
   /** The simulated company directory (the simulator's, not the platform's); null when none is connected. */
   directory: CompanyDirectory | null;
   directorySync: DirectorySync;
+  personalCaptures: Record<string, PersonalCapture>;
+  personalTests: Record<string, PersonalTest>;
   audit: AuditEvent[];
 }
 
@@ -979,6 +1041,8 @@ export function emptyState(): State {
     grantRules: {},
     directory: null,
     directorySync: { revision: 0, syncedAt: null, log: [] },
+    personalCaptures: {},
+    personalTests: {},
     audit: [],
   };
 }

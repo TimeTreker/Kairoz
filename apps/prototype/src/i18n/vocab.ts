@@ -438,6 +438,7 @@ export const CONFIG_ANSWER_LABELS: Record<string, Bilingual> = {
   REPUBLISH: b('软件或策略集已变化，需重新下发', 'Software or policy set changed; publish again'),
   BASE_CONFLICT: b('与新基线冲突，保持已生效配置', 'Conflicts with the new base; keeps the applied configuration'),
   NO_BASE: b('没有适用基线，保持已生效配置', 'No base applies; keeps the applied configuration'),
+  PERSONAL: b('本人刚下发的个人配置', 'Personal configuration its owner just sent'),
   APPLIED: b('已生效配置', 'Applied configuration'),
   INITIAL: b('初始研发配置', 'Initial configuration'),
   BLOCKED: b('阻止', 'Blocked'),
@@ -575,4 +576,24 @@ export const SYNC_KIND_LABELS: Record<string, Bilingual> = {
   ACCOUNT_DISABLED: b('离职停用', 'Disabled (left)'),
   ACCOUNT_REACTIVATED: b('重新启用', 'Reactivated'),
   ACCOUNT_SKIPPED: b('跳过', 'Skipped'),
+  PERSONAL_SIMS_RELEASED: b('释放个人仿真', 'Personal simulations released'),
 };
+
+// Personal simulation (个人研发仿真)
+Object.assign(ERROR_LABELS, {
+  PERSONAL_SIM_OWNER: b('个人仿真只能由创建人本人操作', 'Only its owner uses a personal simulation'),
+  PERSONAL_SIMULATION: b('个人仿真不能加入工作区车辆、车辆组或团队测试', 'A personal simulation never joins workspace vehicles, vehicle groups or team tests'),
+  NOT_PERSONAL_SIMULATION: b('这不是个人仿真', 'This is not a personal simulation'),
+  PERSONAL_QUOTA: b('个人仿真配额已用完（每个工作区 3 个），请先释放一个', 'Personal simulation quota used up (3 per workspace); release one first'),
+  PERSONAL_DEVELOPMENT_ONLY: b('个人仿真只能用于研发环境', 'Personal simulations run in the development environment only'),
+  PERSONAL_GROUP_MISMATCH: b('个人仿真只运行本工作区、本业务分组的 Feature 草稿', 'A personal simulation runs drafts of its own business group in its own workspace'),
+  PERSONAL_SIM_RELEASED: b('该个人仿真已释放', 'The personal simulation was released'),
+  PERSONAL_NOT_APPLIED: b('仿真上还没有生效的草稿配置；请先配置草稿并等待回执', 'The simulation runs no draft yet; configure it and wait for the receipt'),
+  PERSONAL_TRIAL_ONLY: b('个人仿真只能试触发，不产生采集事件', 'A personal simulation only makes trial captures, never collection events'),
+  DRAFT_NOT_RUNNABLE: b('草稿还有问题，修正后才能运行', 'The draft has problems; fix them before running it'),
+  SENSITIVE_NOT_REVIEWED: b('敏感文件须先通过 DCL 审核，个人仿真也不能采集', 'Sensitive files need a current DCL approval first, even on a personal simulation'),
+  CONFIG_ALREADY_APPLIED: b('仿真已在运行这份草稿和基线', 'The simulation already runs this draft on this base'),
+  INVALID_RESULT: b('结果只能是 PASS 或 FAIL', 'The result is PASS or FAIL'),
+  BASE_CONFLICT: b('该基线已改变本 Feature 的业务分组，请在新基线上新建 Feature', 'The base changed this Feature’s business group; start a Feature on it'),
+  NO_BASE: b('没有适用于该软件版本的策略集，请指定显式基线', 'No policy set applies to this software; choose an explicit base'),
+});

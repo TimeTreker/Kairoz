@@ -9,36 +9,55 @@ import { newId } from '../domain/ids.ts';
 import type { Env } from '../domain/vocabulary.ts';
 import { authorizeFeature, displayName, latestRelease } from './config.ts';
 import type { Ctx } from './engine.ts';
-import { directTargetProblems, getResource, membersOf, pendingDeploymentOf, recordGroupBinding } from './fleet.ts';
+import { authorizePersonal, directTargetProblems, getResource, membersOf, pendingDeploymentOf, recordGroupBinding } from './fleet.ts';
 import { getGroup } from './org.ts';
 import { setInEffect } from './release.ts';
-import type { Candidate, Deployment, DeploymentTarget, Feature, Release, ResolvedConfig, Resource, State, TestRequest, TestRun, VehicleGroup } from './types.ts';
+import type { Candidate, Deployment, DeploymentTarget, Feature, PersonalDraft, Release, ResolvedConfig, Resource, State, TestRequest, TestRun, VehicleGroup } from './types.ts';
 
 /** Finds or creates the resolved configuration for a base plus group commits. */
 export function resolveConfig(
   ctx: Ctx,
-  input: { vehicleModelId: string; kind: ResolvedConfig['kind']; sourceId: string; baseReleaseId: string | null; groups: Record<string, string>; disabledPolicies?: string[]; label: string },
+  input: {
+    vehicleModelId: string;
+    kind: ResolvedConfig['kind'];
+    sourceId: string;
+    baseReleaseId: string | null;
+    groups: Record<string, string>;
+    disabledPolicies?: string[];
+    draft?: PersonalDraft | null;
+    label: string;
+  },
 ): string {
   const disabledPolicies = [...new Set(input.disabledPolicies ?? [])].sort();
-  const digest = configDigest(ctx.s, { ...input, disabledPolicies });
+  const draft = input.draft ?? null;
+  const digest = configDigest(ctx.s, { ...input, disabledPolicies, draft });
   const existing = Object.values(ctx.s.resolvedConfigs).find((c) => c.digest === digest);
   if (existing) return existing.id;
   const id = newId('rc');
-  ctx.s.resolvedConfigs[id] = { id, ...input, groups: { ...input.groups }, disabledPolicies, digest, createdAt: ctx.now };
+  ctx.s.resolvedConfigs[id] = { id, ...input, groups: { ...input.groups }, disabledPolicies, draft, digest, createdAt: ctx.now };
   return id;
 }
 
 /** The identity of a configuration; computed without creating it. */
 export function configDigest(
   s: State,
-  input: { vehicleModelId: string; kind: ResolvedConfig['kind']; sourceId: string; baseReleaseId: string | null; groups: Record<string, string>; disabledPolicies: string[] },
+  input: {
+    vehicleModelId: string;
+    kind: ResolvedConfig['kind'];
+    sourceId: string;
+    baseReleaseId: string | null;
+    groups: Record<string, string>;
+    disabledPolicies: string[];
+    draft?: Pick<PersonalDraft, 'groupId' | 'digest'> | null;
+  },
 ): string {
   const pairs = Object.keys(input.groups)
     .sort()
     .map((g) => [g, s.commits[input.groups[g]!]!.digest]);
-  // Switched-off policies change the identity only when there are some, so earlier configurations keep theirs.
+  // Switched-off policies and drafts change the identity only when present, so earlier configurations keep theirs.
   const disabled = input.disabledPolicies.length ? { disabledPolicies: [...input.disabledPolicies].sort() } : {};
-  return digestOf({ vehicleModelId: input.vehicleModelId, baseReleaseId: input.baseReleaseId, kind: input.kind, sourceId: input.sourceId, groups: pairs, ...disabled });
+  const draft = input.draft ? { draft: [input.draft.groupId, input.draft.digest] } : {};
+  return digestOf({ vehicleModelId: input.vehicleModelId, baseReleaseId: input.baseReleaseId, kind: input.kind, sourceId: input.sourceId, groups: pairs, ...disabled, ...draft });
 }
 
 /**
@@ -47,11 +66,11 @@ export function configDigest(
  * yet, takes the initial development configuration (no base). Known software no set applies to
  * has none: the group names an explicit base rather than silently dropping the formal policies.
  */
-export function vehicleBase(s: State, group: VehicleGroup, r: Resource): { release: Release | null; problem: string | null } {
-  if (group.baseReleaseId) return { release: s.releases[group.baseReleaseId] ?? null, problem: null };
+export function vehicleBase(s: State, explicitBaseId: string | null, r: Resource): { release: Release | null; problem: string | null } {
+  if (explicitBaseId) return { release: s.releases[explicitBaseId] ?? null, problem: null };
   if (!r.integrationVersion || !latestRelease(s, r.vehicleModelId)) return { release: null, problem: null };
   const set = setInEffect(s, r.vehicleModelId, r.integrationVersion);
-  return set ? { release: set, problem: null } : { release: null, problem: `no policy set applies to software ${r.integrationVersion}; give the group an explicit base` };
+  return set ? { release: set, problem: null } : { release: null, problem: `no policy set applies to software ${r.integrationVersion}; choose an explicit base` };
 }
 
 export interface FeatureTarget {
@@ -68,8 +87,17 @@ export interface FeatureTarget {
  * of the Feature's business group, and the base policies of other groups switched off.
  */
 export function featureTarget(s: State, feature: Feature, commitId: string, group: VehicleGroup, r: Resource, disabledPolicies: string[]): FeatureTarget {
+  const t = baseTarget(s, feature, group.baseReleaseId, r, disabledPolicies);
+  return t.problem ? t : { ...t, groups: { ...t.groups, [feature.groupId]: commitId } };
+}
+
+/**
+ * The vehicle's base for a Feature without the Feature's own group: what a commit or a draft of
+ * that group runs on top of, with the base policies of other groups switched off.
+ */
+export function baseTarget(s: State, feature: Feature, explicitBaseId: string | null, r: Resource, disabledPolicies: string[]): FeatureTarget {
   const none = { baseReleaseId: null, groups: {}, disabledPolicies: [] };
-  const base = vehicleBase(s, group, r);
+  const base = vehicleBase(s, explicitBaseId, r);
   if (base.problem) return { ...none, conflict: false, problem: base.problem };
   const baseGroups = base.release?.groups ?? {};
   // A Feature changes only its own group, so the base must still hold what the Feature started from.
@@ -77,12 +105,9 @@ export function featureTarget(s: State, feature: Feature, commitId: string, grou
   if (base.release && baseGroups[feature.groupId] !== started) {
     return { ...none, conflict: true, problem: `policy set ${base.release.dclVersion} changed ${s.groups[feature.groupId]?.code ?? feature.groupId} after the Feature started; start a Feature on it` };
   }
-  const present = new Set(
-    Object.entries(baseGroups)
-      .filter(([g]) => g !== feature.groupId)
-      .flatMap(([, c]) => Object.keys(s.commits[c]!.policies)),
-  );
-  return { baseReleaseId: base.release?.id ?? null, groups: { ...baseGroups, [feature.groupId]: commitId }, disabledPolicies: disabledPolicies.filter((p) => present.has(p)).sort(), conflict: false, problem: null };
+  const others = Object.fromEntries(Object.entries(baseGroups).filter(([g]) => g !== feature.groupId));
+  const present = new Set(Object.values(others).flatMap((c) => Object.keys(s.commits[c]!.policies)));
+  return { baseReleaseId: base.release?.id ?? null, groups: others, disabledPolicies: disabledPolicies.filter((p) => present.has(p)).sort(), conflict: false, problem: null };
 }
 
 /** The commit's name, plus the base when it differs from the Feature's and how many policies are off. */
@@ -347,6 +372,8 @@ export function cancelDeployment(ctx: Ctx, deploymentId: string, reason: string)
     ctx.allow('feature.dispatch', { type: 'deployment', id: d.id, workspaceId: d.workspaceId, groupId: group.id, scope: group.domain, env: d.env });
   } else if (d.kind === 'APPLICABILITY') {
     ctx.allow('applicability.dispatch', { type: 'deployment', id: d.id, workspaceId: d.workspaceId, scope: 'Vehicle' });
+  } else if (d.kind === 'PERSONAL') {
+    authorizePersonal(ctx, getResource(ctx.s, d.subjectId));
   } else {
     ctx.allow('candidate.dispatch', { type: 'deployment', id: d.id, workspaceId: d.workspaceId, scope: ctx.s.candidates[d.subjectId]?.scope ?? 'Vehicle' });
   }

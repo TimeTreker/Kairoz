@@ -6,6 +6,7 @@
 import { isFullPlatformOps } from '../domain/authz.ts';
 import { SLUG, USERNAME } from '../domain/ids.ts';
 import type { Ctx } from './engine.ts';
+import { releasePersonalSimsOf } from './personal-sim.ts';
 import type { CompanyDirectory, DirectorySyncEntry, OrgUnit, State } from './types.ts';
 
 export const SYNC_LOG_LIMIT = 200;
@@ -109,6 +110,8 @@ export function syncDirectory(ctx: Ctx, snapshot: CompanyDirectory): number {
       }
       account.status = 'DISABLED';
       log('ACCOUNT_DISABLED', account.username, account.orgUnitId ?? '—');
+      const released = releasePersonalSimsOf(ctx, account.username);
+      if (released.length) log('PERSONAL_SIMS_RELEASED', account.username, released.join(', '));
       continue;
     }
     if (account.status === 'DISABLED') {

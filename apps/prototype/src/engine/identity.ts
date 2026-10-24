@@ -10,6 +10,7 @@ import { ENVS, WILDCARD } from '../domain/vocabulary.ts';
 import type { Env, Role } from '../domain/vocabulary.ts';
 import type { Actor, Ctx } from './engine.ts';
 import { getUnit, unitWithin } from './org.ts';
+import { releasePersonalSimsOf } from './personal-sim.ts';
 import type { Account, GrantRule, State } from './types.ts';
 
 export const BOOTSTRAP_ADMIN = 'admin';
@@ -108,6 +109,7 @@ export function updateAccount(ctx: Ctx, username: string, input: { displayName?:
   }
   if (input.status !== undefined) account.status = input.status;
   assertFullAdministratorRemains(ctx.s);
+  if (input.status === 'DISABLED') releasePersonalSimsOf(ctx, username);
 }
 
 /** Replaces the full grant set of an account. Reviewing them after a move is done with it. */

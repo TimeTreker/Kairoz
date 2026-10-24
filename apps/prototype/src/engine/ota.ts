@@ -305,9 +305,10 @@ export interface ConfigAnswer {
    * or testing group, on the vehicle's own base. REPUBLISH: the vehicle's software or its set changed
    * since; BASE_CONFLICT: the new base changed the Feature's own group; NO_BASE: no set applies to the
    * software and the group names no base. These three keep the applied configuration until someone
-   * publishes again. APPLIED / INITIAL: nothing newer is assigned. BLOCKED: no configuration may run.
+   * publishes again. PERSONAL: the draft a personal simulation's owner just sent it. APPLIED /
+   * INITIAL: nothing newer is assigned. BLOCKED: no configuration may run.
    */
-  reason: 'HELD' | 'TASK' | 'LATEST_RELEASE' | 'GROUP_TARGET' | 'REPUBLISH' | 'BASE_CONFLICT' | 'NO_BASE' | 'APPLIED' | 'INITIAL' | 'BLOCKED';
+  reason: 'HELD' | 'TASK' | 'LATEST_RELEASE' | 'GROUP_TARGET' | 'REPUBLISH' | 'BASE_CONFLICT' | 'NO_BASE' | 'PERSONAL' | 'APPLIED' | 'INITIAL' | 'BLOCKED';
   detail: string | null;
 }
 
@@ -316,6 +317,12 @@ export function answerConfigRequest(s: State, resourceId: string): ConfigAnswer 
   const r = s.resources[resourceId];
   if (!r) return { configId: null, reason: 'BLOCKED', detail: 'unknown vehicle' };
   if (r.status !== 'AVAILABLE') return { configId: null, reason: 'BLOCKED', detail: `the vehicle is ${r.status.toLowerCase()}` };
+  if (r.personal) {
+    // A personal simulation runs only what its owner sent it.
+    const pending = Object.values(s.deployments).find((d) => d.kind === 'PERSONAL' && d.subjectId === r.id && d.status === 'PENDING');
+    if (pending) return { configId: pending.resolvedConfigId, reason: 'PERSONAL', detail: r.personal.owner };
+    return r.appliedConfigId ? { configId: r.appliedConfigId, reason: 'APPLIED', detail: null } : { configId: null, reason: 'INITIAL', detail: null };
+  }
   const rollout = otaRollouts(s).find((d) => d.targets.some((t) => t.resourceId === r.id));
   const target = rollout?.targets.find((t) => t.resourceId === r.id);
   if (rollout && target) {

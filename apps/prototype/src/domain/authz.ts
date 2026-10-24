@@ -58,6 +58,8 @@ export const ACTIONS = {
   'feature.requestTest': { roles: ['BUSINESS_DEV', 'BUSINESS_TEST'], env: 'target' },
   'testRequest.decide': { roles: ['WORKSPACE_ADMIN'], env: 'target' },
   'feature.recordTest': { roles: ['BUSINESS_TEST'], env: 'target', excludeDispatchOnly: true },
+  /** One's own personal simulation (个人仿真): create, run a draft, self-test, release. */
+  'personalSim.use': { roles: ['BUSINESS_DEV', 'BUSINESS_TEST'], env: 'development' },
   'feature.verify': { roles: ['BUSINESS_TEST'], env: 'development', excludeDispatchOnly: true },
   'candidate.dispatch': { roles: ['INTEGRATION_TEST', 'CONFIG_INTEGRATOR'], env: 'testing' },
   'candidate.recordTest': { roles: ['INTEGRATION_TEST'], env: 'testing', excludeDispatchOnly: true },

@@ -32,7 +32,7 @@ function sourceWorkspace(s: State, resourceId: string, configId: string): string
 }
 
 /** Deterministic pseudo size, so repeated runs of the demo look the same. */
-function sizeOf(seed: string): number {
+export function sizeOf(seed: string): number {
   let h = 0;
   for (const ch of seed) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
   return 200_000 + (h % 40_000_000);
@@ -56,6 +56,7 @@ export function captureEvent(
 ): string {
   const r = ctx.s.resources[input.resourceId];
   if (!r) throw notFound('vehicle', input.resourceId);
+  if (r.personal) throw rule('PERSONAL_TRIAL_ONLY', `${r.id} is a personal simulation; its captures are trials for its owner, never collection events`);
   const config = r.appliedConfigId ? ctx.s.resolvedConfigs[r.appliedConfigId] : undefined;
   if (!config) throw rule('NO_APPLIED_CONFIG', `vehicle ${r.id} runs no confirmed configuration, so nothing can fire`);
   const hit = capturablePolicies(ctx.s, r.id).find((p) => p.policyId === input.policyId);

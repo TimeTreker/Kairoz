@@ -4,9 +4,20 @@ import { migrate } from '../src/engine/migrate.ts';
 import { demoState } from '../src/engine/seed.ts';
 import { STATE_SCHEMA } from '../src/engine/types.ts';
 
-/** A schema 7 save: a copy of a demo (today's by default) without the fields schema 8 added. */
-function schema7(demo: unknown = demoState()): Record<string, any> {
+/** A schema 8 save: a copy of a demo (today's by default) without the fields schema 9 added. */
+function schema8(demo: unknown = demoState()): Record<string, any> {
   const s = JSON.parse(JSON.stringify(demo)) as Record<string, any>;
+  s.schema = 8;
+  delete s.personalCaptures;
+  delete s.personalTests;
+  for (const r of Object.values(s.resources) as any[]) delete r.personal;
+  for (const c of Object.values(s.resolvedConfigs) as any[]) delete c.draft;
+  return s;
+}
+
+/** A schema 7 save: a schema 8 save without the fields schema 8 added. */
+function schema7(demo: unknown = demoState()): Record<string, any> {
+  const s = schema8(demo);
   s.schema = 7;
   for (const key of ['applicability', 'applicabilityChecks', 'emergencyStops', 'grantRules', 'directory', 'directorySync']) delete s[key];
   for (const c of Object.values(s.resolvedConfigs) as any[]) delete c.disabledPolicies;
@@ -86,6 +97,16 @@ describe('saved state migration', () => {
     assert.deepEqual(migrated.applicability, []);
     assert.equal(migrated.directory, null);
     assert.deepEqual(migrated.releases, current.releases);
+  });
+
+  test('a schema 8 save gains personal simulation defaults and keeps everything else', () => {
+    const current = JSON.parse(JSON.stringify(demoState()));
+    const migrated = migrate(schema8(current))!;
+    assert.equal(migrated.schema, STATE_SCHEMA);
+    for (const r of Object.values(migrated.resources)) assert.equal(r.personal, null, r.id);
+    for (const c of Object.values(migrated.resolvedConfigs)) assert.equal(c.draft, null, c.id);
+    assert.deepEqual([migrated.personalCaptures, migrated.personalTests], [{}, {}]);
+    assert.deepEqual(migrated, current);
   });
 
   test('a current save passes through unchanged', () => {

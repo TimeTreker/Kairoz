@@ -145,6 +145,15 @@ export function configurationContents(s: State, resolvedConfigId: string | null)
       cloud.add(pipeline(v.content.cloudPipelineId));
     }
   }
+  if (config.draft) {
+    // A personal simulation runs a Feature draft: its policies and files have no versions yet.
+    for (const policyId of Object.keys(config.draft.snapshot.policies)) policies.push({ id: policyId, version: 'draft', status: 'CONFIGURED' });
+    for (const [dataKey, spec] of Object.entries(config.draft.snapshot.files)) {
+      files.push({ id: s.dataItems[dataKey]?.dataCode ?? dataKey, version: 'draft', status: 'CONFIGURED' });
+      edge.add(pipeline(spec.edgePipelineId));
+      cloud.add(pipeline(spec.cloudPipelineId));
+    }
+  }
   const byId = (a: VersionItem, b: VersionItem) => a.id.localeCompare(b.id);
   return {
     version: config.kind === 'RELEASE' ? (s.releases[config.sourceId]?.dclVersion ?? config.label) : config.label,

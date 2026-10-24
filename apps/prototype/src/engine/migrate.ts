@@ -74,7 +74,16 @@ function to8(s: Saved): void {
   s.schema = 8;
 }
 
-const STEPS: Record<number, (s: Saved) => void> = { 6: to7, 7: to8 };
+/** Schema 9: personal simulation instances, their draft configurations, trial captures and self-tests. */
+function to9(s: Saved): void {
+  for (const r of Object.values((s.resources ?? {}) as Rows)) r.personal ??= null;
+  for (const c of Object.values((s.resolvedConfigs ?? {}) as Rows)) c.draft ??= null;
+  s.personalCaptures ??= {};
+  s.personalTests ??= {};
+  s.schema = 9;
+}
+
+const STEPS: Record<number, (s: Saved) => void> = { 6: to7, 7: to8, 8: to9 };
 
 /** The state at the current schema, or null when it cannot be read or is too old. Mutates `raw`. */
 export function migrate(raw: unknown): State | null {

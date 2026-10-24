@@ -50,6 +50,11 @@ function assertIdle(s: State, resourceId: string): void {
   if (pending) throw rule('VEHICLE_BUSY', `vehicle ${resourceId} is waiting for deployment ${pending}`, { deploymentId: pending });
 }
 
+/** Personal simulations never join workspace vehicles, vehicle groups or resource operations. */
+function assertShared(r: Resource): void {
+  if (r.personal) throw rule('PERSONAL_SIMULATION', `${r.id} is a personal simulation of ${r.personal.owner}; it never serves a team`);
+}
+
 /** Moving a vehicle out needs it idle, its simulation instance stopped and no reservation. */
 function assertRemovable(s: State, resourceId: string): void {
   assertIdle(s, resourceId);
@@ -109,7 +114,7 @@ export function registerImage(
 // Vehicles
 // ---------------------------------------------------------------------------
 
-function baseResource(ctx: Ctx, input: { id: string; vehicleModelId: string; env: Env; pool: Scope; displayName?: string }) {
+export function baseResource(ctx: Ctx, input: { id: string; vehicleModelId: string; env: Env; pool: Scope; displayName?: string }) {
   if (!RESOURCE_ID.test(input.id)) throw rule('INVALID_ID', 'vehicle ids look like VEH-001 or SIM-021');
   if (ctx.s.resources[input.id]) throw conflict('ID_TAKEN', `vehicle ${input.id} already exists`);
   const model = ctx.s.vehicleModels[input.vehicleModelId];
@@ -125,6 +130,7 @@ function baseResource(ctx: Ctx, input: { id: string; vehicleModelId: string; env
     controllers: [],
     reservation: null,
     appliedConfigId: null,
+    personal: null,
     agent: { online: true, autoAck: false, failNext: false },
     deviceKey: null,
     createdBy: ctx.user().username,
@@ -229,15 +235,24 @@ export function reportControllers(ctx: Ctx, resourceId: string, input: { target:
   r.updatedAt = ctx.now;
 }
 
+/** Only the owner acts on a personal simulation, and only within a grant for its workspace and group. */
+export function authorizePersonal(ctx: Ctx, r: Resource): void {
+  ctx.allow('personalSim.use', { type: 'personalSim', id: r.id, workspaceId: r.homeWorkspaceId ?? undefined, groupId: r.personal!.groupId, scope: r.pool, env: 'development' });
+  if (r.personal!.owner !== ctx.user().username) throw rule('PERSONAL_SIM_OWNER', `${r.id} is a personal simulation of ${r.personal!.owner}; only its owner uses it`);
+}
+
+/** Team simulations are run by the workspace or vehicle resources; a personal one by its owner. */
 function getSimulation(ctx: Ctx, resourceId: string): Draft<Resource> {
   const r = getResource(ctx.s, resourceId) as Draft<Resource>;
   if (r.type !== 'SIMULATION') throw rule('NOT_A_SIMULATION', `${r.id} is not a simulation instance`);
-  ctx.allow('simulation.manage', { type: 'resource', id: r.id, workspaceId: r.homeWorkspaceId ?? undefined, scope: r.pool, env: r.env });
+  if (r.personal) authorizePersonal(ctx, r);
+  else ctx.allow('simulation.manage', { type: 'resource', id: r.id, workspaceId: r.homeWorkspaceId ?? undefined, scope: r.pool, env: r.env });
   return r;
 }
 
 export function startSimulation(ctx: Ctx, resourceId: string): void {
   const r = getSimulation(ctx, resourceId);
+  if (r.status === 'RETIRED') throw rule('VEHICLE_UNAVAILABLE', `${r.id} is retired`);
   if (r.instance === 'RUNNING') throw rule('ALREADY_RUNNING', `${r.id} is already running`);
   r.instance = 'RUNNING';
   r.updatedAt = ctx.now;
@@ -272,6 +287,7 @@ export function releaseReservation(ctx: Ctx, workspaceId: string, resourceId: st
 export function setResourceStatus(ctx: Ctx, resourceId: string, input: { status: Resource['status']; reason: string }): void {
   const r = getResource(ctx.s, resourceId) as Draft<Resource>;
   ctx.allow('resource.manage', { type: 'resource', id: r.id, scope: r.pool, env: r.env });
+  assertShared(r);
   if (!input.reason.trim()) throw rule('REASON_REQUIRED', 'give a reason');
   if (input.status !== 'AVAILABLE') assertIdle(ctx.s, r.id);
   r.status = input.status;
@@ -301,6 +317,7 @@ export function assignableVehicles(s: State, workspaceId: string): Resource[] {
   return Object.values(s.resources).filter(
     (r) =>
       !assigned.has(r.id) &&
+      !r.personal &&
       r.status !== 'RETIRED' &&
       // Production vehicles serve project and integration workspaces, never team workspaces.
       (r.env !== 'production' || ws.kind !== 'TEAM') &&
@@ -313,6 +330,7 @@ export function assignableVehicles(s: State, workspaceId: string): Resource[] {
 export function addWorkspaceVehicle(ctx: Ctx, workspaceId: string, resourceId: string): void {
   const r = getResource(ctx.s, resourceId);
   ctx.allow('workspace.resources', { type: 'workspaceResource', id: resourceId, workspaceId, scope: r.pool, env: r.env });
+  assertShared(r);
   if (!assignableVehicles(ctx.s, workspaceId).some((x) => x.id === resourceId)) {
     throw rule('VEHICLE_NOT_ASSIGNABLE', 'the vehicle does not fit this workspace (model, pool, environment) or is already assigned');
   }
@@ -398,6 +416,7 @@ function authorizeGroup(ctx: Ctx, vehicleGroupId: string): Draft<VehicleGroup> {
 export function addGroupMember(ctx: Ctx, vehicleGroupId: string, resourceId: string, reason: string): void {
   const g = authorizeGroup(ctx, vehicleGroupId);
   const r = getResource(ctx.s, resourceId);
+  assertShared(r);
   if (!reason.trim()) throw rule('REASON_REQUIRED', 'give a reason for the membership change');
   if (!(ctx.s.workspaceResources[g.workspaceId] ?? []).includes(r.id)) throw rule('VEHICLE_NOT_IN_WORKSPACE', 'add the vehicle to the workspace first');
   if (r.env !== g.env) throw rule('ENV_MISMATCH', `vehicle ${r.id} is a ${r.env} vehicle; the group is ${g.env}`);
@@ -462,6 +481,7 @@ export function directTargetProblems(s: State, workspaceId: string, resourceIds:
   const problems: string[] = [];
   for (const rid of resourceIds) {
     if (!s.resources[rid]) problems.push(`${rid}: vehicle does not exist`);
+    else if (s.resources[rid]!.personal) problems.push(`${rid}: personal simulation of ${s.resources[rid]!.personal!.owner}; only its owner uses it`);
     else if (!(s.workspaceResources[workspaceId] ?? []).includes(rid)) problems.push(`${rid}: not a vehicle of this workspace`);
     else if (s.groupMembers[rid]) problems.push(`${rid}: routes through vehicle group ${s.vehicleGroups[s.groupMembers[rid]!]?.name}; dispatch to the group`);
   }

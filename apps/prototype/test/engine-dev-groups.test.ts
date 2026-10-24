@@ -71,7 +71,7 @@ describe('development vehicle groups', () => {
     w.as('resource', (c) => fleet.confirmIntegration(c, 'VEH-001', { version: '1.2', source: 'DIP 上报' }));
     assert.equal(answerConfigRequest(w.s, 'VEH-001').reason, 'NO_BASE');
     const blocked = w.fails('DISPATCH_BLOCKED', () => dispatchBrake(w));
-    assert.deepEqual((blocked.details as { issues: string[] }).issues, ['VEH-001: no policy set applies to software 1.2; give the group an explicit base']);
+    assert.deepEqual((blocked.details as { issues: string[] }).issues, ['VEH-001: no policy set applies to software 1.2; choose an explicit base']);
 
     w.fails('FORBIDDEN', () => w.as('brake_tester', (c) => fleet.setGroupBase(c, vg, set(w, '1.0.0').id)));
     w.fails('PRODUCTION_GROUP_BASE', () => w.as('release', (c) => fleet.setGroupBase(c, groupId(w, 'X89 量产车组'), set(w, '1.0.0').id)));
