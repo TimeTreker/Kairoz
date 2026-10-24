@@ -10,6 +10,7 @@ import type { DomainError } from '../domain/errors.ts';
 import type { Actor, Ctx } from './engine.ts';
 import { workspaceVehicles } from './fleet.ts';
 import type { ClientReportLog, DeviceKey, State, StoredReport } from './types.ts';
+import { noteReportedSoftware } from './software-change.ts';
 
 /** History kept per vehicle; older reports are dropped. */
 export const REPORT_HISTORY_LIMIT = 50;
@@ -115,6 +116,8 @@ export function acceptClientReport(ctx: Ctx, signed: SignedReport): 'ACCEPTED' |
     log.history.sort((a, b) => (isNewer(a, b) ? -1 : isNewer(b, a) ? 1 : 0));
   }
   log.history.splice(REPORT_HISTORY_LIMIT);
+  // The newest signed report is what the vehicle actually runs: a software change is noted.
+  if (check.kind === 'NEW') noteReportedSoftware(ctx, p.resourceId, p.vehicleIntegrationVersion);
   return check.kind === 'NEW' ? 'ACCEPTED' : 'STALE';
 }
 

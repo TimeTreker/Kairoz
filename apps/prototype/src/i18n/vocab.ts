@@ -636,3 +636,51 @@ export const IMAGE_CHANGE_STATUS_LABELS: Record<string, Bilingual> = {
   CANCELLED: b('已撤回', 'Withdrawn'),
 };
 export const IMAGE_CHANGE_STATUS_COLORS: Record<string, string> = { PENDING: 'processing', APPLIED: 'green', FAILED: 'red', CANCELLED: 'default' };
+
+// Vehicle software changes (整车软件版本变化)
+Object.assign(ERROR_LABELS, {
+  NOT_A_TEAM_CHANGE: b('这次变化没有需要车辆组团队确认的内容', 'This change has no vehicle group team to confirm it'),
+  ALREADY_ACKNOWLEDGED: b('已经确认过', 'Already confirmed'),
+});
+
+export const CHANGE_OUTCOME_LABELS: Record<string, Bilingual> = {
+  NONE: b('无需修改', 'No change needed'),
+  FIX: b('需修改本组文件或策略', 'Fix the group’s files or policies'),
+  REPUBLISH: b('基线已变化，需重新下发', 'Base changed; publish again'),
+  NEW_FEATURE: b('基线改了本组内容，需在新基线上新建 Feature', 'The new base changed this group; start a Feature on it'),
+  NO_BASE: b('新软件没有适用的策略集', 'No policy set applies to the new software'),
+  CANNOT_CHECK: b('新软件没有软件清单，无法检查', 'The new software has no manifest; cannot check'),
+  PRODUCTION: b('量产车按适用的策略集处理', 'Production: the set in effect applies'),
+  NOT_PUBLISHED: b('车辆组没有发布 Feature', 'No Feature published to its group'),
+  UNRECORDED: b('上报的版本尚未登记', 'Reported version not recorded yet'),
+};
+export const CHANGE_OUTCOME_COLORS: Record<string, string> = {
+  NONE: 'green',
+  FIX: 'orange',
+  REPUBLISH: 'gold',
+  NEW_FEATURE: 'red',
+  NO_BASE: 'red',
+  CANNOT_CHECK: 'default',
+  PRODUCTION: 'default',
+  NOT_PUBLISHED: 'default',
+  UNRECORDED: 'purple',
+};
+
+export const FILE_CHECK_LABELS: Record<string, Bilingual> = {
+  OK: b('可用', 'OK'),
+  SOURCE_MISSING: b('来源缺失', 'Source missing'),
+  REFERENCE_CHANGED: b('引用文件已变化', 'Referenced file changed'),
+  REFERENCE_REMOVED: b('引用文件已删除', 'Referenced file removed'),
+};
+
+export const POLICY_CHECK_LABELS: Record<string, Bilingual> = {
+  OK: b('可运行', 'Runnable'),
+  MISSING: b('有问题', 'Problem'),
+  UNKNOWN: b('无法检查', 'Cannot check'),
+};
+
+export const SOFTWARE_SOURCE_LABELS: Record<string, Bilingual> = {
+  CLIENT_REPORT: b('客户端上报', 'Client report'),
+  CONFIRMED: b('车辆资源确认', 'Vehicle resources confirmation'),
+  CONTROLLERS: b('域控上报', 'Controller report'),
+};

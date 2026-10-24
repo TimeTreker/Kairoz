@@ -44,7 +44,8 @@ export function normalizeManifest(input: { signals: string[]; sources: { unit: s
   return { signals, sources: unique };
 }
 
-function covered(manifest: SoftwareManifest, unit: string, directory: string): boolean {
+/** Whether the software provides a data source: a listed directory covers its subdirectories. */
+export function covered(manifest: SoftwareManifest, unit: string, directory: string): boolean {
   return manifest.sources.some((s) => s.unit === unit && (directory === s.directory || directory.startsWith(s.directory === '/' ? '/' : `${s.directory}/`)));
 }
 

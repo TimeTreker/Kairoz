@@ -10,7 +10,7 @@ import type { FileType, Privacy } from '../domain/file-types.ts';
 import type { ReviewControls } from '../domain/intake.ts';
 import type { Domain, Env, GroupPurpose, Role, Scope, WorkspaceKind } from '../domain/vocabulary.ts';
 
-export const STATE_SCHEMA = 10;
+export const STATE_SCHEMA = 11;
 
 export interface Account {
   username: string;
@@ -929,12 +929,36 @@ export interface DeviceState {
   bootId: string;
   sequence: number;
   clientVersion: string;
+  /**
+   * The whole-vehicle software the simulated physical vehicle actually runs, after a simulated
+   * software OTA; null while it runs what the platform recorded.
+   */
+  software: string | null;
   /** Reports waiting for a connection; removed only once accepted. */
   outbox: { signed: SignedReport; lastError: string | null }[];
   /** The last report the platform accepted, kept to resend. */
   lastSent: SignedReport | null;
   lastContentDigest: string | null;
   lastSentAt: string | null;
+}
+
+/**
+ * A change of a physical vehicle's whole-vehicle software (整车软件版本变化): from its own signed
+ * report, a vehicle resources confirmation or controller reports. UNRECORDED: the vehicle reported
+ * a version the platform does not know yet; the record stays until vehicle resources record it.
+ */
+export interface SoftwareChange {
+  id: string;
+  seq: number;
+  resourceId: string;
+  fromVersion: string | null;
+  toVersion: string;
+  source: 'CLIENT_REPORT' | 'CONFIRMED' | 'CONTROLLERS';
+  status: 'APPLIED' | 'UNRECORDED' | 'RESOLVED';
+  at: string;
+  /** Who of the vehicle's team has seen it (确认); the check itself is recomputed when viewed. */
+  acknowledgedBy: string | null;
+  acknowledgedAt: string | null;
 }
 
 /** A department of the simulated company directory (公司目录). */
@@ -1048,6 +1072,7 @@ export interface State {
   personalTests: Record<string, PersonalTest>;
   softwareBuilds: Record<string, SoftwareBuild>;
   imageChanges: Record<string, ImageChange>;
+  softwareChanges: Record<string, SoftwareChange>;
   audit: AuditEvent[];
 }
 
@@ -1105,6 +1130,7 @@ export function emptyState(): State {
     personalTests: {},
     softwareBuilds: {},
     imageChanges: {},
+    softwareChanges: {},
     audit: [],
   };
 }

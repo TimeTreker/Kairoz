@@ -4,13 +4,15 @@
 
 import type { Draft } from 'immer';
 import { digestOf } from '../domain/canonical.ts';
+import { policyCompatibility } from '../domain/compatibility.ts';
 import { notFound, rule } from '../domain/errors.ts';
 import { newId } from '../domain/ids.ts';
 import type { Env } from '../domain/vocabulary.ts';
 import { authorizeFeature, displayName, latestRelease } from './config.ts';
 import type { Ctx } from './engine.ts';
-import { authorizePersonal, directTargetProblems, getResource, membersOf, pendingDeploymentOf, pendingImageChangeOf, recordGroupBinding } from './fleet.ts';
+import { authorizePersonal, directTargetProblems, getResource, membersOf, pendingDeploymentOf, pendingImageChangeOf, recordGroupBinding, softwareKey } from './fleet.ts';
 import { getGroup } from './org.ts';
+import { commitSnapshot, resolveFiles } from './snapshots.ts';
 import { setInEffect } from './release.ts';
 import type { Candidate, Deployment, DeploymentTarget, Feature, PersonalDraft, Release, ResolvedConfig, Resource, State, TestRequest, TestRun, VehicleGroup } from './types.ts';
 
@@ -444,11 +446,32 @@ export interface TargetStatus {
   stale: TestRun | null;
 }
 
-/** Results of a subject on a vehicle that count: those recorded on the image it runs now. */
+/**
+ * Whether a result still speaks for the vehicle's current software. A simulation's result counts
+ * on the image it ran on. A physical vehicle's Feature result from an earlier software version
+ * counts when the vehicle keeps the base it ran on and every policy of the commit can run on the
+ * new software; candidate and applicability results name their software and never carry over.
+ */
+export function stillCounts(s: State, x: TestRun, r: Resource): boolean {
+  if (x.imageId !== r.imageId) return false;
+  if (x.integrationVersion === r.integrationVersion) return true;
+  if (x.subjectKind !== 'FEATURE' || r.type !== 'PHYSICAL' || !r.integrationVersion) return false;
+  const ran = s.resolvedConfigs[x.resolvedConfigId];
+  const g = s.groupMembers[r.id] ? s.vehicleGroups[s.groupMembers[r.id]!] : undefined;
+  const base = vehicleBase(s, g?.baseReleaseId ?? null, r);
+  if (!ran || base.problem || (base.release?.id ?? null) !== ran.baseReleaseId) return false;
+  const manifest = s.softwareVersions[softwareKey(r.vehicleModelId, r.integrationVersion)]?.manifest ?? null;
+  if (!manifest) return false;
+  const snapshot = commitSnapshot(s, x.versionId);
+  const files = resolveFiles(s, snapshot);
+  return Object.entries(snapshot.policies).every(([id, p]) => policyCompatibility(id, p, files, manifest).status === 'OK');
+}
+
+/** Results of a subject on a vehicle that count: those on the software it runs now. */
 function currentRuns(s: State, subjectId: string, versionId: string, resourceId: string): { current: TestRun[]; earlier: TestRun[] } {
   const r = s.resources[resourceId]!;
   const runs = s.testRuns.filter((x) => x.subjectId === subjectId && x.versionId === versionId && x.resourceId === resourceId).sort((a, b) => b.seq - a.seq);
-  return { current: runs.filter((x) => x.imageId === r.imageId), earlier: runs.filter((x) => x.imageId !== r.imageId) };
+  return { current: runs.filter((x) => stillCounts(s, x, r)), earlier: runs.filter((x) => !stillCounts(s, x, r)) };
 }
 
 export function testStatusFor(s: State, subjectId: string, versionId: string): TargetStatus[] {
@@ -480,7 +503,9 @@ export function blockersFor(s: State, status: TargetStatus[]): string[] {
   if (status.length === 0) blockers.push('no vehicles were dispatched for this commit');
   for (const t of status) {
     if (t.latest?.result === 'PASS') continue;
-    blockers.push(t.stale ? `${t.resourceId} runs another image since its test; test it again` : `${t.resourceId} has no passing test`);
+    const r = s.resources[t.resourceId]!;
+    const reason = r.type === 'SIMULATION' ? 'runs another image since its test' : 'runs other software since its test';
+    blockers.push(t.stale ? `${t.resourceId} ${reason}; test it again` : `${t.resourceId} has no passing test`);
   }
   const types = new Set(status.filter((t) => t.latest?.result === 'PASS').map((t) => s.resources[t.resourceId]!.type));
   if (!types.has('SIMULATION')) blockers.push('a simulation test must pass');

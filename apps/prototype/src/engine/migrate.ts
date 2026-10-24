@@ -94,7 +94,14 @@ function to10(s: Saved): void {
   s.schema = 10;
 }
 
-const STEPS: Record<number, (s: Saved) => void> = { 6: to7, 7: to8, 8: to9, 9: to10 };
+/** Schema 11: physical vehicles' software changes, with what each simulated device really runs. */
+function to11(s: Saved): void {
+  for (const d of Object.values((s.devices ?? {}) as Rows)) d.software ??= null;
+  s.softwareChanges ??= {};
+  s.schema = 11;
+}
+
+const STEPS: Record<number, (s: Saved) => void> = { 6: to7, 7: to8, 8: to9, 9: to10, 10: to11 };
 
 /** The state at the current schema, or null when it cannot be read or is too old. Mutates `raw`. */
 export function migrate(raw: unknown): State | null {

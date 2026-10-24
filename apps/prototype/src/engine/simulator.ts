@@ -92,6 +92,7 @@ export function provisionDevice(ctx: Ctx, resourceId: string): Draft<DeviceState
     bootId: newId('boot'),
     sequence: 0,
     clientVersion: DCL_CLIENT_VERSION,
+    software: null,
     outbox: [],
     lastSent: null,
     lastContentDigest: null,
@@ -112,18 +113,20 @@ const clientRunning = (r: Resource) => r.instance !== 'STOPPED' && r.status !== 
 function observe(s: State, r: Resource, device: DeviceState): Omit<ClientReportPayload, 'sequence' | 'reportedAt'> {
   const contents = configurationContents(s, r.appliedConfigId);
   const last = s.receipts.findLast((x) => x.resourceId === r.id);
+  // After a simulated software OTA the car runs its own version, whatever the platform recorded.
+  const software = r.type === 'PHYSICAL' && device.software ? device.software : r.integrationVersion;
   const domains: VersionItem[] =
     r.type === 'SIMULATION'
       ? [{ id: `image ${r.imageId ?? '—'}`, version: r.integrationVersion, status: r.instance ?? 'RUNNING' }]
-      : r.controllers.length
+      : r.controllers.length && !device.software
         ? r.controllers.map((c) => ({ id: c.name, version: c.version, status: c.status }))
-        : [{ id: 'VEHICLE', version: r.integrationVersion, status: r.softwareStatus }];
+        : [{ id: 'VEHICLE', version: software, status: device.software ? 'CONSISTENT' : r.softwareStatus }];
   return {
     schemaVersion: 1,
     resourceId: r.id,
     vin: r.vin,
     uvid: r.uvid,
-    vehicleIntegrationVersion: r.integrationVersion,
+    vehicleIntegrationVersion: software,
     domains,
     clients: [{ id: 'dcl-client', version: device.clientVersion, build: `${device.clientVersion}+mock`, status: 'RUNNING' }],
     configuration: contents && { version: contents.version, releaseId: contents.releaseId, digest: contents.digest },
@@ -235,6 +238,19 @@ export function restartClient(ctx: Ctx, resourceId: string): 'ACCEPTED' | 'REPLA
 }
 
 /** Installs another DCL client version; the next report carries it. */
+/**
+ * A whole-vehicle software OTA on a simulated physical vehicle: the car now runs `version`, and
+ * says so in its next signed report. The platform learns it only from that report.
+ */
+export function simulateSoftwareOta(ctx: Ctx, resourceId: string, version: string): void {
+  const r = ctx.s.resources[resourceId];
+  if (!r) throw notFound('vehicle', resourceId);
+  if (r.type !== 'PHYSICAL') throw rule('SIMULATION_SOFTWARE_FROM_IMAGE', 'a simulation’s software comes from its image');
+  const v = version.trim();
+  if (!/^[A-Za-z0-9._-]{1,40}$/.test(v)) throw rule('INVALID_VERSION', 'a software version is letters, digits, . _ - (up to 40)');
+  provisionDevice(ctx, r.id).software = v;
+}
+
 export function upgradeClient(ctx: Ctx, resourceId: string, version: string): void {
   provisionDevice(ctx, runningVehicle(ctx, resourceId).id).clientVersion = version;
 }

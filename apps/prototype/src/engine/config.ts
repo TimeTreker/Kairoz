@@ -130,7 +130,7 @@ export function visibleSuspects(s: State, groupId: string, suspects: string[]) {
 // Feature creation and draft editing
 // ---------------------------------------------------------------------------
 
-export function createFeature(ctx: Ctx, input: { workspaceId: string; groupId: string; name: string; description?: string }): string {
+export function createFeature(ctx: Ctx, input: { workspaceId: string; groupId: string; name: string; description?: string; baseReleaseId?: string | null }): string {
   const group = getGroup(ctx.s, input.groupId);
   ctx.allow('feature.create', { type: 'feature', workspaceId: input.workspaceId, groupId: group.id, scope: group.domain });
   const workspace = getWorkspace(ctx.s, input.workspaceId);
@@ -141,6 +141,14 @@ export function createFeature(ctx: Ctx, input: { workspaceId: string; groupId: s
   if (!FEATURE_NAME.test(input.name)) throw rule('INVALID_FEATURE_NAME', `feature name must match ${FEATURE_NAME.source}`);
   if (Object.values(ctx.s.features).some((f) => f.groupId === group.id && f.name === input.name)) {
     throw conflict('FEATURE_NAME_TAKEN', `group ${group.id} already has a feature named ${input.name}`);
+  }
+  // A Feature starts on the newest set, or on a set the team names (e.g. the base its vehicles' new software takes).
+  let base = latestRelease(ctx.s, workspace.vehicleModelId)?.id ?? null;
+  if (input.baseReleaseId) {
+    const release = ctx.s.releases[input.baseReleaseId];
+    if (!release) throw notFound('policy set', input.baseReleaseId);
+    if (release.vehicleModelId !== workspace.vehicleModelId) throw rule('MODEL_MISMATCH', `policy set ${release.dclVersion} is for ${release.vehicleModelId}`);
+    base = release.id;
   }
   const id = newId('ft');
   const feature: Feature = {
@@ -153,7 +161,7 @@ export function createFeature(ctx: Ctx, input: { workspaceId: string; groupId: s
     description: input.description ?? '',
     kind: 'BUSINESS',
     stage: 'DRAFT',
-    baseReleaseId: latestRelease(ctx.s, workspace.vehicleModelId)?.id ?? null,
+    baseReleaseId: base,
     headCommitId: null,
     verifiedCommitId: null,
     sequence: 0,

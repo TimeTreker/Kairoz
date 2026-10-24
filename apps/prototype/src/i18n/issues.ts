@@ -18,6 +18,7 @@ const PROBLEMS: Pattern[] = [
   [/the whole-vehicle software version is unknown/, () => '整车软件版本未知'],
   [/a partial software update left controllers inconsistent \((.*)\); finish or roll back the software OTA first/, ([c]) => `软件部分升级使域控状态不一致（${c}），请先完成或回滚软件 OTA`],
   [/(\S+) runs another image since its test; test it again/, ([r]) => `${r} 测试后已更换镜像，需重新测试`],
+  [/(\S+) runs other software since its test; test it again/, ([r]) => `${r} 测试后整车软件已变化，需重新测试`],
   [/waiting for an image change/, () => '正在等待镜像变更'],
   [/simulated health check failure/, () => '模拟的健康检查失败'],
   [/runs a derived development image/, () => '运行研发派生镜像'],

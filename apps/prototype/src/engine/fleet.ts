@@ -13,7 +13,7 @@ import { openCheckForNewSoftware } from './applicability.ts';
 import type { Actor, Ctx } from './engine.ts';
 import { getWorkspace } from './org.ts';
 import { displayName } from './config.ts';
-import type { ControllerState, GroupPublication, Resource, State, VehicleGroup, VehicleGroupEvent, VehicleGroupPurpose } from './types.ts';
+import type { ControllerState, GroupPublication, Resource, SoftwareChange, State, VehicleGroup, VehicleGroupEvent, VehicleGroupPurpose } from './types.ts';
 
 const RESOURCE_ID = /^[A-Z][A-Z0-9-]{2,40}$/;
 const VIN = /^[A-HJ-NPR-Z0-9]{17}$/;
@@ -212,11 +212,39 @@ export function confirmIntegration(ctx: Ctx, resourceId: string, input: { versio
     throw rule('UNKNOWN_SOFTWARE_VERSION', `${r.vehicleModelId} ${input.version} is not a recorded software version`);
   }
   if (!input.source.trim()) throw rule('SOURCE_REQUIRED', 'name the trusted source (e.g. DIP report, OTA confirmation)');
+  recordSoftwareChange(ctx, r, input.version, 'CONFIRMED');
   r.integrationVersion = input.version;
   r.integrationSource = input.source.trim();
   r.softwareStatus = input.version ? 'CONSISTENT' : 'UNKNOWN';
   r.controllers = [];
   r.updatedAt = ctx.now;
+}
+
+/**
+ * Notes a change of a physical vehicle's whole-vehicle software (before the vehicle is updated),
+ * so the vehicle's team is told and its configuration checked. A pending report of a version the
+ * platform did not know yet is resolved once that version is confirmed.
+ */
+export function recordSoftwareChange(ctx: Ctx, r: Resource, toVersion: string | null, source: SoftwareChange['source']): string | null {
+  for (const c of Object.values(ctx.s.softwareChanges)) {
+    if (c.resourceId === r.id && c.status === 'UNRECORDED' && c.toVersion === toVersion) c.status = 'RESOLVED';
+  }
+  // Learning a vehicle's first known version is no change; neither is the same version again.
+  if (r.type !== 'PHYSICAL' || !toVersion || !r.integrationVersion || toVersion === r.integrationVersion) return null;
+  const id = newId('sc');
+  ctx.s.softwareChanges[id] = {
+    id,
+    seq: ctx.seq(),
+    resourceId: r.id,
+    fromVersion: r.integrationVersion,
+    toVersion,
+    source,
+    status: 'APPLIED',
+    at: ctx.now,
+    acknowledgedBy: null,
+    acknowledgedAt: null,
+  };
+  return id;
 }
 
 /**
@@ -235,6 +263,7 @@ export function reportControllers(ctx: Ctx, resourceId: string, input: { target:
     throw rule('CONTROLLERS_REQUIRED', 'report every domain controller with its version and result');
   }
   const consistent = input.controllers.every((c) => c.status === 'PASS' && c.version === input.target);
+  if (consistent) recordSoftwareChange(ctx, r, input.target, 'CONTROLLERS');
   r.controllers = input.controllers.map((c) => ({ name: c.name.trim(), version: c.version.trim(), status: c.status }));
   r.softwareStatus = consistent ? 'CONSISTENT' : 'PARTIAL_FAILURE';
   // Never write the expected version as the actual one.
