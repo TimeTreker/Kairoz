@@ -94,7 +94,7 @@ export function ClientReportDrawer({ resourceId, workspaceId, onClose }: { resou
                     <Match same={view.comparison.software.same} />
                     {!view.comparison.software.same && (
                       <Typography.Text type="secondary">
-                        {L('平台记录', 'platform')}: {view.comparison.software.recorded ?? L('未知', 'unknown')}
+                        {L('平台记录：', 'platform: ')}{view.comparison.software.recorded ?? L('未知', 'unknown')}
                       </Typography.Text>
                     )}
                   </Space>
@@ -113,7 +113,7 @@ export function ClientReportDrawer({ resourceId, workspaceId, onClose }: { resou
                     <Match same={view.comparison.configuration.same} />
                     {!view.comparison.configuration.same && (
                       <Typography.Text type="secondary">
-                        {L('平台记录', 'platform')}: {B(configName(state, state.resources[view.resourceId]?.appliedConfigId))}
+                        {L('平台记录：', 'platform: ')}{B(configName(state, state.resources[view.resourceId]?.appliedConfigId))}
                       </Typography.Text>
                     )}
                   </Space>

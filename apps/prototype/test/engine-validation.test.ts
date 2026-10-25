@@ -103,13 +103,14 @@ describe('dispatch, receipts and tests', () => {
     const old = e.getState().resources['VEH-001']!.appliedConfigId;
     e.run(null, (c) => {
       setAgent(c, 'SIM-021', { autoAck: true });
-      setAgent(c, 'VEH-001', { autoAck: true, failNext: true });
+      setAgent(c, 'VEH-001', { autoAck: true, fault: 'APPLY_INTERRUPTED' });
     });
     e.run('brake_tester', (c) => v.dispatchFeature(c, feature.id, { commitId: feature.headCommitId!, vehicleGroupIds: [vg.id] }));
     assert.equal(e.run(null, (c) => tick(c)), 2);
     const s = e.getState();
     assert.equal(s.resources['VEH-001']!.appliedConfigId, old);
-    assert.equal(s.resources['VEH-001']!.agent.failNext, false);
+    assert.equal(s.deployments[Object.keys(s.deployments).at(-1)!]!.targets.find((t) => t.resourceId === 'VEH-001')!.error, 'apply interrupted; the previous configuration was restored');
+    e.run(null, (c) => setAgent(c, 'VEH-001', { fault: 'NONE' }));
     const d2 = one(e.run('brake_tester', (c) => v.dispatchFeature(c, feature.id, { commitId: feature.headCommitId!, vehicleGroupIds: [vg.id] })));
     e.run(null, (c) => tick(c));
     assert.equal(e.getState().deployments[d2]!.status, 'COMPLETED');

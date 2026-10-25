@@ -91,6 +91,10 @@ const PROBLEMS: Pattern[] = [
   [/unknown vehicle/, () => '未知车辆'],
   // Receipts, rollbacks and processing outcomes shown in history columns
   [/simulated apply failure/, () => '模拟的应用失败'],
+  [/package checksum mismatch; nothing installed, the previous configuration stays/, () => '配置包校验失败：未安装，保留原配置'],
+  [/package signature does not verify against the platform key; nothing installed, the previous configuration stays/, () => '配置包签名与平台公钥不符：未安装，保留原配置'],
+  [/apply interrupted; the previous configuration was restored/, () => '应用中断：已恢复原配置'],
+  [/apply interrupted; there is no earlier configuration to restore, the vehicle runs none/, () => '应用中断：没有可恢复的上一配置，车上没有配置'],
   [/apply failed/, () => '应用失败'],
   [/rolled back: (.+)/, ([r]) => `已回滚：${r}`],
   [/ParserFailure: (\S+) could not be parsed/, ([sc]) => `ParserFailure：无法按 ${sc} 解析`],

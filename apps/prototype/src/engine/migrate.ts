@@ -131,7 +131,22 @@ function to14(s: Saved): void {
   s.schema = 14;
 }
 
-const STEPS: Record<number, (s: Saved) => void> = { 6: to7, 7: to8, 8: to9, 9: to10, 10: to11, 11: to12, 12: to13, 13: to14 };
+/** Schema 15: vehicles play a lasting fault instead of failing the next apply; devices keep unsent receipts. */
+function to15(s: Saved): void {
+  for (const r of Object.values((s.resources ?? {}) as Rows)) {
+    const agent = r.agent as Record<string, unknown> | undefined;
+    if (!agent) continue;
+    agent.fault ??= agent.failNext ? 'APPLY_INTERRUPTED' : 'NONE';
+    delete agent.failNext;
+  }
+  for (const d of Object.values((s.devices ?? {}) as Rows)) {
+    d.config ??= null;
+    d.unsent ??= [];
+  }
+  s.schema = 15;
+}
+
+const STEPS: Record<number, (s: Saved) => void> = { 6: to7, 7: to8, 8: to9, 9: to10, 10: to11, 11: to12, 12: to13, 13: to14, 14: to15 };
 
 /** The state at the current schema, or null when it cannot be read or is too old. Mutates `raw`. */
 export function migrate(raw: unknown): State | null {

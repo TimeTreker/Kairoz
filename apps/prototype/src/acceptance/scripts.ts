@@ -3025,6 +3025,122 @@ export const SCRIPTS: Script[] = [
         "fail": "拒绝不改变任何状态。"
       }
     ]
+  },
+  {
+    "id": "device-faults",
+    "name": "车端故障与恢复 · 校验、签名、应用中断与回执丢失",
+    "start": "demo",
+    "scenes": [
+      {
+        "id": "DF01",
+        "title": "配置包校验失败与签名无效",
+        "actor": "车辆模拟器；brake_tester",
+        "accounts": [
+          "brake_tester"
+        ],
+        "workspace": "team-brake",
+        "page": "原型工具 → 车辆模拟器；研发 Feature → guided_brake → 下发与测试",
+        "pre": "演示数据。车辆模拟器中 SIM-021、VEH-001 打开“自动回执”。",
+        "steps": [
+          "在车辆模拟器“车端 Agent”把 VEH-001 的车端故障设为“配置包校验失败”，SIM-021 设为“配置包签名无效”。",
+          "brake_tester 在制动团队工作区把 guided_brake 的当前提交下发到制动研发车组。",
+          "在模拟器点“执行一步”：两辆车都回执失败，错误分别为“配置包校验失败：未安装，保留原配置”和“配置包签名与平台公钥不符：未安装，保留原配置”；两车已生效配置不变。",
+          "brake_tester 不能在 SIM-021 上登记测试结果：车辆尚未确认应用。"
+        ],
+        "done": "车辆拒绝损坏或签名不符的配置包，失败回执写明原因，旧配置保留。",
+        "fail": "失败的车辆不能被当成已应用。"
+      },
+      {
+        "id": "DF02",
+        "title": "排除故障后重新下发",
+        "actor": "车辆模拟器；brake_tester",
+        "accounts": [
+          "brake_tester"
+        ],
+        "workspace": "team-brake",
+        "page": "车辆模拟器；guided_brake → 下发与测试",
+        "pre": "DF01 完成。",
+        "steps": [
+          "把两辆车的车端故障改回“无”。",
+          "brake_tester 再次下发 guided_brake；执行一步：两车应用成功。",
+          "下发记录中上一次下发仍为“失败”，保留错误原因。"
+        ],
+        "done": "故障持续到被排除；失败的下发不被改写。",
+        "fail": "故障未排除时重新下发仍会失败。"
+      },
+      {
+        "id": "DF03",
+        "title": "应用中断，恢复原配置",
+        "actor": "车辆模拟器；brake_tester",
+        "accounts": [
+          "brake_tester"
+        ],
+        "workspace": "team-brake",
+        "page": "车辆模拟器；brake_monitor → 下发与测试",
+        "pre": "DF02 完成。",
+        "steps": [
+          "把 VEH-001 的车端故障设为“应用中断”。",
+          "brake_tester 把 brake_monitor 下发到制动研发车组；执行一步：VEH-001 回执失败“应用中断：已恢复原配置”，仍运行 guided_brake；SIM-021 应用成功。"
+        ],
+        "done": "应用中断时车辆回到上一配置，平台记录与车上一致。",
+        "fail": "同一次尝试的失败回执不能再换成成功。"
+      },
+      {
+        "id": "DF04",
+        "title": "回执丢失与补发",
+        "actor": "车辆模拟器；brake_tester；resource",
+        "accounts": [
+          "brake_tester",
+          "resource"
+        ],
+        "workspace": "team-brake",
+        "page": "车辆模拟器；brake_monitor → 下发与测试；车辆台账 → 客户端状态",
+        "pre": "DF03 完成。",
+        "steps": [
+          "把 VEH-001 的车端故障设为“回执丢失”；brake_tester 再次下发 brake_monitor。",
+          "执行一步：模拟器显示 VEH-001“已应用 · 回执未送达”，已生效配置旁标注“车上实际：brake_monitor …”；平台的下发记录为“已推送·待回执”，已生效配置仍为 guided_brake。",
+          "VEH-001“上报”后，resource 在车辆台账“客户端状态”中看到上报的配置与平台记录不同。",
+          "再执行一步：不会重复安装，也不会送出回执。",
+          "把故障改回“无”，执行一步：同一尝试的回执补发，平台确认一次，VEH-001 已生效 brake_monitor。"
+        ],
+        "done": "平台只按回执记录车上的配置；补发的回执只确认一次。",
+        "fail": "期望下发的配置不被当作车上已生效的配置。"
+      },
+      {
+        "id": "DF05",
+        "title": "取消后迟到的回执",
+        "actor": "车辆模拟器；brake_tester；resource",
+        "accounts": [
+          "brake_tester",
+          "resource"
+        ],
+        "workspace": "team-brake",
+        "page": "车辆模拟器；guided_brake → 下发与测试；车辆台账 → 客户端状态",
+        "pre": "DF04 完成。",
+        "steps": [
+          "VEH-001 设为“回执丢失”；brake_tester 下发 guided_brake，执行一步后取消这次下发（原因“回执迟迟未到，取消后重新下发”）。",
+          "把故障改回“无”，执行一步：迟到的回执被平台拒绝并丢弃，平台仍记录 brake_monitor；VEH-001 上报后客户端状态显示车上实际运行 guided_brake，与平台记录不同。",
+          "brake_tester 重新下发 guided_brake，执行一步：应用成功，再次上报后与平台记录一致。"
+        ],
+        "done": "取消的下发不会因迟到的回执生效；重新下发让平台与车辆重新一致。",
+        "fail": "迟到的回执不能改变已取消的下发。"
+      },
+      {
+        "id": "N01",
+        "title": "回执不能改写或重复确认",
+        "actor": "车辆模拟器",
+        "accounts": [],
+        "workspace": null,
+        "page": "引擎回放",
+        "pre": "DF04 完成。",
+        "steps": [
+          "DF03 中失败的尝试再收到“应用成功”：拒绝（同一次尝试已有不同回执）。",
+          "已确认的回执再次补发：没有可补发的回执；重复的成功回执被忽略。"
+        ],
+        "done": "每次尝试只有一个结果。",
+        "fail": "拒绝不改变任何状态。"
+      }
+    ]
   }
 ];
 

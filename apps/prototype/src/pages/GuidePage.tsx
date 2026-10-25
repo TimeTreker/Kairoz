@@ -87,6 +87,17 @@ export const SCENARIOS: Scenario[] = [
     ],
   },
   {
+    key: 'device-faults',
+    titleZh: '车端故障与恢复',
+    titleEn: 'Device faults and recovery',
+    steps: [
+      { account: 'brake_tester', workspace: 'team-brake', page: 'simulator', zh: '在“车端 Agent”打开 SIM-021、VEH-001 的自动回执，把 VEH-001 的车端故障设为“配置包校验失败”', en: 'Under On-vehicle agents turn on Auto receipt for SIM-021 and VEH-001 and set VEH-001’s device fault to Package checksum fails', expectZh: '故障持续到改回“无”', expectEn: 'The fault lasts until set back to None' },
+      { account: 'brake_tester', workspace: 'team-brake', page: 'features', zh: '把 guided_brake 下发到制动研发车组，在模拟器“执行一步”', en: 'Dispatch guided_brake to 制动研发车组, then Step once in the simulator', expectZh: 'VEH-001 回执失败“配置包校验失败：未安装，保留原配置”，已生效配置不变', expectEn: 'VEH-001 answers failed: checksum mismatch, nothing installed; its configuration stays' },
+      { account: 'brake_tester', workspace: 'team-brake', page: 'simulator', zh: '把故障改为“回执丢失”，再下发并执行一步', en: 'Change the fault to Receipt lost, dispatch again and step', expectZh: '车辆已应用、回执未送达：平台仍“已推送·待回执”，客户端状态显示与平台记录不同', expectEn: 'Applied, receipt not delivered: the platform still waits, and the client state differs from the platform record' },
+      { account: 'brake_tester', workspace: 'team-brake', page: 'simulator', zh: '把故障改回“无”，执行一步', en: 'Set the fault back to None and step', expectZh: '同一尝试的回执补发，平台只确认一次', expectEn: 'The same attempt’s receipt is sent again and confirmed once' },
+    ],
+  },
+  {
     key: 'lifecycle',
     titleZh: '车辆环境迁移与组织归档',
     titleEn: 'Vehicle environments and archiving',

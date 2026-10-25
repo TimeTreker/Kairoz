@@ -10,7 +10,7 @@ import type { FileType, Privacy } from '../domain/file-types.ts';
 import type { ReviewControls } from '../domain/intake.ts';
 import type { Domain, Env, GroupPurpose, Role, Scope, WorkspaceKind } from '../domain/vocabulary.ts';
 
-export const STATE_SCHEMA = 14;
+export const STATE_SCHEMA = 15;
 
 export interface Account {
   username: string;
@@ -427,8 +427,23 @@ export interface AgentState {
   online: boolean;
   /** Acknowledge pending configurations automatically when the simulator runs. */
   autoAck: boolean;
-  /** The next configuration fails to apply. */
-  failNext: boolean;
+  /** The fault the vehicle plays when it applies a configuration, until set back to NONE. */
+  fault: DeviceFault;
+}
+
+/**
+ * Faults a simulated vehicle plays (车端故障, v0.13 mock): the package fails its checksum or its
+ * platform signature, the apply is interrupted (the previous configuration is restored), or the
+ * vehicle applies it and the receipt is lost on the way.
+ */
+export type DeviceFault = 'NONE' | 'CHECKSUM' | 'SIGNATURE' | 'APPLY_INTERRUPTED' | 'DROP_RECEIPT';
+
+/** A receipt for a configuration the vehicle applied that has not reached the platform yet. */
+export interface UnsentReceipt {
+  deploymentId: string;
+  attempt: number;
+  /** Why it is still on the vehicle: RECEIPT_LOST, or the platform's refusal code. */
+  lastError: string;
 }
 
 export interface ControllerState {
@@ -963,6 +978,13 @@ export interface DeviceState {
   lastSent: SignedReport | null;
   lastContentDigest: string | null;
   lastSentAt: string | null;
+  /**
+   * The configuration the vehicle actually runs when the platform has not recorded it (its receipt
+   * was lost); null while it runs what the platform recorded.
+   */
+  config: string | null;
+  /** Receipts for configurations the vehicle applied that the platform has not received; resent once connected. */
+  unsent: UnsentReceipt[];
 }
 
 /**

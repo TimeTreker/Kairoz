@@ -477,6 +477,15 @@ Object.assign(ERROR_LABELS, {
   NOTHING_TO_REPLAY: b('客户端还没有发送过上报', 'The client has not sent a report yet'),
 });
 
+/** Faults a simulated vehicle plays when it applies a configuration (prototype tool). */
+export const DEVICE_FAULT_LABELS: Record<string, Bilingual> = {
+  NONE: b('无', 'None'),
+  CHECKSUM: b('配置包校验失败', 'Package checksum fails'),
+  SIGNATURE: b('配置包签名无效', 'Package signature invalid'),
+  APPLY_INTERRUPTED: b('应用中断', 'Apply interrupted'),
+  DROP_RECEIPT: b('回执丢失', 'Receipt lost'),
+};
+
 export const REPORT_RESULT_LABELS: Record<string, Bilingual> = {
   ACCEPTED: b('已接收', 'Accepted'),
   STALE: b('较旧，仅入历史', 'Older; history only'),

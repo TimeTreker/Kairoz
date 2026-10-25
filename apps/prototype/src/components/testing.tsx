@@ -91,80 +91,114 @@ export function DeliveryTag({ target }: { target: Pick<DeploymentTarget, 'status
 }
 
 /** Dispatches with their frozen member targets. */
-export function DeploymentsTable({ deployments, canCancel, onCancel }: { deployments: Deployment[]; canCancel: (d: Deployment) => boolean; onCancel: (d: Deployment) => void }) {
+export function DeploymentsTable({
+  deployments,
+  canCancel,
+  onCancel,
+}: {
+  deployments: Deployment[];
+  canCancel: (d: Deployment) => boolean;
+  /** Cancels with the reason given; undefined when the platform refused. */
+  onCancel: (d: Deployment, reason: string) => unknown;
+}) {
   const state = useEngineState();
   const { L, B } = useI18n();
   // Every dispatch shows its vehicles, including ones added while the page is open, unless collapsed.
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  const [cancelling, setCancelling] = useState<Deployment | null>(null);
+  const [reason, setReason] = useState('');
+  const closeCancel = () => (setCancelling(null), setReason(''));
   return (
-    <Table
-      rowKey="id"
-      pagination={false}
-      dataSource={deployments}
-      locale={{ emptyText: L('没有下发', 'No dispatches') }}
-      expandable={{
-        expandedRowKeys: deployments.filter((d) => !collapsed.has(d.id)).map((d) => d.id),
-        onExpand: (open, d) =>
-          setCollapsed((c) => {
-            const next = new Set(c);
-            if (open) next.delete(d.id);
-            else next.add(d.id);
-            return next;
-          }),
-        expandedRowRender: (d) => (
-          <Table
-            rowKey="resourceId"
-            size="small"
-            pagination={false}
-            dataSource={d.targets}
-            columns={[
-              { title: L('车辆', 'Vehicle'), render: (_, t) => <Mono>{t.resourceId}</Mono> },
-              { title: L('车辆组', 'Group'), render: (_, t) => (t.vehicleGroupId ? state.vehicleGroups[t.vehicleGroupId]?.name : <Tag>{L('直投', 'direct')}</Tag>) },
-              { title: L('尝试', 'Attempt'), dataIndex: 'attempt' },
-              { title: L('状态', 'Status'), render: (_, t) => <DeliveryTag target={t} /> },
-              { title: L('错误', 'Error'), render: (_, t) => (t.error ? B(issueLabel(t.error), t.error) : '—') },
-              { title: L('更新', 'Updated'), render: (_, t) => when(t.updatedAt) },
-            ]}
-          />
-        ),
-      }}
-      columns={[
-        { title: L('下发', 'Dispatch'), render: (_, d) => <Mono>{d.id}</Mono> },
-        { title: L('配置', 'Configuration'), render: (_, d) => <Mono>{B(configName(state, d.resolvedConfigId))}</Mono> },
-        { title: L('环境', 'Env'), render: (_, d) => <EnvTag env={d.env} /> },
-        { title: L('状态', 'Status'), render: (_, d) => <LabelTag map={DEPLOYMENT_STATUS_LABELS} value={d.status} /> },
-        {
-          title: L('下发人', 'By'),
-          render: (_, d) => (
-            <Space size={4} wrap>
-              {d.trigger === 'GROUP_FOLLOW' && (
-                <Tooltip title={L('车辆加入车辆组或更新整车软件后上报，云端推送了已下发给车辆组的配置。', 'The vehicle joined the group or had its software updated; on its report the cloud pushed what was dispatched to the group.')}>
-                  <Tag color="cyan">{B(DEPLOYMENT_TRIGGER_LABELS.GROUP_FOLLOW)}</Tag>
-                </Tooltip>
-              )}
-              <span>{`${state.accounts[d.dispatchedBy]?.displayName ?? d.dispatchedBy} · ${when(d.createdAt)}`}</span>
-            </Space>
+    <>
+      <Modal
+        open={!!cancelling}
+        title={`${L('取消下发', 'Cancel dispatch')} · ${cancelling?.id ?? ''}`}
+        okText={L('取消下发', 'Cancel dispatch')}
+        okButtonProps={{ danger: true, disabled: !reason.trim() }}
+        cancelText={L('返回', 'Back')}
+        onCancel={closeCancel}
+        onOk={() => {
+          if (cancelling && onCancel(cancelling, reason.trim()) !== undefined) closeCancel();
+        }}
+        destroyOnHidden
+      >
+        <Hint>
+          {L(
+            '还没有回执的车辆不再推送，也不再接受这次下发的回执；已应用的车辆保持现有配置。取消不能撤回。',
+            'Vehicles that have not answered get nothing more, and receipts for this dispatch are no longer accepted; vehicles that applied it keep their configuration. A cancel cannot be undone.',
+          )}
+        </Hint>
+        <Input value={reason} onChange={(e) => setReason(e.target.value)} placeholder={L('原因，例如：回执迟迟未到，取消后重新下发', 'Reason, e.g. no receipt for too long; dispatch again')} />
+      </Modal>
+      <Table
+        rowKey="id"
+        pagination={false}
+        dataSource={deployments}
+        locale={{ emptyText: L('没有下发', 'No dispatches') }}
+        expandable={{
+          expandedRowKeys: deployments.filter((d) => !collapsed.has(d.id)).map((d) => d.id),
+          onExpand: (open, d) =>
+            setCollapsed((c) => {
+              const next = new Set(c);
+              if (open) next.delete(d.id);
+              else next.add(d.id);
+              return next;
+            }),
+          expandedRowRender: (d) => (
+            <Table
+              rowKey="resourceId"
+              size="small"
+              pagination={false}
+              dataSource={d.targets}
+              columns={[
+                { title: L('车辆', 'Vehicle'), render: (_, t) => <Mono>{t.resourceId}</Mono> },
+                { title: L('车辆组', 'Group'), render: (_, t) => (t.vehicleGroupId ? state.vehicleGroups[t.vehicleGroupId]?.name : <Tag>{L('直投', 'direct')}</Tag>) },
+                { title: L('尝试', 'Attempt'), dataIndex: 'attempt' },
+                { title: L('状态', 'Status'), render: (_, t) => <DeliveryTag target={t} /> },
+                { title: L('错误', 'Error'), render: (_, t) => (t.error ? B(issueLabel(t.error), t.error) : '—') },
+                { title: L('更新', 'Updated'), render: (_, t) => when(t.updatedAt) },
+              ]}
+            />
           ),
-        },
-        {
-          title: '',
-          render: (_, d) => (
-            <Space size={0}>
-              {d.status === 'PENDING' && canCancel(d) && (
-                <Button type="link" size="small" danger onClick={() => onCancel(d)}>
-                  {L('取消', 'Cancel')}
-                </Button>
-              )}
-              {d.status === 'PENDING' && (
-                <Button type="link" size="small" onClick={() => navigate('simulator')}>
-                  {L('去车辆模拟器回执', 'Answer in simulator')}
-                </Button>
-              )}
-            </Space>
-          ),
-        },
-      ]}
-    />
+        }}
+        columns={[
+          { title: L('下发', 'Dispatch'), render: (_, d) => <Mono>{d.id}</Mono> },
+          { title: L('配置', 'Configuration'), render: (_, d) => <Mono>{B(configName(state, d.resolvedConfigId))}</Mono> },
+          { title: L('环境', 'Env'), render: (_, d) => <EnvTag env={d.env} /> },
+          { title: L('状态', 'Status'), render: (_, d) => <LabelTag map={DEPLOYMENT_STATUS_LABELS} value={d.status} /> },
+          {
+            title: L('下发人', 'By'),
+            render: (_, d) => (
+              <Space size={4} wrap>
+                {d.trigger === 'GROUP_FOLLOW' && (
+                  <Tooltip title={L('车辆加入车辆组或更新整车软件后上报，云端推送了已下发给车辆组的配置。', 'The vehicle joined the group or had its software updated; on its report the cloud pushed what was dispatched to the group.')}>
+                    <Tag color="cyan">{B(DEPLOYMENT_TRIGGER_LABELS.GROUP_FOLLOW)}</Tag>
+                  </Tooltip>
+                )}
+                <span>{`${state.accounts[d.dispatchedBy]?.displayName ?? d.dispatchedBy} · ${when(d.createdAt)}`}</span>
+              </Space>
+            ),
+          },
+          {
+            title: '',
+            render: (_, d) => (
+              <Space size={0}>
+                {d.status === 'PENDING' && canCancel(d) && (
+                  <Button type="link" size="small" danger onClick={() => setCancelling(d)}>
+                    {L('取消', 'Cancel')}
+                  </Button>
+                )}
+                {d.status === 'PENDING' && (
+                  <Button type="link" size="small" onClick={() => navigate('simulator')}>
+                    {L('去车辆模拟器回执', 'Answer in simulator')}
+                  </Button>
+                )}
+              </Space>
+            ),
+          },
+        ]}
+      />
+    </>
   );
 }
 

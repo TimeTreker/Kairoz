@@ -293,7 +293,7 @@ function CheckCard({ check }: { check: ApplicabilityCheck }) {
         <DeploymentsTable
           deployments={deployments}
           canCancel={() => can('applicability.dispatch', target)}
-          onCancel={(d) => run((c) => cancelDeployment(c, d.id, L('取消适用性测试下发', 'Applicability test dispatch cancelled')), L('已取消下发', 'Dispatch cancelled'))}
+          onCancel={(d, reason) => run((c) => cancelDeployment(c, d.id, reason), L('已取消下发', 'Dispatch cancelled'))}
         />
       )}
       <DispatchModal

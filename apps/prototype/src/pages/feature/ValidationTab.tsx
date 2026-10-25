@@ -156,7 +156,7 @@ export function ValidationTab({ feature }: { feature: Feature }) {
         <DeploymentsTable
           deployments={deploymentsOf(state, feature.id)}
           canCancel={(d) => can('feature.dispatch', target(d.env as 'development'))}
-          onCancel={(d) => run((c) => cancelDeployment(c, d.id, L('手动取消', 'Cancelled manually')), L('已取消', 'Cancelled'))}
+          onCancel={(d, reason) => run((c) => cancelDeployment(c, d.id, reason), L('已取消下发', 'Dispatch cancelled'))}
         />
       </Card>
 

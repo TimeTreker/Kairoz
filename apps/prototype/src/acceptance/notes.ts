@@ -13,6 +13,7 @@ export const SCRIPT_NOTES: Record<string, string> = {
   'software-change': '使用演示数据。车辆的整车软件 OTA 由车辆模拟器扮演（“模拟整车软件 OTA”），平台只从车辆签名的上报中得知；软件清单为 Mock。',
   borrowing: '使用演示数据。车辆上报、整车 OTA 系统和时间推进由车辆模拟器扮演；签名为 Mock。借用到期按平台日期（真实时间加模拟推进）判断。',
   lifecycle: '使用演示数据。真实车队的环境迁移还需线下资源移交与设备凭证接入，原型只记录平台侧的环境、原因和审计；归档不删除任何历史数据。',
+  'device-faults': '使用演示数据。车端故障由车辆模拟器扮演（对应 v0.13 Mock 的 Checksum、无效签名、ApplyInterrupted、DropReceipt；Offline 即“在线”开关）：没有真实配置包、签名或设备，只演练平台如何处理失败回执、丢失回执与补发。',
   notifications: '使用演示数据。通知由授权数据中的当前事项生成，已读保存在平台状态中并按账号、工作区隔离；不提供后台推送、邮件或跨设备同步。',
   'org-directory': '使用演示数据。公司目录由车辆模拟器扮演（真实系统中是 HR、LDAP/AD 或 SCIM 推送）；自动运行时每一步同步，也可手动“同步到平台”。',
 };

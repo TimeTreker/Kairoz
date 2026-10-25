@@ -11,14 +11,14 @@ import type { Ctx } from '../engine/engine.ts';
 import { advanceEvent, assessEvent, capturablePolicies, captureEvent, deliverCallback, receiveChunk, setFailParse } from '../engine/events.ts';
 import { personalCapturablePolicies, trialCapture } from '../engine/personal-sim.ts';
 import { answerImageChange, completeBuild } from '../engine/sim-software.ts';
-import type { Quality, TrainingUse } from '../engine/types.ts';
-import { advanceClock, completeVehicleSoftware, deviceSummary, flushOutbox, pendingForVehicles, reportNow, restartClient, sendFault, sendReceipt, setAgent, simulateSoftwareOta, tick, upgradeClient } from '../engine/simulator.ts';
+import type { DeviceFault, Quality, TrainingUse } from '../engine/types.ts';
+import { advanceClock, completeVehicleSoftware, deviceSummary, flushOutbox, heldReceipt, pendingForVehicles, reportNow, resendReceipts, restartClient, sendFault, sendReceipt, setAgent, simulateSoftwareOta, tick, upgradeClient } from '../engine/simulator.ts';
 import { DAY_MS, todayOf } from '../engine/clock.ts';
 import { pendingSoftwareRequests } from '../engine/vehicle-software.ts';
 import { DeliveryTag } from '../components/testing.tsx';
 import type { ReportFault } from '../engine/simulator.ts';
 import { useI18n } from '../i18n/i18n.tsx';
-import { ERROR_LABELS, EVENT_STATUS_COLORS, IMAGE_CHANGE_KIND_LABELS, EVENT_STATUS_LABELS, QUALITY_LABELS, REPORT_RESULT_LABELS, RESOURCE_TYPE_LABELS, TRAINING_USE_LABELS } from '../i18n/vocab.ts';
+import { DEVICE_FAULT_LABELS, ERROR_LABELS, EVENT_STATUS_COLORS, IMAGE_CHANGE_KIND_LABELS, EVENT_STATUS_LABELS, QUALITY_LABELS, REPORT_RESULT_LABELS, RESOURCE_TYPE_LABELS, TRAINING_USE_LABELS } from '../i18n/vocab.ts';
 
 let autoTimer: ReturnType<typeof setInterval> | undefined;
 
@@ -253,6 +253,27 @@ export function SimulatorPage() {
                   render: (_, p) => {
                     const vehicle = state.resources[p.target.resourceId]!;
                     const online = vehicle.agent.online && vehicle.instance !== 'STOPPED';
+                    const unsent = heldReceipt(state, vehicle.id, p.deployment.id, p.target.attempt);
+                    if (unsent) {
+                      // The vehicle applied it; the receipt is still on the vehicle.
+                      const losing = vehicle.agent.fault === 'DROP_RECEIPT';
+                      return (
+                        <Space>
+                          <Tooltip
+                            title={
+                              unsent.lastError === 'RECEIPT_LOST'
+                                ? L('车辆已应用，回执在路上丢失。去掉“回执丢失”故障后补发同一尝试，平台只确认一次。', 'The vehicle applied it and the receipt was lost. Clear the Receipt lost fault and the same attempt is sent again; the platform confirms it once.')
+                                : B(ERROR_LABELS[unsent.lastError] ?? { zh: unsent.lastError, en: unsent.lastError })
+                            }
+                          >
+                            <Tag color="gold">{L('已应用 · 回执未送达', 'Applied · receipt not delivered')}</Tag>
+                          </Tooltip>
+                          <Button size="small" disabled={!online || losing} onClick={() => system((c) => resendReceipts(c, vehicle.id), L('已补发回执', 'Receipt sent again'))}>
+                            {L('补发回执', 'Send receipt again')}
+                          </Button>
+                        </Space>
+                      );
+                    }
                     if (p.held) {
                       return (
                         <Tooltip title={L('暂停期间车辆保持已确认的配置；配置发布恢复 OTA 后再回执。', 'While paused the vehicle keeps its confirmed configuration; it reports once Release resumes the rollout.')}>
@@ -292,8 +313,38 @@ export function SimulatorPage() {
               { title: L('环境', 'Env'), render: (_, r) => <EnvTag env={r.env} /> },
               { title: L('在线', 'Online'), render: (_, r) => <Switch size="small" checked={r.agent.online} onChange={(v) => system((c) => setAgent(c, r.id, { online: v }))} /> },
               { title: L('自动回执', 'Auto receipt'), render: (_, r) => <Switch size="small" checked={r.agent.autoAck} onChange={(v) => system((c) => setAgent(c, r.id, { autoAck: v }))} /> },
-              { title: L('下一次应用失败', 'Fail next apply'), render: (_, r) => <Switch size="small" checked={r.agent.failNext} onChange={(v) => system((c) => setAgent(c, r.id, { failNext: v }))} /> },
-              { title: L('已生效配置', 'Applied'), render: (_, r) => <Mono>{B(configName(state, r.appliedConfigId))}</Mono> },
+              {
+                title: (
+                  <Tooltip title={L('车辆应用配置时扮演的故障，直到改回“无”。校验失败、签名无效与应用中断都回执失败并保留原配置；回执丢失时车辆已应用，平台仍在等待回执。', 'The fault the vehicle plays when it applies a configuration, until set back to None. Checksum, signature and interrupted applies answer failed and keep the previous configuration; with a lost receipt the vehicle applied it and the platform still waits.')}>
+                    {L('车端故障', 'Device fault')}
+                  </Tooltip>
+                ),
+                render: (_, r) => (
+                  <Select<DeviceFault>
+                    size="small"
+                    style={{ width: 150 }}
+                    value={r.agent.fault}
+                    onChange={(v) => system((c) => setAgent(c, r.id, { fault: v }))}
+                    options={Object.keys(DEVICE_FAULT_LABELS).map((f) => ({ value: f as DeviceFault, label: B(DEVICE_FAULT_LABELS[f]!) }))}
+                  />
+                ),
+              },
+              {
+                title: L('已生效配置', 'Applied'),
+                render: (_, r) => {
+                  const own = deviceSummary(state, r.id)?.ownConfig;
+                  return (
+                    <Space size={4} wrap>
+                      <Mono>{B(configName(state, r.appliedConfigId))}</Mono>
+                      {own && own !== r.appliedConfigId && (
+                        <Tooltip title={L('回执丢失：车辆运行的配置平台尚未记录。', 'Receipt lost: the vehicle runs a configuration the platform has not recorded.')}>
+                          <Tag color="gold">{`${L('车上实际', 'on the vehicle')}${L('：', ': ')}${B(configName(state, own))}`}</Tag>
+                        </Tooltip>
+                      )}
+                    </Space>
+                  );
+                },
+              },
               {
                 title: (
                   <Tooltip title={L('客户端上报实际运行的内容；离线时暂存，恢复连接后补报。签名为 Mock。', 'The client reports what it actually runs; offline, reports wait and are sent on reconnect. Signatures are mock.')}>

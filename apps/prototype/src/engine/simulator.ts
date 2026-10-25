@@ -4,12 +4,12 @@
 import type { Draft } from 'immer';
 import { contentDigest, mockPublicKey, mockSign } from '../domain/client-report.ts';
 import type { ClientReportPayload, SignedReport, VersionItem } from '../domain/client-report.ts';
-import { notFound, rule } from '../domain/errors.ts';
+import { DomainError, notFound, rule } from '../domain/errors.ts';
 import { newId } from '../domain/ids.ts';
 import { acceptClientReport, checkClientReport, configurationContents } from './client-report.ts';
 import { DAY_MS, nowOf } from './clock.ts';
 import type { Ctx } from './engine.ts';
-import type { AgentState, DeviceState, Resource, State } from './types.ts';
+import type { AgentState, DeviceState, Resource, State, UnsentReceipt } from './types.ts';
 import { syncIfChanged } from './company-directory.ts';
 import { pushPending } from './delivery.ts';
 import { advanceEvent } from './events.ts';
@@ -39,7 +39,82 @@ export function sendReceipt(ctx: Ctx, deploymentId: string, resourceId: string, 
   const d = ctx.s.deployments[deploymentId];
   const t = d?.targets.find((x) => x.resourceId === resourceId);
   if (!d || !t) throw notFound('deployment target', `${deploymentId}/${resourceId}`);
-  return acceptReceipt(ctx, { deploymentId, resourceId, attempt: t.attempt, result, ...(error ? { error } : {}) });
+  const answer = acceptReceipt(ctx, { deploymentId, resourceId, attempt: t.attempt, result, ...(error ? { error } : {}) });
+  const device = ctx.s.devices[resourceId];
+  // The platform now records what the vehicle runs; a receipt it held for this target is delivered.
+  if (device && result === 'APPLIED') {
+    device.config = null;
+    device.unsent = device.unsent.filter((u) => u.deploymentId !== deploymentId);
+  }
+  return answer;
+}
+
+/** What each fault makes the vehicle answer (the error of its FAILED receipt). */
+export const FAULT_ERRORS = {
+  CHECKSUM: 'package checksum mismatch; nothing installed, the previous configuration stays',
+  SIGNATURE: 'package signature does not verify against the platform key; nothing installed, the previous configuration stays',
+  APPLY_INTERRUPTED: 'apply interrupted; the previous configuration was restored',
+  APPLY_INTERRUPTED_FIRST: 'apply interrupted; there is no earlier configuration to restore, the vehicle runs none',
+} as const;
+
+/**
+ * The vehicle applies one pushed configuration and answers, playing its fault: a corrupt or
+ * unsigned package is refused, an interrupted apply restores the previous configuration, and a
+ * lost receipt leaves the platform waiting while the vehicle runs the new configuration.
+ */
+function applyOnVehicle(ctx: Ctx, deploymentId: string, r: Resource): void {
+  const d = ctx.s.deployments[deploymentId]!;
+  switch (r.agent.fault) {
+    case 'CHECKSUM':
+    case 'SIGNATURE':
+      sendReceipt(ctx, d.id, r.id, 'FAILED', FAULT_ERRORS[r.agent.fault]);
+      return;
+    case 'APPLY_INTERRUPTED':
+      sendReceipt(ctx, d.id, r.id, 'FAILED', r.appliedConfigId ? FAULT_ERRORS.APPLY_INTERRUPTED : FAULT_ERRORS.APPLY_INTERRUPTED_FIRST);
+      return;
+    case 'DROP_RECEIPT': {
+      const t = d.targets.find((x) => x.resourceId === r.id)!;
+      const device = provisionDevice(ctx, r.id);
+      device.config = d.resolvedConfigId;
+      device.unsent.push({ deploymentId: d.id, attempt: t.attempt, lastError: 'RECEIPT_LOST' });
+      return;
+    }
+    case 'NONE':
+      sendReceipt(ctx, d.id, r.id, 'APPLIED');
+  }
+}
+
+/** The receipt the vehicle holds for this attempt (it applied it; the platform has not received it). */
+export function heldReceipt(s: State, resourceId: string, deploymentId: string, attempt: number): UnsentReceipt | undefined {
+  return s.devices[resourceId]?.unsent.find((u) => u.deploymentId === deploymentId && u.attempt === attempt);
+}
+
+/** The vehicle applied this attempt and holds its receipt: it is not applied again. */
+const holdsReceipt = (s: State, resourceId: string, deploymentId: string, attempt: number) => !!heldReceipt(s, resourceId, deploymentId, attempt);
+
+/**
+ * The vehicle sends the receipts it holds, oldest first (once connected and no longer losing them).
+ * The platform confirms each attempt once; a paused rollout keeps it waiting until the resume, and
+ * one the platform has moved past (cancelled, retried) is dropped.
+ */
+export function resendReceipts(ctx: Ctx, resourceId: string): { sent: number; waiting: number } {
+  const r = runningVehicle(ctx, resourceId);
+  const device = provisionDevice(ctx, r.id);
+  if (!r.agent.online || r.agent.fault === 'DROP_RECEIPT') return { sent: 0, waiting: device.unsent.length };
+  let sent = 0;
+  const remaining: UnsentReceipt[] = [];
+  for (const u of device.unsent) {
+    try {
+      acceptReceipt(ctx, { deploymentId: u.deploymentId, resourceId: r.id, attempt: u.attempt, result: 'APPLIED' });
+      device.config = null;
+      sent += 1;
+    } catch (e) {
+      if (e instanceof DomainError && e.code === 'OTA_PAUSED') remaining.push({ ...u, lastError: e.code });
+      else if (!(e instanceof DomainError)) throw e;
+    }
+  }
+  device.unsent = remaining;
+  return { sent, waiting: remaining.length };
 }
 
 /** One simulator step: online vehicles in automatic mode answer their pending configurations
@@ -48,17 +123,17 @@ export function tick(ctx: Ctx): number {
   let answered = 0;
   // Vehicles that are on and connected receive what was dispatched to them (推送).
   for (const r of Object.values(ctx.s.resources)) if (r.agent.online && clientRunning(r)) pushPending(ctx, r.id);
+  // Receipts a vehicle could not deliver go out once it is connected and no longer loses them.
+  for (const r of Object.values(ctx.s.resources)) {
+    if (r.agent.online && clientRunning(r) && r.agent.fault !== 'DROP_RECEIPT' && ctx.s.devices[r.id]?.unsent.length) answered += resendReceipts(ctx, r.id).sent;
+  }
   for (const { deployment, target } of pendingForVehicles(ctx.s)) {
     // Read the status now: a failure earlier in this step may have paused the rollout.
     if (ctx.s.deployments[deployment.id]!.status !== 'PENDING') continue;
     const r = ctx.s.resources[target.resourceId]!;
     if (!r.agent.online || !r.agent.autoAck || r.instance === 'STOPPED') continue;
-    if (r.agent.failNext) {
-      sendReceipt(ctx, deployment.id, r.id, 'FAILED', 'simulated apply failure');
-      r.agent.failNext = false;
-    } else {
-      sendReceipt(ctx, deployment.id, r.id, 'APPLIED');
-    }
+    if (holdsReceipt(ctx.s, r.id, deployment.id, target.attempt)) continue;
+    applyOnVehicle(ctx, deployment.id, r);
     answered += 1;
   }
   for (const e of Object.values(ctx.s.events)) {
@@ -98,6 +173,8 @@ export function provisionDevice(ctx: Ctx, resourceId: string): Draft<DeviceState
     sequence: 0,
     clientVersion: DCL_CLIENT_VERSION,
     software: null,
+    config: null,
+    unsent: [],
     outbox: [],
     lastSent: null,
     lastContentDigest: null,
@@ -116,8 +193,11 @@ const clientRunning = (r: Resource) => r.instance !== 'STOPPED' && r.status !== 
 
 /** What the client observes on its own vehicle. */
 function observe(s: State, r: Resource, device: DeviceState): Omit<ClientReportPayload, 'sequence' | 'reportedAt'> {
-  const contents = configurationContents(s, r.appliedConfigId);
-  const last = s.receipts.findLast((x) => x.resourceId === r.id);
+  // A vehicle whose receipt was lost runs what it applied, whatever the platform recorded.
+  const contents = configurationContents(s, device.config ?? r.appliedConfigId);
+  const held = device.unsent.at(-1);
+  const sent = s.receipts.findLast((x) => x.resourceId === r.id);
+  const last = held ? { deploymentId: held.deploymentId, attempt: held.attempt, error: null } : sent;
   // After a simulated software OTA the car runs its own version, whatever the platform recorded.
   const software = r.type === 'PHYSICAL' && device.software ? device.software : r.integrationVersion;
   const domains: VersionItem[] =
@@ -329,6 +409,8 @@ export function deviceSummary(s: State, resourceId: string) {
     bootCounter: d.bootCounter,
     sequence: d.sequence,
     queued: d.outbox.length,
+    unsentReceipts: d.unsent.length,
+    ownConfig: d.config,
     lastError: d.outbox.findLast((x) => x.lastError)?.lastError ?? null,
     hasSent: d.lastSent !== null,
   };

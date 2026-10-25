@@ -829,7 +829,7 @@ function CandidateDetail({ candidate: c }: { candidate: Candidate }) {
         <DeploymentsTable
           deployments={deploymentsOf(state, c.id)}
           canCancel={() => can('candidate.dispatch', target)}
-          onCancel={(d) => run((cx) => cancelDeployment(cx, d.id, L('手动取消', 'Cancelled manually')), L('已取消', 'Cancelled'))}
+          onCancel={(d, reason) => run((cx) => cancelDeployment(cx, d.id, reason), L('已取消下发', 'Dispatch cancelled'))}
         />
       </Card>
 

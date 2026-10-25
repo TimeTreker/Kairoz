@@ -149,7 +149,7 @@ describe('configuration OTA', () => {
     const r101 = e.run('release', (c) => rel.promoteCandidate(c, cand, { dclVersion: '1.0.1', vehicleIntegrationVersions: ['1.0'] }));
     const id = e.run('release', (c) => ota.createOta(c, { releaseId: r101, vehicleGroupIds: [production], firstWave: 'ALL' }));
     e.run(null, (c) => {
-      setAgent(c, 'VEH-201', { autoAck: true, failNext: true });
+      setAgent(c, 'VEH-201', { autoAck: true, fault: 'APPLY_INTERRUPTED' });
       setAgent(c, 'VEH-202', { autoAck: true });
     });
     assert.equal(e.run(null, (c) => tick(c)), 1);
@@ -161,6 +161,28 @@ describe('configuration OTA', () => {
     e.run('release', (c) => ota.cancelOta(c, id, '停止本次 OTA'));
     assert.equal(e.run(null, (c) => tick(c)), 0, 'a cancelled rollout is not delivered either');
     fails(() => e.run(null, (c) => sendReceipt(c, id, 'VEH-202', 'APPLIED')), 'TARGET_NOT_PENDING');
+  });
+
+  test('a receipt lost while the rollout pauses is resent after the resume and confirmed once', () => {
+    const { e, cand, production } = verifiedCandidate();
+    const r101 = e.run('release', (c) => rel.promoteCandidate(c, cand, { dclVersion: '1.0.1', vehicleIntegrationVersions: ['1.0'] }));
+    const id = e.run('release', (c) => ota.createOta(c, { releaseId: r101, vehicleGroupIds: [production], firstWave: 'ALL' }));
+    e.run(null, (c) => {
+      setAgent(c, 'VEH-201', { autoAck: true, fault: 'DROP_RECEIPT' });
+      setAgent(c, 'VEH-202', { autoAck: true, fault: 'CHECKSUM' });
+    });
+    e.run(null, (c) => tick(c));
+    assert.equal(e.getState().deployments[id]!.status, 'PAUSED', 'the checksum failure pauses the rollout');
+    assert.equal(appliedLabel(e, 'VEH-201'), 'DCL 1.0.0', 'VEH-201 applied 1.0.1, but no receipt confirmed it');
+    e.run(null, (c) => setAgent(c, 'VEH-201', { fault: 'NONE' }));
+    e.run(null, (c) => tick(c));
+    assert.deepEqual(e.getState().devices['VEH-201']!.unsent.map((u) => u.lastError), ['OTA_PAUSED'], 'held by the pause');
+    e.run(null, (c) => setAgent(c, 'VEH-202', { fault: 'NONE' }));
+    e.run('release', (c) => ota.resumeOta(c, id));
+    e.run(null, (c) => tick(c));
+    assert.equal(e.getState().deployments[id]!.status, 'COMPLETED');
+    assert.deepEqual([appliedLabel(e, 'VEH-201'), appliedLabel(e, 'VEH-202')], ['DCL 1.0.1', 'DCL 1.0.1']);
+    assert.equal(e.getState().receipts.filter((r) => r.deploymentId === id && r.resourceId === 'VEH-201').length, 1);
   });
 
   test('every vehicle is checked against the release: software, newest match, rollback target', () => {

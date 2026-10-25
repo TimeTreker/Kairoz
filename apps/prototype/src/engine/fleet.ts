@@ -176,7 +176,7 @@ export function baseResource(ctx: Ctx, input: { id: string; vehicleModelId: stri
     reservation: null,
     appliedConfigId: null,
     personal: null,
-    agent: { online: true, autoAck: false, failNext: false },
+    agent: { online: true, autoAck: false, fault: 'NONE' as const },
     deviceKey: null,
     createdBy: ctx.user().username,
     createdAt: ctx.now,
