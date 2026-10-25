@@ -180,7 +180,7 @@ export function ValidationTab({ feature }: { feature: Feature }) {
         emptyText={L('本工作区没有服务该分组的车辆组；请联系工作区管理员。', 'No vehicle group serves this group here; ask the workspace admin.')}
         onClose={() => setDispatching(false)}
         onDispatch={(ids, _goal, _direct, disabledPolicies) =>
-          run((c) => dispatchFeature(c, feature.id, { commitId: feature.headCommitId!, vehicleGroupIds: ids, disabledPolicies }), L('已下发，等待车辆回执', 'Dispatched; waiting for vehicle receipts')) !== undefined
+          run((c) => dispatchFeature(c, feature.id, { commitId: feature.headCommitId!, vehicleGroupIds: ids, disabledPolicies }), L('已下发：车辆上线时推送，回执后生效', 'Dispatched: pushed when each vehicle is on, applied after its receipt')) !== undefined
         }
       />
       <RecordTestModal

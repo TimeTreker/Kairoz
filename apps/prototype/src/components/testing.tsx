@@ -30,7 +30,12 @@ export function TargetsTable({ status, action }: { status: TargetStatus[]; actio
         { title: L('环境', 'Env'), render: (_, t) => <EnvTag env={state.resources[t.resourceId]!.env} /> },
         {
           title: L('配置', 'Configuration'),
-          render: (_, t) => (t.applied ? <Tag color="success">{L('已生效', 'Applied')}</Tag> : <Tag color="processing">{L('未确认生效', 'Not confirmed')}</Tag>),
+          render: (_, t) => {
+            if (t.applied) return <Tag color="success">{L('已生效', 'Applied')}</Tag>;
+            // Not applied yet: show where its latest dispatch is (not pushed, pushed, failed).
+            const target = state.deployments[t.deploymentId]?.targets.find((x) => x.resourceId === t.resourceId);
+            return target ? <DeliveryTag target={target} /> : <Tag color="processing">{L('未确认生效', 'Not confirmed')}</Tag>;
+          },
         },
         {
           title: L('最新结果', 'Latest result'),
@@ -89,6 +94,8 @@ export function DeliveryTag({ target }: { target: Pick<DeploymentTarget, 'status
 export function DeploymentsTable({ deployments, canCancel, onCancel }: { deployments: Deployment[]; canCancel: (d: Deployment) => boolean; onCancel: (d: Deployment) => void }) {
   const state = useEngineState();
   const { L, B } = useI18n();
+  // Every dispatch shows its vehicles, including ones added while the page is open, unless collapsed.
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   return (
     <Table
       rowKey="id"
@@ -96,7 +103,14 @@ export function DeploymentsTable({ deployments, canCancel, onCancel }: { deploym
       dataSource={deployments}
       locale={{ emptyText: L('没有下发', 'No dispatches') }}
       expandable={{
-        defaultExpandAllRows: true,
+        expandedRowKeys: deployments.filter((d) => !collapsed.has(d.id)).map((d) => d.id),
+        onExpand: (open, d) =>
+          setCollapsed((c) => {
+            const next = new Set(c);
+            if (open) next.delete(d.id);
+            else next.add(d.id);
+            return next;
+          }),
         expandedRowRender: (d) => (
           <Table
             rowKey="resourceId"

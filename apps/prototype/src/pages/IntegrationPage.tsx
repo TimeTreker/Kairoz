@@ -839,7 +839,7 @@ function CandidateDetail({ candidate: c }: { candidate: Candidate }) {
         vehicles={ungrouped}
         emptyText={L('集成测试工作区没有测试车辆；请联系车辆资源或工作区管理员。', 'The integration workspace has no testing vehicles; ask vehicle resources or its admin.')}
         onClose={() => setDispatching(false)}
-        onDispatch={(ids, _goal, direct) => run((cx) => dispatchCandidate(cx, c.id, { vehicleGroupIds: ids, resourceIds: direct }), L('已下发，等待车辆回执', 'Dispatched; waiting for vehicle receipts')) !== undefined}
+        onDispatch={(ids, _goal, direct) => run((cx) => dispatchCandidate(cx, c.id, { vehicleGroupIds: ids, resourceIds: direct }), L('已下发：车辆上线时推送，回执后生效', 'Dispatched: pushed when each vehicle is on, applied after its receipt')) !== undefined}
       />
       <RecordTestModal resourceId={testing} onClose={() => setTesting(null)} onRecord={(v) => run((cx) => recordCandidateTest(cx, c.id, { resourceId: testing!, ...v }), L('已登记', 'Recorded')) !== undefined} />
       <Modal
