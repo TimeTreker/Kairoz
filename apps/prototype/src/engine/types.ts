@@ -10,7 +10,7 @@ import type { FileType, Privacy } from '../domain/file-types.ts';
 import type { ReviewControls } from '../domain/intake.ts';
 import type { Domain, Env, GroupPurpose, Role, Scope, WorkspaceKind } from '../domain/vocabulary.ts';
 
-export const STATE_SCHEMA = 13;
+export const STATE_SCHEMA = 14;
 
 export interface Account {
   username: string;
@@ -987,6 +987,33 @@ export interface SoftwareChange {
 }
 
 /**
+ * A vehicle moved between development, testing and production (资源环境迁移) by vehicle resources.
+ * Its software and applied configuration stay as they were.
+ */
+export interface EnvironmentChange {
+  id: string;
+  seq: number;
+  resourceId: string;
+  from: Env;
+  to: Env;
+  reason: string;
+  by: string;
+  at: string;
+}
+
+/** Archiving or restoring a workspace, business group or organization unit (归档与恢复). History stays. */
+export interface LifecycleEvent {
+  id: string;
+  seq: number;
+  kind: 'ARCHIVED' | 'RESTORED';
+  object: 'WORKSPACE' | 'GROUP' | 'ORG_UNIT';
+  objectId: string;
+  reason: string;
+  by: string;
+  at: string;
+}
+
+/**
  * A vehicle waiting to follow its vehicle group (跟随车辆组): it joined the group, or its software
  * was updated on request. On its next accepted report the cloud pushes what was dispatched to the
  * group, if that fits the vehicle's software; otherwise the team chooses what to do.
@@ -1190,6 +1217,8 @@ export interface State {
   loans: Record<string, Loan>;
   /** Simulated time (模拟时间): how far the platform clock runs ahead of real time. */
   clockOffsetMs: number;
+  environmentChanges: EnvironmentChange[];
+  lifecycleEvents: LifecycleEvent[];
   audit: AuditEvent[];
 }
 
@@ -1253,6 +1282,8 @@ export function emptyState(): State {
     vehicleSoftwareRequests: {},
     loans: {},
     clockOffsetMs: 0,
+    environmentChanges: [],
+    lifecycleEvents: [],
     audit: [],
   };
 }

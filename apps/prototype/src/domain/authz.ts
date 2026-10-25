@@ -26,7 +26,8 @@ interface ActionSpec {
    * The environment a grant must include. `all`: platform-wide effect, every environment.
    * `target`: the environment of the object acted on (a vehicle, vehicle group, rollout).
    */
-  env: Env | 'all' | 'target';
+  /** 'none': the action is about an organization object, not an environment. */
+  env: Env | 'all' | 'target' | 'none';
   /** Dispatch-only tester grants never satisfy this action. */
   excludeDispatchOnly?: boolean;
 }
@@ -37,6 +38,9 @@ export const ACTIONS = {
   'org.manage': { roles: ['PLATFORM_OPS'], env: 'all' },
   'workspace.manage': { roles: ['PLATFORM_OPS'], env: 'all' },
   'group.create': { roles: ['PLATFORM_OPS', 'WORKSPACE_ADMIN'], env: 'development' },
+  /** Archiving a workspace or a business group (归档): its admin, or platform operations. */
+  'workspace.archive': { roles: ['WORKSPACE_ADMIN', 'PLATFORM_OPS'], env: 'none' },
+  'group.archive': { roles: ['WORKSPACE_ADMIN', 'PLATFORM_OPS'], env: 'none' },
   'reference.administer': { roles: ['PLATFORM_OPS'], env: 'all' },
   'audit.read': { roles: ['PLATFORM_OPS'], env: 'all' },
   // Processing catalog and intake (DCL 工程)
@@ -128,7 +132,9 @@ export type DenyReason =
   /** The only grants with the role are limited to dispatching. */
   | 'DISPATCH_ONLY_GRANT'
   /** Each condition is met by some grant, but no single grant meets all of them. */
-  | 'NO_SINGLE_GRANT';
+  | 'NO_SINGLE_GRANT'
+  /** The workspace is archived: nothing acts in it until platform operations restore it. */
+  | 'WORKSPACE_ARCHIVED';
 
 export type AuthzResult = { ok: true; grant: Grant } | { ok: false; reason: DenyReason };
 
@@ -167,7 +173,7 @@ export function authorize(grants: readonly Grant[], action: Action, target: Auth
   if (candidates.length === 0) return { ok: false, reason: 'DISPATCH_ONLY_GRANT' };
 
   if (spec.env === 'target' && target.env === undefined) throw new Error(`${action} needs the target environment`);
-  const envs: Env[] = spec.env === 'all' ? [...ENVS] : spec.env === 'target' ? [] : [spec.env];
+  const envs: Env[] = spec.env === 'all' ? [...ENVS] : spec.env === 'target' || spec.env === 'none' ? [] : [spec.env];
   if (target.env !== undefined && !envs.includes(target.env)) envs.push(target.env);
   const failures = candidates.map((g) => ({ grant: g, failed: failedDimensions(g, target, envs) }));
   const match = failures.find((f) => f.failed.length === 0);

@@ -108,6 +108,7 @@ export const DENY_REASON_LABELS: Record<string, Bilingual> = {
   DISPATCH_ONLY_GRANT: b('仅下发授权不能执行此操作', 'dispatch-only grants cannot do this'),
   NO_SINGLE_GRANT: b('各条件分别被不同授权满足，但授权不能拼接', 'conditions are met only by combining grants, which is not allowed'),
   NOT_VISIBLE: b('无权查看该分组配置', 'not allowed to view this group’s configuration'),
+  WORKSPACE_ARCHIVED: b('工作区已归档，恢复前不能操作', 'the workspace is archived; nothing acts in it until it is restored'),
 };
 
 /** Error codes with friendlier text; others fall back to the engine message. */
@@ -789,4 +790,19 @@ export const EXTENSION_STATUS_LABELS: Record<string, Bilingual> = {
   PENDING: b('延期待审批', 'Extension requested'),
   APPROVED: b('延期已批准', 'Extension approved'),
   REJECTED: b('延期未批准', 'Extension rejected'),
+};
+
+// Vehicle environments and organization lifecycle (资源环境迁移、归档与恢复)
+Object.assign(ERROR_LABELS, {
+  INVALID_ENV: b('未知的环境', 'Unknown environment'),
+  SAME_ENVIRONMENT: b('车辆已经在该环境', 'The vehicle is already in that environment'),
+  ENV_MOVE_BLOCKED: b('车辆现在不能变更环境：请先结束下列事项', 'The vehicle cannot move now: finish these first'),
+  ARCHIVE_BLOCKED: b('现在不能归档：请先结束下列事项', 'Cannot archive yet: finish these first'),
+  RESTORE_BLOCKED: b('现在不能恢复：所依赖的对象已归档', 'Cannot restore: what it stands on is archived'),
+  NOT_ARCHIVED: b('该对象没有归档', 'It is not archived'),
+  ALREADY_ARCHIVED: b('该对象已经归档', 'It is already archived'),
+});
+export const LIFECYCLE_KIND_LABELS: Record<string, Bilingual> = {
+  ARCHIVED: b('归档', 'Archived'),
+  RESTORED: b('恢复', 'Restored'),
 };

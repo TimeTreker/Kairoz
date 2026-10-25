@@ -2,9 +2,13 @@ import { PlusOutlined } from '@ant-design/icons';
 import { Button, Card, Checkbox, Col, Descriptions, Form, Input, Modal, Row, Select, Space, Table, Tabs, Tag, Tree, Typography } from 'antd';
 import type { TreeDataNode } from 'antd';
 import { useState } from 'react';
+import type { Key } from 'react';
 import { useCan, useRun } from '../app/hooks.ts';
 import { useEngineState } from '../app/store.ts';
 import { Hint, LabelTag, Mono, PageHeader, RoleTag, when } from '../components/common.tsx';
+import { LifecycleModal } from '../components/lifecycle.tsx';
+import type { LifecycleTarget } from '../components/lifecycle.tsx';
+import { workspacesOfGroup } from '../engine/lifecycle.ts';
 import { DOMAINS, SCOPES } from '../domain/vocabulary.ts';
 import { archiveGrantRule, createGrantRule, ruleCovers } from '../engine/identity.ts';
 import {
@@ -37,7 +41,7 @@ function treeOf(state: State, filter: (kind: string, projectId: string | null) =
           <span style={u.status === 'ARCHIVED' ? { opacity: 0.55 } : undefined}>
             {u.name} <Typography.Text type="secondary" className="kz-mono">{u.id}</Typography.Text>
             {u.source === 'DIRECTORY' && <Tag style={{ marginLeft: 6 }}>{u.externalId === u.id ? L('目录', 'directory') : L(`目录 ${u.externalId}`, `directory ${u.externalId}`)}</Tag>}
-            {u.status === 'ARCHIVED' && <Tag color="red">{L('已撤销', 'removed')}</Tag>}
+            {u.status === 'ARCHIVED' && <Tag color="red">{u.source === 'DIRECTORY' ? L('已撤销', 'removed') : L('已归档', 'archived')}</Tag>}
             {Object.values(state.workspaces)
               .filter((w) => w.orgUnitId === u.id)
               .map((w) => (
@@ -61,6 +65,7 @@ export function OrgPage() {
   const canWorkspaces = can('workspace.manage', {});
   const [modal, setModal] = useState<null | 'unit' | 'project' | 'model' | 'group' | 'workspace' | 'rule' | { edit: string } | { ws: string } | { rehome: 'workspace' | 'group'; id: string }>(null);
   const canAccounts = can('account.manage', {});
+  const [lifecycle, setLifecycle] = useState<LifecycleTarget | null>(null);
   const orphaned = orphanedOrgObjects(state);
   const [form] = Form.useForm();
   const units = Object.values(state.orgUnits).filter((u) => u.status === 'ACTIVE');
@@ -113,6 +118,15 @@ export function OrgPage() {
       if (ok !== undefined) close();
     });
 
+  // Platform operations edit or archive a unit from either tree; directory units follow the directory.
+  const editUnit = (key: Key | undefined) => {
+    if (key === undefined || !canOrg) return;
+    const u = state.orgUnits[String(key)];
+    if (!u || u.source === 'DIRECTORY' || u.status !== 'ACTIVE') return;
+    form.setFieldsValue({ name: u.name, parentId: u.parentId });
+    setModal({ edit: u.id });
+  };
+
   const editWorkspace = (w: Workspace) => {
     form.setFieldsValue({ name: w.name, groupIds: w.groupIds, scopes: w.scopes, sourceWorkspaceIds: w.sourceWorkspaceIds });
     setModal({ ws: w.id });
@@ -141,20 +155,14 @@ export function OrgPage() {
                     <Tree
                       defaultExpandAll
                       treeData={treeOf(state, (k) => k === 'TEAM', L)}
-                      onSelect={([key]) => {
-                        if (!key || !canOrg) return;
-                        const u = state.orgUnits[String(key)]!;
-                        if (u.source === 'DIRECTORY' || u.status !== 'ACTIVE') return;
-                        form.setFieldsValue({ name: u.name, parentId: u.parentId });
-                        setModal({ edit: u.id });
-                      }}
+                      onSelect={([key]) => editUnit(key)}
                     />
                   </Card>
                 </Col>
                 <Col xs={24} lg={12}>
                   {Object.values(state.projects).map((p) => (
                     <Card key={p.id} title={`${L('项目组织', 'Project organization')} · ${p.name}`} style={{ marginBottom: 16 }}>
-                      <Tree defaultExpandAll treeData={treeOf(state, (k, pid) => k === 'PROJECT' && pid === p.id, L)} />
+                      <Tree defaultExpandAll treeData={treeOf(state, (k, pid) => k === 'PROJECT' && pid === p.id, L)} onSelect={([key]) => editUnit(key)} />
                     </Card>
                   ))}
                   {canOrg && (
@@ -198,7 +206,29 @@ export function OrgPage() {
                     { title: L('业务分组', 'Groups'), render: (_, w) => w.groupIds.map((g) => <Tag key={g}>{state.groups[g]?.name}</Tag>) },
                     { title: L('范围', 'Scopes'), render: (_, w) => w.scopes.join(', ') },
                     { title: L('来源工作区', 'Sources'), render: (_, w) => w.sourceWorkspaceIds.map((s) => <Tag key={s}>{state.workspaces[s]?.name}</Tag>) },
-                    { title: '', render: (_, w) => canWorkspaces && <Button type="link" size="small" onClick={() => editWorkspace(w)}>{L('编辑', 'Edit')}</Button> },
+                    { title: L('状态', 'Status'), render: (_, w) => (w.status === 'ARCHIVED' ? <Tag color="red">{L('已归档', 'Archived')}</Tag> : <Tag color="green">{L('使用中', 'Active')}</Tag>) },
+                    {
+                      title: '',
+                      render: (_, w) => (
+                        <Space size={0}>
+                          {canWorkspaces && w.status === 'ACTIVE' && (
+                            <Button type="link" size="small" onClick={() => editWorkspace(w)}>
+                              {L('编辑', 'Edit')}
+                            </Button>
+                          )}
+                          {w.status === 'ACTIVE' && can('workspace.archive', { workspaceId: w.id }) && (
+                            <Button type="link" size="small" danger onClick={() => setLifecycle({ object: 'workspace', action: 'archive', id: w.id })}>
+                              {L('归档', 'Archive')}
+                            </Button>
+                          )}
+                          {w.status === 'ARCHIVED' && canWorkspaces && (
+                            <Button type="link" size="small" onClick={() => setLifecycle({ object: 'workspace', action: 'restore', id: w.id })}>
+                              {L('恢复', 'Restore')}
+                            </Button>
+                          )}
+                        </Space>
+                      ),
+                    },
                   ]}
                 />
               </Card>
@@ -234,6 +264,23 @@ export function OrgPage() {
                         ) : (
                           unitPath(state, g.orgUnitId).map((u) => u.name).join(' / ')
                         ),
+                    },
+                    { title: L('状态', 'Status'), render: (_, g) => (g.status === 'ARCHIVED' ? <Tag color="red">{L('已归档', 'Archived')}</Tag> : <Tag color="green">{L('使用中', 'Active')}</Tag>) },
+                    {
+                      title: '',
+                      render: (_, g) => {
+                        // Archived by the admin of every workspace holding the group, or by platform operations.
+                        const holders = workspacesOfGroup(state, g.id);
+                        const may = holders.length ? holders.every((ws) => can('group.archive', { workspaceId: ws })) : canOrg;
+                        return (
+                          g.status === 'ACTIVE' &&
+                          may && (
+                            <Button type="link" size="small" danger onClick={() => setLifecycle({ object: 'group', action: 'archive', id: g.id })}>
+                              {L('归档', 'Archive')}
+                            </Button>
+                          )
+                        );
+                      },
                     },
                   ]}
                 />
@@ -377,6 +424,19 @@ export function OrgPage() {
               <Select allowClear options={unitOptions} />
             </Form.Item>
           )}
+          {modal !== null && typeof modal === 'object' && 'edit' in modal && (
+            <Button
+              danger
+              size="small"
+              onClick={() => {
+                const id = modal.edit;
+                close();
+                setLifecycle({ object: 'unit', action: 'archive', id });
+              }}
+            >
+              {L('归档该节点…', 'Archive this unit…')}
+            </Button>
+          )}
           {modal === 'project' && (
             <Form.Item name="vehicleModelId" label={L('车型', 'Vehicle model')}>
               <Select allowClear options={Object.keys(state.vehicleModels).map((m) => ({ value: m, label: m }))} />
@@ -419,7 +479,14 @@ export function OrgPage() {
                 </>
               )}
               <Form.Item name="groupIds" label={L('业务分组', 'Business groups')}>
-                <Select mode="multiple" options={Object.values(state.groups).map((g) => ({ value: g.id, label: g.name }))} />
+                <Select
+                  mode="multiple"
+                  options={Object.values(state.groups).map((g) => {
+                    // An archived group a workspace holds may stay; it is never added anew.
+                    const held = typeof modal === 'object' && modal !== null && 'ws' in modal && !!state.workspaces[modal.ws]?.groupIds.includes(g.id);
+                    return { value: g.id, label: g.status === 'ARCHIVED' ? `${g.name}（${L('已归档', 'archived')}）` : g.name, disabled: g.status === 'ARCHIVED' && !held };
+                  })}
+                />
               </Form.Item>
               <Form.Item name="scopes" label={L('范围', 'Scopes')}>
                 <Select mode="multiple" options={SCOPES.map((s) => ({ value: s, label: s }))} />
@@ -431,6 +498,7 @@ export function OrgPage() {
           )}
         </Form>
       </Modal>
+      <LifecycleModal target={lifecycle} onClose={() => setLifecycle(null)} />
     </div>
   );
 }

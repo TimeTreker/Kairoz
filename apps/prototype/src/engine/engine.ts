@@ -5,7 +5,7 @@
 import { produce } from 'immer';
 import type { Draft } from 'immer';
 import { authorize } from '../domain/authz.ts';
-import type { Action, AuthzTarget, Grant } from '../domain/authz.ts';
+import type { Action, AuthzResult, AuthzTarget, Grant } from '../domain/authz.ts';
 import { ForbiddenError, unauthenticated } from '../domain/errors.ts';
 import { newId } from '../domain/ids.ts';
 import { nowOf } from './clock.ts';
@@ -102,7 +102,9 @@ export class Engine {
           },
           allow: (action, target) => {
             if (!actor) throw new Error(`system context cannot authorize ${action}`);
-            const decision = authorize(actor.grants, action, target);
+            // An archived workspace is closed to everything but platform operations restoring it.
+            const archived = target.workspaceId !== undefined && s.workspaces[target.workspaceId]?.status === 'ARCHIVED' && action !== 'workspace.manage';
+            const decision: AuthzResult = archived ? { ok: false, reason: 'WORKSPACE_ARCHIVED' } : authorize(actor.grants, action, target);
             const { type, id, ...scope } = target;
             if (!decision.ok) throw new ForbiddenError(action, decision.reason, { type, id, ...scope });
             pushAudit(s, {

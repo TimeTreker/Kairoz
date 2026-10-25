@@ -9,6 +9,7 @@ type Pattern = [RegExp, (g: string[]) => string];
 const STATUS: Record<string, string> = { available: '可用', maintenance: '维护中', retired: '已报废' };
 const CONTROL: Record<string, string> = { accessControl: '访问控制', uploadControl: '上传控制', processingControl: '处理控制' };
 const SIDE: Record<string, string> = { EDGE: '车端', CLOUD: '云端' };
+const STAGE: Record<string, string> = { DRAFT: '草稿', SUBMITTED: '已提交', DCL_READY: 'DCL Ready', TESTING: '测试中', VERIFIED: '已验证' };
 const HELD: Record<string, string> = { 'a rollback': '是回滚', paused: '已暂停', cancelled: '已取消', rolled_back: '已回滚' };
 
 /** Problem patterns, most specific first; capture groups feed the Chinese text. */
@@ -29,6 +30,28 @@ const PROBLEMS: Pattern[] = [
   [/reserved for (.+); release it first/, ([p]) => `已预约（${p}），请先解除预约`],
   [/the vehicle group asked for is no longer available/, () => '申请的车辆组已不可用'],
   [/already a vehicle of the borrowing workspace/, () => '借用方工作区已经有这辆车'],
+  // Archiving, restoring and environment moves
+  [/workspace (.+) takes it as a source/, ([w]) => `工作区 ${w} 以它为集成来源`],
+  [/Feature (\S+) is in stage (\w+)/, ([f, st]) => `Feature ${f} 尚未结束（${STAGE[st!] ?? st}）`],
+  [/candidate (.+) is open/, ([c]) => `集成候选 ${c} 尚未结束`],
+  [/merge preview (\S+) is open/, ([p]) => `合并预览 ${p} 尚未结束`],
+  [/simulation (\S+) is running/, ([r]) => `仿真实例 ${r} 正在运行`],
+  [/(\S+) is reserved$/, ([r]) => `${r} 已被预约`],
+  [/personal simulation (\S+) of (\S+) is in use/, ([r, o]) => `${o} 的个人仿真 ${r} 仍在使用`],
+  [/the loan of (\S+) is open/, ([r]) => `${r} 的借用尚未结束`],
+  [/dispatch (\S+) is not finished/, ([d]) => `下发 ${d} 尚未结束`],
+  [/vehicle group (.+) has vehicles/, ([g]) => `车辆组 ${g} 仍有车辆`],
+  [/unit (.+) is active/, ([u]) => `下级组织 ${u} 仍在使用`],
+  [/group (.+) is active/, ([g]) => `业务分组 ${g} 仍在使用`],
+  [/workspace (.+) is active/, ([w]) => `工作区 ${w} 仍在使用`],
+  [/organization unit (.+) is archived/, ([u]) => `组织节点 ${u} 已归档`],
+  [/source workspace (.+) is archived/, ([w]) => `来源工作区 ${w} 已归档`],
+  [/group (.+) is archived/, ([g]) => `业务分组 ${g} 已归档`],
+  [/simulation instances are for development and testing/, () => '仿真实例只用于研发与测试环境'],
+  [/routes through vehicle group (.+); take it out first/, ([g]) => `属于车辆组“${g}”，请先移出`],
+  [/event (\S+) is still being processed/, ([e]) => `事件 ${e} 仍在处理中`],
+  [/team workspace (.+) uses it; production vehicles never serve team workspaces/, ([w]) => `团队工作区 ${w} 正在使用；量产车不能用于团队工作区`],
+  [/runs no formal policy set for software (\S+); roll one out to it first/, ([v]) => `没有运行适用于软件 ${v} 的正式策略集，请先通过配置 OTA 下发`],
   [/the vehicle group takes approved team test requests/, () => '车辆组下发需审批：请提交团队测试申请'],
   [/simulated health check failure/, () => '模拟的健康检查失败'],
   [/runs a derived development image/, () => '运行研发派生镜像'],

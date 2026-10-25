@@ -234,14 +234,15 @@ interface Membership {
   sourceWorkspaceIds: string[];
 }
 
-function checkMembership(s: Draft<State>, workspace: Pick<Workspace, 'id' | 'kind' | 'orgUnitId' | 'projectId' | 'vehicleModelId'>, m: Membership): void {
+/** `held` are the groups the workspace already holds: an archived one may stay, never be added. */
+function checkMembership(s: Draft<State>, workspace: Pick<Workspace, 'id' | 'kind' | 'orgUnitId' | 'projectId' | 'vehicleModelId'>, m: Membership, held: string[] = []): void {
   const unique = (xs: string[]) => new Set(xs).size === xs.length;
   if (!unique(m.groupIds) || !unique(m.scopes) || !unique(m.sourceWorkspaceIds)) {
     throw rule('DUPLICATE_MEMBERS', 'groups, scopes and sources must not contain duplicates');
   }
   for (const groupId of m.groupIds) {
     const group = getGroup(s, groupId);
-    if (group.status !== 'ACTIVE') throw rule('GROUP_ARCHIVED', `group ${groupId} is archived`);
+    if (group.status !== 'ACTIVE' && !held.includes(groupId)) throw rule('GROUP_ARCHIVED', `group ${groupId} is archived`);
     const unit = getUnit(s, group.orgUnitId);
     // Project and integration workspaces integrate the configurations of team groups as well as
     // their own; team workspaces hold only groups of their own team.
@@ -311,7 +312,7 @@ export function updateWorkspace(ctx: Ctx, id: string, input: Partial<Membership>
     scopes: input.scopes ?? ws.scopes,
     sourceWorkspaceIds: input.sourceWorkspaceIds ?? ws.sourceWorkspaceIds,
   };
-  checkMembership(ctx.s, ws, next);
+  checkMembership(ctx.s, ws, next, ws.groupIds);
   const removed = ws.groupIds.filter((g) => !next.groupIds.includes(g));
   const busy = removed.filter((g) => Object.values(ctx.s.features).some((f) => f.workspaceId === id && f.groupId === g));
   if (busy.length) throw rule('GROUP_IN_USE', 'groups with features in this workspace cannot be removed', { groupIds: busy });

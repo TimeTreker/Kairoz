@@ -2895,6 +2895,136 @@ export const SCRIPTS: Script[] = [
         "fail": "拒绝不改变任何状态。"
       }
     ]
+  },
+  {
+    "id": "lifecycle",
+    "name": "车辆环境迁移与组织归档",
+    "start": "demo",
+    "scenes": [
+      {
+        "id": "LV01",
+        "title": "车辆移出车辆组后转入测试环境",
+        "actor": "resource；workspace_manager",
+        "accounts": ["resource", "workspace_manager"],
+        "workspace": null,
+        "page": "车辆与车辆组 → 车辆台账 → 变更环境；车辆组",
+        "pre": "演示数据。",
+        "steps": [
+          "resource 在车辆台账对 VEH-003 点“变更环境”，选“测试”：提示“属于车辆组“转向研发车组”，请先移出”，不能变更。",
+          "workspace_manager（转向团队工作区）把 VEH-003 移出转向研发车组。",
+          "resource 再次变更到测试，原因“转入转向联调”：VEH-003 变为测试环境，整车软件与已生效配置不变；对话框中列出这次变更。workspace_manager 收到“VEH-003 的环境已变更”。"
+        ],
+        "done": "环境是车辆的使用边界，由车辆资源按授权变更并留痕。",
+        "fail": "车辆组、下发、预约、借用、运行中的仿真或处理中的事件未结束时不能变更。"
+      },
+      {
+        "id": "LV02",
+        "title": "量产只接收运行正式策略集的车辆",
+        "actor": "resource",
+        "accounts": ["resource"],
+        "workspace": null,
+        "page": "车辆台账 → 变更环境",
+        "pre": "LV01 完成。",
+        "steps": [
+          "对 VEH-001 选“量产”：列出“团队工作区 制动团队工作区 正在使用；量产车不能用于团队工作区”和“没有运行适用于软件 1.0 的正式策略集”。",
+          "对 SIM-021 选“量产”：“仿真实例只用于研发与测试环境”。"
+        ],
+        "done": "研发车、仿真不能直接变成量产车。",
+        "fail": "按钮保持不可用，平台也会拒绝。"
+      },
+      {
+        "id": "LV03",
+        "title": "量产车去台架复测再回来",
+        "actor": "release；resource",
+        "accounts": ["release", "resource"],
+        "workspace": "x89-project",
+        "page": "车辆组；车辆台账 → 变更环境",
+        "pre": "LV02 完成。",
+        "steps": [
+          "release 在 X89 项目研发把 VEH-202 移出 X89 量产车组（原因“台架复测”）。",
+          "resource 把 VEH-202 变更到测试，再变更回量产：它仍运行适用于 1.0 的策略集 1.0.0，可以回到量产。"
+        ],
+        "done": "环境变更不改变车上的软件和配置。",
+        "fail": "量产车回到量产前须运行适用于其软件的正式策略集。"
+      },
+      {
+        "id": "LV04",
+        "title": "有事务的工作区不能归档",
+        "actor": "workspace_manager",
+        "accounts": ["workspace_manager"],
+        "workspace": "team-steering",
+        "page": "工作台 → 归档本工作区",
+        "pre": "LV03 完成。",
+        "steps": [
+          "workspace_manager 在转向团队工作区的工作台点“归档本工作区…”：列出“工作区 X89 项目研发 以它为集成来源”、尚未结束的 Feature 与“仿真实例 SIM-022 正在运行”，“归档”不可用。"
+        ],
+        "done": "归档前须结束来源依赖、Feature、候选、合并、实例、预约、借用与下发。",
+        "fail": "平台同样拒绝。"
+      },
+      {
+        "id": "LV05",
+        "title": "归档后关闭，平台运维恢复",
+        "actor": "admin；resource",
+        "accounts": ["admin", "resource"],
+        "workspace": null,
+        "page": "组织与工作区 → 组织树、工作区",
+        "pre": "LV04 完成。",
+        "steps": [
+          "admin 在 X89 项目下新建节点“试验组”（x89-lab-unit），再新建项目工作区“X89 试验区”（x89-lab）。",
+          "在“工作区”对 X89 试验区点“归档”，原因“试验结束”：状态“已归档”；resource 的工作区切换中不再有它，平台拒绝其中的操作。",
+          "admin 点“恢复”，原因“重开试验”：恢复使用，历史中保留归档与恢复两条记录。"
+        ],
+        "done": "归档撤销入口与访问，不删除车辆归属和历史。",
+        "fail": "只有平台运维可以恢复。"
+      },
+      {
+        "id": "LV06",
+        "title": "归档业务分组",
+        "actor": "workspace_manager；admin",
+        "accounts": ["workspace_manager", "admin"],
+        "workspace": "team-brake",
+        "page": "工作台 → 业务分组；组织与工作区 → 工作区",
+        "pre": "LV05 完成。",
+        "steps": [
+          "workspace_manager 在制动团队工作区的工作台点“新建业务分组…”，建“制动预研组”（brake-lab，chassis.brakelab，研发），随后点它的“归档…”，原因“预研结束”（只有本工作区持有该分组）。",
+          "admin 编辑 X89 项目研发：业务分组中“制动预研组（已归档）”不可选；平台同样拒绝把它加入工作区（“业务分组已归档”）。制动团队工作区仍保留它（已归档），仍可编辑。"
+        ],
+        "done": "分组的文件、策略与提交保留，不再加入工作区或新建 Feature。",
+        "fail": "被其他工作区持有的分组须由各工作区管理员或平台运维归档。"
+      },
+      {
+        "id": "LV07",
+        "title": "归档组织节点",
+        "actor": "admin",
+        "accounts": ["admin"],
+        "workspace": null,
+        "page": "组织与工作区 → 组织树",
+        "pre": "LV06 完成。",
+        "steps": [
+          "admin 打开“试验组”节点，点“归档该节点…”：提示“工作区 X89 试验区 仍在使用”。",
+          "先归档 X89 试验区，再归档试验组：成功；这时恢复 X89 试验区会提示“组织节点 试验组 已归档”。",
+          "来自公司目录的节点（如制动团队）不能在平台中归档。"
+        ],
+        "done": "下级节点、分组与工作区都归档后才能归档节点。",
+        "fail": "目录节点随公司目录变化。"
+      },
+      {
+        "id": "N01",
+        "title": "越权的归档与环境变更",
+        "actor": "workspace_manager；integration_admin",
+        "accounts": ["workspace_manager", "integration_admin"],
+        "workspace": null,
+        "page": "引擎回放",
+        "pre": "演示数据。",
+        "steps": [
+          "workspace_manager 不能归档转向组：X89 项目研发也持有它。",
+          "workspace_manager 不能变更车辆环境。",
+          "integration_admin 不能恢复工作区。"
+        ],
+        "done": "每个动作只由一条完整授权放行。",
+        "fail": "拒绝不改变任何状态。"
+      }
+    ]
   }
 ];
 

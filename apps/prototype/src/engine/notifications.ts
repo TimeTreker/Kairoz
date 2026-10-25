@@ -54,6 +54,7 @@ export type NotificationKind =
   | 'LOAN_OVERDUE'
   | 'LOAN_ENDED'
   | 'LOAN_RECALLED'
+  | 'VEHICLE_ENV_CHANGED'
   | 'GRANT_REVIEW'
   | 'ORPHANED_UNIT';
 
@@ -195,6 +196,13 @@ export function notificationsFor(s: State, actor: Actor, workspaceId: string): N
     if (!has(role)) continue;
     for (const r of workspaceVehicles(s, workspaceId).filter((x) => x.status === 'MAINTENANCE')) {
       add(role, 'VEHICLE_MAINTENANCE', [r.id, r.status, r.updatedAt], { severity: 'WARNING', subject: r.id, detail: null, link: 'fleet/workspace', at: r.updatedAt });
+    }
+  }
+  // A vehicle the workspace uses moved to another environment: it may no longer fit its use here.
+  if (has('WORKSPACE_ADMIN')) {
+    const mine = new Set(s.workspaceResources[workspaceId] ?? []);
+    for (const c of s.environmentChanges.filter((x) => mine.has(x.resourceId) && fresh(x.at))) {
+      add('WORKSPACE_ADMIN', 'VEHICLE_ENV_CHANGED', [c.id], { severity: 'INFO', subject: c.resourceId, detail: `${c.from} → ${c.to}`, link: 'fleet/workspace', at: c.at });
     }
   }
   if (has('DCL_ENGINEER')) {

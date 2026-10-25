@@ -1,7 +1,10 @@
 import { Badge, Button, Card, Col, Flex, Row, Space, Statistic, Typography } from 'antd';
 import { useState } from 'react';
 import type { ReactNode } from 'react';
-import { useActor, useCanOpen, useWorkspace } from '../app/hooks.ts';
+import { useActor, useCan, useCanOpen, useWorkspace } from '../app/hooks.ts';
+import { LifecycleModal } from '../components/lifecycle.tsx';
+import type { LifecycleTarget } from '../components/lifecycle.tsx';
+import { WorkspaceGroups } from '../components/workspace-groups.tsx';
 import { navigate } from '../app/router.ts';
 import { useEngineState } from '../app/store.ts';
 import { LabelTag, Mono, RoleTag, StageTag } from '../components/common.tsx';
@@ -60,6 +63,8 @@ export function WorkbenchPage() {
   const cards: ReactNode[] = [];
   const [changeOf, setChangeOf] = useState<string | null>(null);
   const [fitOfId, setFitOf] = useState<string | null>(null);
+  const [lifecycle, setLifecycle] = useState<LifecycleTarget | null>(null);
+  const can = useCan();
   const features = workspace ? visibleFeatures(state, actor, workspace.id) : [];
 
   if (roles.includes('BUSINESS_DEV') && workspace) {
@@ -215,6 +220,12 @@ export function WorkbenchPage() {
               <LoanStatusTag loan={l} />
             </Row2>
           ))}
+        <WorkspaceGroups workspaceId={workspace.id} onArchive={setLifecycle} />
+        {can('workspace.archive', { workspaceId: workspace.id }) && (
+          <Button type="link" danger size="small" style={{ paddingLeft: 0, marginTop: 8 }} onClick={() => setLifecycle({ object: 'workspace', action: 'archive', id: workspace.id })}>
+            {L('归档本工作区…', 'Archive this workspace…')}
+          </Button>
+        )}
       </Card>,
     );
   }
@@ -457,6 +468,7 @@ export function WorkbenchPage() {
       )}
       <SoftwareChangeDrawer changeId={changeOf} onClose={() => setChangeOf(null)} />
       <GroupFitDrawer resourceId={fitOfId} onClose={() => setFitOf(null)} />
+      <LifecycleModal target={lifecycle} onClose={() => setLifecycle(null)} />
     </div>
   );
 }

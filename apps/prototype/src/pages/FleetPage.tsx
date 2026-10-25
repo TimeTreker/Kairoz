@@ -8,6 +8,7 @@ import { PersonalSims } from '../components/personal-sim.tsx';
 import { SimSoftwareDrawer, isDerivedImage } from '../components/sim-software.tsx';
 import { SoftwareChangeDrawer } from '../components/software-change.tsx';
 import { LoanVehicleTag, LoansPanel } from '../components/loans.tsx';
+import { EnvironmentModal } from '../components/environment.tsx';
 import { DeliveryTag } from '../components/testing.tsx';
 import { GroupFitDrawer, SoftwareUpdateTag, UpdateSoftwareModal, useCanUpdateSoftware } from '../components/vehicle-software.tsx';
 import { fitOf } from '../engine/delivery.ts';
@@ -673,6 +674,7 @@ function Registry() {
   const [registering, setRegistering] = useState(false);
   const [confirming, setConfirming] = useState<Resource | null>(null);
   const [statusOf, setStatusOf] = useState<Resource | null>(null);
+  const [envOf, setEnvOf] = useState<string | null>(null);
   const [reporting, setReporting] = useState<Resource | null>(null);
   const [keying, setKeying] = useState<Resource | null>(null);
   const [clientOf, setClientOf] = useState<string | null>(null);
@@ -735,6 +737,9 @@ function Registry() {
             <Button type="link" size="small" onClick={() => (sf.setFieldsValue({ status: r.status, reason: '' }), setStatusOf(r))}>
               {L('状态', 'Status')}
             </Button>
+            <Button type="link" size="small" onClick={() => setEnvOf(r.id)}>
+              {L('变更环境', 'Change environment')}
+            </Button>
             {r.deviceKey ? (
               <Button type="link" size="small" onClick={() => setClientOf(r.id)}>
                 {L('客户端状态', 'Client state')}
@@ -749,6 +754,7 @@ function Registry() {
       />
       <ClientReportDrawer resourceId={clientOf} workspaceId={null} onClose={() => setClientOf(null)} />
       <SimSoftwareDrawer resourceId={imageOf} onClose={() => setImageOf(null)} />
+      <EnvironmentModal resourceId={envOf} onClose={() => setEnvOf(null)} />
       <Modal
         open={keying !== null}
         title={L(`登记设备密钥 · ${keying?.id ?? ''}`, `Register device key · ${keying?.id ?? ''}`)}

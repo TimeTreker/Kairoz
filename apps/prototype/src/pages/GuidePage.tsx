@@ -87,6 +87,20 @@ export const SCENARIOS: Scenario[] = [
     ],
   },
   {
+    key: 'lifecycle',
+    titleZh: '车辆环境迁移与组织归档',
+    titleEn: 'Vehicle environments and archiving',
+    steps: [
+      { account: 'resource', page: 'fleet/registry', zh: '在车辆台账对 VEH-003 点“变更环境”，选“测试”', en: 'In the registry click Change environment on VEH-003 and pick Testing', expectZh: '它还在转向研发车组：先移出才能变更', expectEn: 'It still routes through the steering group: take it out first' },
+      { account: 'workspace_manager', workspace: 'team-steering', page: 'fleet/groups', zh: '把 VEH-003 移出转向研发车组', en: 'Take VEH-003 out of the steering vehicle group', expectZh: '车辆回到未分组', expectEn: 'The vehicle is ungrouped' },
+      { account: 'resource', page: 'fleet/registry', zh: '再变更到测试，写明原因', en: 'Move it to Testing again, with a reason', expectZh: '环境变为测试，软件与已生效配置不变；转向团队收到通知', expectEn: 'It is a testing vehicle now, with the same software and configuration; the steering team is told' },
+      { account: 'resource', page: 'fleet/registry', zh: '对 VEH-001 选“量产”', en: 'Pick Production for VEH-001', expectZh: '团队工作区在用、没有运行适用于其软件的正式策略集：不能转量产', expectEn: 'A team workspace uses it and it runs no formal set for its software: no production' },
+      { account: 'workspace_manager', workspace: 'team-steering', page: 'workbench', zh: '在工作台点“归档本工作区…”', en: 'On the workbench click Archive this workspace…', expectZh: '列出来源依赖、未结束的 Feature 与运行中的仿真，不能归档', expectEn: 'Source use, open Features and a running simulation are listed; it cannot be archived' },
+      { account: 'workspace_manager', workspace: 'team-brake', page: 'workbench', zh: '在“业务分组”新建一个研发组，再归档它', en: 'Under Business groups create a development group, then archive it', expectZh: '只有本工作区持有的组可由本区管理员归档；归档后不再加入工作区或新建 Feature', expectEn: 'Only a group no other workspace holds is archived by this admin; it then joins no workspace and starts no Feature' },
+      { account: 'admin', page: 'org', zh: '在“工作区”归档一个没有事务的工作区，再“恢复”', en: 'Under Workspaces archive a workspace with nothing in flight, then Restore it', expectZh: '归档后从工作区切换中消失、拒绝一切操作；恢复后历史保留两条', expectEn: 'Archived it leaves the switcher and refuses every action; after the restore both entries stay in the history' },
+    ],
+  },
+  {
     key: 'intake',
     titleZh: 'DCL 接入 · 敏感文件审核',
     titleEn: 'DCL intake · sensitive review',

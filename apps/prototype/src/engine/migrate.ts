@@ -124,7 +124,14 @@ function to13(s: Saved): void {
   s.schema = 13;
 }
 
-const STEPS: Record<number, (s: Saved) => void> = { 6: to7, 7: to8, 8: to9, 9: to10, 10: to11, 11: to12, 12: to13 };
+/** Schema 14: vehicle environment moves and the archive / restore history of org objects. */
+function to14(s: Saved): void {
+  s.environmentChanges ??= [];
+  s.lifecycleEvents ??= [];
+  s.schema = 14;
+}
+
+const STEPS: Record<number, (s: Saved) => void> = { 6: to7, 7: to8, 8: to9, 9: to10, 10: to11, 11: to12, 12: to13, 13: to14 };
 
 /** The state at the current schema, or null when it cannot be read or is too old. Mutates `raw`. */
 export function migrate(raw: unknown): State | null {

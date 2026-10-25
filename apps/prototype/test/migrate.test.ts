@@ -4,9 +4,18 @@ import { migrate } from '../src/engine/migrate.ts';
 import { demoState } from '../src/engine/seed.ts';
 import { STATE_SCHEMA } from '../src/engine/types.ts';
 
-/** A schema 12 save: a copy of a demo (today's by default) without the fields schema 13 added. */
-function schema12(demo: unknown = demoState()): Record<string, any> {
+/** A schema 13 save: a copy of a demo (today's by default) without the fields schema 14 added. */
+function schema13(demo: unknown = demoState()): Record<string, any> {
   const s = JSON.parse(JSON.stringify(demo)) as Record<string, any>;
+  s.schema = 13;
+  delete s.environmentChanges;
+  delete s.lifecycleEvents;
+  return s;
+}
+
+/** A schema 12 save: a schema 13 save without the fields schema 13 added. */
+function schema12(demo: unknown = demoState()): Record<string, any> {
+  const s = schema13(demo);
   s.schema = 12;
   for (const d of Object.values(s.deployments) as any[]) {
     delete d.trigger;
@@ -148,6 +157,14 @@ describe('saved state migration', () => {
     assert.deepEqual(migrated.applicability, []);
     assert.equal(migrated.directory, null);
     assert.deepEqual(migrated.releases, current.releases);
+  });
+
+  test('a schema 13 save gains empty environment moves and lifecycle history', () => {
+    const current = JSON.parse(JSON.stringify(demoState()));
+    const migrated = migrate(schema13(current))!;
+    assert.equal(migrated.schema, STATE_SCHEMA);
+    assert.deepEqual([migrated.environmentChanges, migrated.lifecycleEvents], [[], []]);
+    assert.deepEqual(migrated, current);
   });
 
   test('a schema 12 save counts finished targets as pushed and gains empty loans and follows', () => {

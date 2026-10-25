@@ -13,7 +13,7 @@ import type { Notification, NotificationKind } from '../engine/notifications.ts'
 import type { State } from '../engine/types.ts';
 import { useI18n } from '../i18n/i18n.tsx';
 import type { Bilingual } from '../i18n/i18n.tsx';
-import { CHANGE_OUTCOME_LABELS, STAGE_LABELS, setName } from '../i18n/vocab.ts';
+import { CHANGE_OUTCOME_LABELS, ENV_LABELS, STAGE_LABELS, setName } from '../i18n/vocab.ts';
 import { when } from './common.tsx';
 
 /** What a notification is about, for its tag and the filter. */
@@ -49,6 +49,7 @@ export const NOTIFICATION_CATEGORY: Record<NotificationKind, string> = {
   LOAN_OVERDUE: 'VEHICLE',
   LOAN_ENDED: 'VEHICLE',
   LOAN_RECALLED: 'VEHICLE',
+  VEHICLE_ENV_CHANGED: 'VEHICLE',
   GRANT_REVIEW: 'ORG',
   ORPHANED_UNIT: 'ORG',
 };
@@ -175,6 +176,11 @@ export function useNotificationText() {
       }
       case 'LOAN_RECALLED':
         return { title: L(`借用的 ${s} 已被收回`, `Borrowed ${s} was recalled`), body: d };
+      case 'VEHICLE_ENV_CHANGED': {
+        const [from, to] = d.split(' → ');
+        const env = (e?: string) => B(ENV_LABELS[e ?? ''] as Bilingual | undefined, e ?? '');
+        return { title: L(`${s} 的环境已变更`, `${s} moved to another environment`), body: L(`${env(from)} → ${env(to)}；检查它在本工作区的车辆组与用途。`, `${env(from)} → ${env(to)}; check its groups and use in this workspace.`) };
+      }
       case 'GRANT_REVIEW':
         return { title: L(`${s} 调岗后待复核授权`, `Grants of ${s} to review after a move`), body: d };
       case 'ORPHANED_UNIT':
