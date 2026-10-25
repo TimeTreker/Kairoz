@@ -75,7 +75,7 @@ export const scenes: Record<string, SceneSpec> = {
       w.eq(w.s.groupMembers['VEH-004'], group(w, '制动研发车组'), 'it joined the brake group');
       w.check(w.s.workspaceResources['team-brake']!.includes('VEH-004') && w.s.workspaceResources['team-adc-system']!.includes('VEH-004'), 'in the borrower’s list and still in the lender’s');
       const events = w.s.vehicleGroupEvents.filter((e) => e.resourceId === 'VEH-004').slice(-2).map((e) => [e.kind, e.reason]);
-      w.eq(events, [['MEMBER_REMOVED', '借出至 制动团队工作区'], ['MEMBER_ADDED', '借用：AEB 联合制动验证']], 'both groups record it');
+      w.eq(events, [['LENT_OUT', '制动团队工作区'], ['BORROWED_IN', 'AEB 联合制动验证']], 'both groups record it');
       w.check(has(w, 'workspace_manager', 'team-brake', 'LOAN_DECIDED', 'VEH-004'), 'the borrower is told');
     },
   },

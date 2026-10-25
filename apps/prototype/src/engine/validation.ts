@@ -10,7 +10,7 @@ import { newId } from '../domain/ids.ts';
 import type { Env } from '../domain/vocabulary.ts';
 import { authorizeFeature, displayName, latestRelease } from './config.ts';
 import type { Ctx } from './engine.ts';
-import { activeLoanOf, authorizePersonal, directTargetProblems, isOverdue, getResource, membersOf, pendingDeploymentOf, pendingImageChangeOf, pendingSoftwareUpdateOf, recordGroupBinding, softwareKey } from './fleet.ts';
+import { authorizePersonal, directTargetProblems, getResource, livePublication, membersOf, occupancyProblems, pendingDeploymentOf, pendingImageChangeOf, recordGroupBinding, softwareKey } from './fleet.ts';
 import { getGroup } from './org.ts';
 import { commitSnapshot, resolveFiles } from './snapshots.ts';
 import { setInEffect } from './release.ts';
@@ -173,9 +173,7 @@ export function vehicleDispatchProblems(s: State, feature: Feature, commitId: st
   const pending = pendingDeploymentOf(s, r.id);
   if (pending) problems.push(`vehicle is waiting for deployment ${pending}`);
   if (pendingImageChangeOf(s, r.id)) problems.push('waiting for an image change');
-  if (pendingSoftwareUpdateOf(s, r.id)) problems.push('waiting for a software update');
-  const loan = activeLoanOf(s, r.id);
-  if (loan && isOverdue(s, loan)) problems.push(`loan overdue since ${loan.dueDate}; extend or return it`);
+  problems.push(...occupancyProblems(s, r.id, feature.workspaceId));
   const target = featureTarget(s, feature, commitId, g, r, disabledPolicies);
   if (target.problem) problems.push(target.problem);
   return problems;
@@ -432,6 +430,23 @@ export function cancelDeployment(ctx: Ctx, deploymentId: string, reason: string)
   }
   d.status = 'CANCELLED';
   d.updatedAt = ctx.now;
+  if (d.kind === 'FEATURE') for (const vgId of d.vehicleGroupIds) restorePublication(ctx, vgId);
+}
+
+/**
+ * After a Feature dispatch is cancelled for every member of a group, the group's publication
+ * returns to the latest dispatch that still stands there, so vehicles that join later follow what
+ * the group actually runs. Cancelling never rolls back vehicles.
+ */
+function restorePublication(ctx: Ctx, vehicleGroupId: string): void {
+  const g = ctx.s.vehicleGroups[vehicleGroupId];
+  if (!g || g.publication?.kind !== 'FEATURE' || livePublication(ctx.s, g)) return;
+  const standing = Object.values(ctx.s.deployments)
+    .filter((x) => x.kind === 'FEATURE' && x.trigger === 'DISPATCH' && x.commitId && x.targets.some((t) => t.vehicleGroupId === g.id && t.status !== 'CANCELLED'))
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.id.localeCompare(a.id))[0];
+  if (!standing) return;
+  const config = ctx.s.resolvedConfigs[standing.resolvedConfigId];
+  recordGroupBinding(ctx, g.id, { kind: 'FEATURE', featureId: standing.subjectId, commitId: standing.commitId!, disabledPolicies: [...(config?.disabledPolicies ?? [])] });
 }
 
 /**
@@ -652,9 +667,7 @@ export function candidateVehicleProblems(s: State, c: Candidate, rid: string): s
   const pending = pendingDeploymentOf(s, rid);
   if (pending) problems.push(`${rid}: waiting for deployment ${pending}`);
   if (pendingImageChangeOf(s, rid)) problems.push(`${rid}: waiting for an image change`);
-  if (pendingSoftwareUpdateOf(s, rid)) problems.push(`${rid}: waiting for a software update`);
-  const loan = activeLoanOf(s, rid);
-  if (loan && isOverdue(s, loan)) problems.push(`${rid}: loan overdue since ${loan.dueDate}; extend or return it`);
+  problems.push(...occupancyProblems(s, rid, c.testWorkspaceId).map((p) => `${rid}: ${p}`));
   // Integration tests name real software versions; a derived development image is not one.
   if (r.imageId && s.images[r.imageId]?.derived) problems.push(`${rid}: runs a derived development image`);
   return problems;

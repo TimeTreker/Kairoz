@@ -555,6 +555,10 @@ export const GROUP_EVENT_LABELS: Record<string, Bilingual> = {
   CREATED: b('创建', 'Created'),
   MEMBER_ADDED: b('加入车辆', 'Vehicle added'),
   MEMBER_REMOVED: b('移出车辆', 'Vehicle removed'),
+  LENT_OUT: b('借出至', 'Lent to'),
+  BORROWED_IN: b('借用加入', 'Borrowed in'),
+  LOAN_RETURNED: b('借用归还', 'Loan returned'),
+  LOAN_RECALLED: b('借用收回', 'Loan recalled'),
   BOUND: b('发布', 'Published'),
   BASE_SET: b('设置基线', 'Base set'),
   ARCHIVED: b('归档', 'Archived'),
@@ -752,6 +756,7 @@ Object.assign(ERROR_LABELS, {
   NO_EXTENSION_PENDING: b('没有待处理的延期申请', 'No extension is waiting'),
   VEHICLE_ON_LOAN: b('车辆借用中：只有借用方可以使用，借用方只能通过归还移出', 'The vehicle is on loan: only the borrower uses it, and returns it to let it go'),
   INVALID_CLOCK_STEP: b('每次可将时间推进 1 到 30 天', 'Move the clock forward 1 to 30 days'),
+  LOAN_NOT_NEEDED: b('这辆车在本工作区的资源池中且无人使用，请直接加入', 'The vehicle is in this workspace’s pools and nobody uses it; add it directly'),
 });
 export const LOAN_STATUS_LABELS: Record<string, Bilingual> = {
   REQUESTED: b('待审批', 'Requested'),

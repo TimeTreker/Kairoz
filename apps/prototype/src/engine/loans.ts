@@ -95,8 +95,9 @@ export function loanCatalog(s: State, workspaceId: string): CatalogEntry[] {
     .sort((a, b) => (a.type === b.type ? a.resourceId.localeCompare(b.resourceId) : a.type === 'PHYSICAL' ? -1 : 1));
 }
 
+/** Asking, withdrawing, extending and returning belong to the borrowing workspace's admin. */
 function allowBorrower(ctx: Ctx, l: Pick<Loan, 'id' | 'workspaceId'>, r: Resource) {
-  return ctx.allow('workspace.resources', { type: 'loan', id: l.id, workspaceId: l.workspaceId, scope: r.pool, env: r.env });
+  return ctx.allow('loan.request', { type: 'loan', id: l.id, workspaceId: l.workspaceId, scope: r.pool, env: r.env });
 }
 
 function allowResources(ctx: Ctx, l: Pick<Loan, 'id'>, r: Resource) {
@@ -107,9 +108,12 @@ function allowResources(ctx: Ctx, l: Pick<Loan, 'id'>, r: Resource) {
 export function requestLoan(ctx: Ctx, input: { workspaceId: string; resourceId: string; vehicleGroupId: string; dueDate: string; purpose: string }): string {
   const ws = getWorkspace(ctx.s, input.workspaceId);
   const r = getResource(ctx.s, input.resourceId);
-  ctx.allow('workspace.resources', { type: 'loan', id: r.id, workspaceId: ws.id, scope: r.pool, env: r.env });
+  ctx.allow('loan.request', { type: 'loan', id: r.id, workspaceId: ws.id, scope: r.pool, env: r.env });
   if (!lendable(r, ws)) throw rule('LOAN_NOT_LENDABLE', `${r.id} cannot be lent: production vehicles, personal simulations, retired vehicles and other models never are`);
   if ((ctx.s.workspaceResources[ws.id] ?? []).includes(r.id)) throw rule('ALREADY_IN_WORKSPACE', `${r.id} is already a vehicle of ${ws.name}`);
+  if (usersOf(ctx.s, r.id, ws.id).length === 0 && assignableVehicles(ctx.s, ws.id).some((x) => x.id === r.id)) {
+    throw rule('LOAN_NOT_NEEDED', `${r.id} is in ${ws.name}'s pools and nobody uses it; add it directly`);
+  }
   if (Object.values(ctx.s.loans).some((l) => l.resourceId === r.id && l.workspaceId === ws.id && (l.status === 'REQUESTED' || l.status === 'APPROVED'))) {
     throw conflict('LOAN_OPEN', `${ws.name} already has an open loan of ${r.id}`);
   }
@@ -162,7 +166,7 @@ export function answerLoanAsLender(ctx: Ctx, loanId: string, input: { workspaceI
   const r = getResource(ctx.s, l.resourceId);
   const lender = l.lenders.find((x) => x.workspaceId === input.workspaceId);
   if (!lender) throw notFound('lender', input.workspaceId);
-  ctx.allow('workspace.resources', { type: 'loan', id: l.id, workspaceId: lender.workspaceId, scope: r.pool, env: r.env });
+  ctx.allow('loan.lend', { type: 'loan', id: l.id, workspaceId: lender.workspaceId, scope: r.pool, env: r.env });
   if (l.status !== 'REQUESTED') throw rule('LOAN_NOT_PENDING', 'the loan request is no longer open');
   if (lender.decision !== 'PENDING') throw conflict('ALREADY_ANSWERED', `${lender.workspaceId} already answered`);
   const note = input.note?.trim() ?? '';
@@ -185,6 +189,7 @@ export function approvalProblems(s: State, l: Loan): string[] {
   const problems: string[] = [];
   const waiting = l.lenders.filter((x) => x.decision !== 'AGREED').map((x) => s.workspaces[x.workspaceId]?.name ?? x.workspaceId);
   if (waiting.length) problems.push(`waiting for ${waiting.join(', ')} to agree`);
+  if ((s.workspaceResources[l.workspaceId] ?? []).includes(r.id)) problems.push('already a vehicle of the borrowing workspace');
   const late = usersOf(s, r.id, l.workspaceId).filter((ws) => !l.lenders.some((x) => x.workspaceId === ws));
   if (late.length) problems.push(`${late.map((ws) => s.workspaces[ws]?.name ?? ws).join(', ')} started using the vehicle after the request; ask again`);
   if (r.status !== 'AVAILABLE') problems.push(`vehicle is ${r.status.toLowerCase()}`);
@@ -210,6 +215,7 @@ export function decideLoan(ctx: Ctx, loanId: string, input: { approve: boolean; 
   const r = getResource(ctx.s, l.resourceId);
   allowResources(ctx, l, r);
   if (l.status !== 'REQUESTED') throw rule('LOAN_NOT_PENDING', 'the loan request is no longer open');
+  if (l.requestedBy === ctx.user().username) throw rule('SELF_APPROVAL', 'nobody decides their own request');
   const note = input.note?.trim() ?? '';
   if (!input.approve) {
     if (!note) throw rule('REASON_REQUIRED', 'say why the loan is rejected');
@@ -221,11 +227,11 @@ export function decideLoan(ctx: Ctx, loanId: string, input: { approve: boolean; 
     const borrower = getWorkspace(ctx.s, l.workspaceId);
     const current = ctx.s.groupMembers[r.id];
     if (current) {
-      leaveGroup(ctx, current, r.id, `借出至 ${borrower.name}`);
+      leaveGroup(ctx, current, r.id, borrower.name, 'LENT_OUT');
       l.leftGroupId = current;
     }
     ctx.s.workspaceResources[l.workspaceId] = [...(ctx.s.workspaceResources[l.workspaceId] ?? []), r.id];
-    joinGroup(ctx, ctx.s.vehicleGroups[l.vehicleGroupId]!, r.id, `借用：${l.purpose}`);
+    joinGroup(ctx, ctx.s.vehicleGroups[l.vehicleGroupId]!, r.id, l.purpose, 'BORROWED_IN');
     l.status = 'APPROVED';
     l.softwareAtStart = r.integrationVersion;
   }
@@ -253,6 +259,9 @@ export function decideExtension(ctx: Ctx, loanId: string, approve: boolean): voi
   allowResources(ctx, l, getResource(ctx.s, l.resourceId));
   const ext = l.extensions.find((x) => x.status === 'PENDING');
   if (l.status !== 'APPROVED' || !ext) throw rule('NO_EXTENSION_PENDING', 'no extension is waiting');
+  if (ext.requestedBy === ctx.user().username) throw rule('SELF_APPROVAL', 'nobody decides their own request');
+  // Time may have passed since the request: an extension to a day already gone extends nothing.
+  if (approve && ext.dueDate <= todayOf(ctx.s)) throw rule('INVALID_DUE_DATE', 'the extension’s last day has passed; ask for a later one');
   ext.status = approve ? 'APPROVED' : 'REJECTED';
   ext.decidedBy = ctx.user().username;
   ext.decidedAt = ctx.now;
@@ -265,7 +274,7 @@ function endLoan(ctx: Ctx, l: Draft<Loan>, status: 'RETURNED' | 'RECALLED', note
   assertIdle(ctx.s, r.id);
   if (r.instance === 'RUNNING') throw rule('SIMULATION_RUNNING', `${r.id} is running; stop the instance first`);
   const vg = ctx.s.groupMembers[r.id];
-  if (vg && ctx.s.vehicleGroups[vg]?.workspaceId === l.workspaceId) leaveGroup(ctx, vg, r.id, status === 'RETURNED' ? '借用归还' : `借用收回：${note}`);
+  if (vg && ctx.s.vehicleGroups[vg]?.workspaceId === l.workspaceId) leaveGroup(ctx, vg, r.id, note, status === 'RETURNED' ? 'LOAN_RETURNED' : 'LOAN_RECALLED');
   r.reservation = null;
   ctx.s.workspaceResources[l.workspaceId] = (ctx.s.workspaceResources[l.workspaceId] ?? []).filter((id) => id !== r.id);
   for (const x of l.extensions) if (x.status === 'PENDING') x.status = 'REJECTED';
@@ -314,7 +323,7 @@ export function loansToAgree(s: State, actor: Actor, workspaceId: string): Loan[
     return (
       l.status === 'REQUESTED' &&
       l.lenders.some((x) => x.workspaceId === workspaceId && x.decision === 'PENDING') &&
-      authorize(actor.grants, 'workspace.resources', { workspaceId, scope: r.pool, env: r.env }).ok
+      authorize(actor.grants, 'loan.lend', { workspaceId, scope: r.pool, env: r.env }).ok
     );
   });
 }

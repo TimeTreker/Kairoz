@@ -6,6 +6,7 @@
 import { authorize } from '../domain/authz.ts';
 import type { Role } from '../domain/vocabulary.ts';
 import { blockedProductionVehicles } from './applicability.ts';
+import { DAY_MS, nowOf } from './clock.ts';
 import { mismatchesFor } from './delivery.ts';
 import type { Actor, Ctx } from './engine.ts';
 import { emergencyStopsOf } from './emergency.ts';
@@ -74,6 +75,9 @@ export interface Notification {
 /** Read marks kept per account and workspace; the oldest are dropped beyond this. */
 export const READ_LIMIT = 1000;
 
+/** Answers (a decision, a returned car, a finished update) stay this long on the platform clock. */
+export const ANSWER_DAYS = 14;
+
 /** The account's current notifications in a workspace: warnings first, then newest first. */
 export function notificationsFor(s: State, actor: Actor, workspaceId: string): Notification[] {
   const ws = s.workspaces[workspaceId];
@@ -89,6 +93,8 @@ export function notificationsFor(s: State, actor: Actor, workspaceId: string): N
     items.push({ id: JSON.stringify([role, kind, ...key]), role, kind, ...n });
   };
   const has = (role: Role) => roles.includes(role);
+  const now = Date.parse(nowOf(s));
+  const fresh = (at: string | null) => !at || now - Date.parse(at) <= ANSWER_DAYS * DAY_MS;
   const features = Object.values(s.features).filter((f) => f.workspaceId === workspaceId);
 
   if (has('BUSINESS_DEV')) {
@@ -121,7 +127,7 @@ export function notificationsFor(s: State, actor: Actor, workspaceId: string): N
   // The answer to an account's own software update request.
   const updater = (['BUSINESS_DEV', 'BUSINESS_TEST', 'WORKSPACE_ADMIN', 'VEHICLE_RESOURCE'] as const).find(has);
   if (updater) {
-    for (const q of Object.values(s.vehicleSoftwareRequests).filter((x) => x.workspaceId === workspaceId && x.requestedBy === actor.username && (x.status === 'APPLIED' || x.status === 'FAILED'))) {
+    for (const q of Object.values(s.vehicleSoftwareRequests).filter((x) => x.workspaceId === workspaceId && x.requestedBy === actor.username && (x.status === 'APPLIED' || x.status === 'FAILED') && fresh(x.answeredAt))) {
       add(updater, 'SOFTWARE_UPDATE', [q.id, q.status], { severity: q.status === 'FAILED' ? 'WARNING' : 'INFO', subject: q.resourceId, detail: `${q.toVersion} · ${q.status}`, link: 'fleet/workspace', at: q.answeredAt });
     }
   }
@@ -131,7 +137,7 @@ export function notificationsFor(s: State, actor: Actor, workspaceId: string): N
       if (!['DCL_READY', 'TESTING'].includes(f.stage) || !authorize(actor.grants, 'feature.dispatch', { workspaceId, groupId: f.groupId, env: 'development' }).ok) continue;
       add('BUSINESS_TEST', 'FEATURE_TO_TEST', [f.id, f.headCommitId, f.stage], { severity: 'INFO', subject: f.name, detail: f.stage, link: `features/${f.id}`, at: f.updatedAt });
     }
-    for (const r of testRequestsOf(s, workspaceId).filter((x) => x.requestedBy === actor.username && (x.status === 'APPROVED' || x.status === 'REJECTED'))) {
+    for (const r of testRequestsOf(s, workspaceId).filter((x) => x.requestedBy === actor.username && (x.status === 'APPROVED' || x.status === 'REJECTED') && fresh(x.decidedAt))) {
       add('BUSINESS_TEST', 'TEST_REQUEST_DECIDED', [r.id, r.status], { severity: r.status === 'REJECTED' ? 'WARNING' : 'INFO', subject: s.features[r.featureId]?.name ?? r.featureId, detail: r.status, link: `features/${r.featureId}`, at: r.decidedAt });
     }
   }
@@ -157,19 +163,21 @@ export function notificationsFor(s: State, actor: Actor, workspaceId: string): N
       add('WORKSPACE_ADMIN', 'LOAN_TO_AGREE', [l.id, l.status], { severity: 'WARNING', subject: l.resourceId, detail: s.workspaces[l.workspaceId]?.name ?? l.workspaceId, link: 'fleet/loans', at: l.requestedAt });
     }
     const r0 = (id: string) => s.resources[id]!;
-    const mine = borrowedBy(s, workspaceId).filter((l) => authorize(actor.grants, 'workspace.resources', { workspaceId, scope: r0(l.resourceId).pool, env: r0(l.resourceId).env }).ok);
+    const mine = borrowedBy(s, workspaceId).filter((l) => authorize(actor.grants, 'loan.request', { workspaceId, scope: r0(l.resourceId).pool, env: r0(l.resourceId).env }).ok);
     for (const l of mine) {
-      const ext = l.extensions.at(-1);
+      // The latest answer: an extension decided after the loan, else the loan's own decision.
+      const ext = l.extensions.filter((x) => x.status !== 'PENDING').at(-1);
       if (l.status === 'APPROVED' || l.status === 'REJECTED') {
-        const extended = l.status === 'APPROVED' && ext && ext.status !== 'PENDING';
-        const detail = extended ? `EXTENSION_${ext.status}` : l.status;
-        add('WORKSPACE_ADMIN', 'LOAN_DECIDED', [l.id, detail, ext?.decidedAt ?? null], { severity: detail.endsWith('REJECTED') ? 'WARNING' : 'INFO', subject: l.resourceId, detail, link: 'fleet/loans', at: extended ? ext.decidedAt : l.decidedAt });
+        const extended = l.status === 'APPROVED' && !!ext;
+        const detail = extended ? `EXTENSION_${ext!.status}` : l.status;
+        const at = extended ? ext!.decidedAt : l.decidedAt;
+        if (fresh(at)) add('WORKSPACE_ADMIN', 'LOAN_DECIDED', [l.id, detail, at], { severity: detail.endsWith('REJECTED') ? 'WARNING' : 'INFO', subject: l.resourceId, detail, link: 'fleet/loans', at });
       }
       if (isOverdue(s, l)) add('WORKSPACE_ADMIN', 'LOAN_OVERDUE', [l.id, l.dueDate], { severity: 'WARNING', subject: l.resourceId, detail: l.dueDate, link: 'fleet/loans', at: null });
-      if (l.status === 'RECALLED') add('WORKSPACE_ADMIN', 'LOAN_RECALLED', [l.id, l.status], { severity: 'WARNING', subject: l.resourceId, detail: l.endNote, link: 'fleet/loans', at: l.endedAt });
+      if (l.status === 'RECALLED' && fresh(l.endedAt)) add('WORKSPACE_ADMIN', 'LOAN_RECALLED', [l.id, l.status], { severity: 'WARNING', subject: l.resourceId, detail: l.endNote, link: 'fleet/loans', at: l.endedAt });
     }
-    for (const l of lentBy(s, workspaceId).filter((x) => x.status === 'RETURNED' || x.status === 'RECALLED')) {
-      if (!authorize(actor.grants, 'workspace.resources', { workspaceId, scope: r0(l.resourceId).pool, env: r0(l.resourceId).env }).ok) continue;
+    for (const l of lentBy(s, workspaceId).filter((x) => (x.status === 'RETURNED' || x.status === 'RECALLED') && fresh(x.endedAt))) {
+      if (!authorize(actor.grants, 'loan.lend', { workspaceId, scope: r0(l.resourceId).pool, env: r0(l.resourceId).env }).ok) continue;
       add('WORKSPACE_ADMIN', 'LOAN_ENDED', [l.id, l.status], { severity: 'INFO', subject: l.resourceId, detail: `${l.status} · ${l.softwareAtStart ?? '—'} → ${l.softwareAtEnd ?? '—'}`, link: 'fleet/workspace', at: l.endedAt });
     }
   }
@@ -200,7 +208,7 @@ export function notificationsFor(s: State, actor: Actor, workspaceId: string): N
     for (const p of Object.values(s.mergePlans).filter((x) => x.workspaceId === workspaceId && x.status === 'READY' && !isConfirmed(s, x))) {
       add('DCL_ENGINEER', 'PROCESSING_CONFIRM', [p.id, p.digest], { severity: 'INFO', subject: p.id, detail: null, link: 'integration', at: p.createdAt });
     }
-    for (const x of emergencyStopsOf(s, ws.vehicleModelId).filter((x) => x.requestedBy === actor.username && x.status !== 'REQUESTED')) {
+    for (const x of emergencyStopsOf(s, ws.vehicleModelId).filter((x) => x.requestedBy === actor.username && x.status !== 'REQUESTED' && fresh(x.decidedAt))) {
       add('DCL_ENGINEER', 'EMERGENCY_STOP', [x.id, x.status], { severity: 'INFO', subject: x.policyId, detail: x.status, link: 'release', at: x.decidedAt });
     }
   }

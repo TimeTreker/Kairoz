@@ -8,7 +8,7 @@ import type { PolicyCompatibility } from '../domain/compatibility.ts';
 import { conflict, notFound, rule } from '../domain/errors.ts';
 import { newId } from '../domain/ids.ts';
 import type { Ctx } from './engine.ts';
-import { directTargetProblems, membersOf, pendingDeploymentOf, pendingImageChangeOf, recordGroupBinding, softwareKey } from './fleet.ts';
+import { directTargetProblems, membersOf, occupancyProblems, pendingDeploymentOf, pendingImageChangeOf, recordGroupBinding, softwareKey } from './fleet.ts';
 import { latestRelease } from './config.ts';
 import { appliesTo, getRelease, setInEffect } from './release.ts';
 import { commitSnapshot, resolveFiles } from './snapshots.ts';
@@ -136,6 +136,7 @@ export function checkVehicleProblems(s: State, check: ApplicabilityCheck, rid: s
   const pending = pendingDeploymentOf(s, rid);
   if (pending) problems.push(`${rid}: waiting for deployment ${pending}`);
   if (pendingImageChangeOf(s, rid)) problems.push(`${rid}: waiting for an image change`);
+  problems.push(...occupancyProblems(s, rid, check.testWorkspaceId).map((p) => `${rid}: ${p}`));
   return problems;
 }
 

@@ -3,7 +3,9 @@ import { describe, test } from 'node:test';
 import { World } from '../acceptance/world.ts';
 import { addDays, todayOf } from '../src/engine/clock.ts';
 import * as dl from '../src/engine/delivery.ts';
+import { checkVehicleProblems } from '../src/engine/applicability.ts';
 import * as fleet from '../src/engine/fleet.ts';
+import { replaceGrants } from '../src/engine/identity.ts';
 import * as ln from '../src/engine/loans.ts';
 import * as nc from '../src/engine/notifications.ts';
 import { demoState } from '../src/engine/seed.ts';
@@ -26,6 +28,16 @@ function ask(w: World, rid = 'VEH-004'): string {
 function lend(w: World): string {
   const id = ask(w);
   w.as('adc_integrator', (c) => ln.answerLoanAsLender(c, id, { workspaceId: 'team-adc-system', agree: true }));
+  w.as('resource', (c) => ln.decideLoan(c, id, { approve: true }));
+  return id;
+}
+
+/** A loan of VEH-031 (X89 integration's testing car) to the ADC domain workspace, approved. */
+function lendIntegrationCar(w: World): string {
+  const id = w.as('adc_integrator', (c) =>
+    ln.requestLoan(c, { workspaceId: 'x89-adc-integration', resourceId: 'VEH-031', vehicleGroupId: groupId(w, 'ADC 域集成测试车组'), dueDate: due(w, 3), purpose: '域集成联调' }),
+  );
+  w.as('integration_admin', (c) => ln.answerLoanAsLender(c, id, { workspaceId: 'x89-integration', agree: true }));
   w.as('resource', (c) => ln.decideLoan(c, id, { approve: true }));
   return id;
 }
@@ -60,8 +72,8 @@ describe('borrowing', () => {
     assert.equal(w.s.groupFollows['VEH-004']?.reason, 'JOINED');
     const events = w.s.vehicleGroupEvents.filter((e) => e.resourceId === 'VEH-004').map((e) => [e.vehicleGroupId, e.kind, e.reason]);
     assert.deepEqual(events.slice(-2), [
-      [adcGroup, 'MEMBER_REMOVED', '借出至 制动团队工作区'],
-      [groupId(w, '制动研发车组'), 'MEMBER_ADDED', '借用：AEB 联合制动验证'],
+      [adcGroup, 'LENT_OUT', '制动团队工作区'],
+      [groupId(w, '制动研发车组'), 'BORROWED_IN', 'AEB 联合制动验证'],
     ]);
     assert.deepEqual(kinds(w, 'workspace_manager', 'team-brake').filter(([k]) => k === 'LOAN_DECIDED'), [['LOAN_DECIDED', 'VEH-004']]);
   });
@@ -176,5 +188,68 @@ describe('borrowing', () => {
     assert.equal(fleet.simulationWorkspace(w.s, w.s.resources['SIM-021']!), 'team-steering');
     w.as('workspace_manager', (c) => fleet.startSimulation(c, 'SIM-021'));
     assert.equal(w.s.groupMembers['SIM-021'], steeringGroup);
+  });
+
+  test('only workspace admins ask and lend; nobody decides their own request', () => {
+    const w = new World(demoState());
+    const vg = groupId(w, '制动研发车组');
+    w.denied('resource', (c) => ln.requestLoan(c, { workspaceId: 'team-brake', resourceId: 'VEH-004', vehicleGroupId: vg, dueDate: due(w, 7), purpose: 'x' }));
+    const id = ask(w);
+    w.denied('resource', (c) => ln.answerLoanAsLender(c, id, { workspaceId: 'team-adc-system', agree: true }));
+    w.as('adc_integrator', (c) => ln.answerLoanAsLender(c, id, { workspaceId: 'team-adc-system', agree: true }));
+    // workspace_manager also gets vehicle resources: still not for a request of their own.
+    const grants = [
+      { role: 'WORKSPACE_ADMIN', workspaces: ['team-brake', 'team-steering'], groups: [], scopes: [], envs: ['development', 'testing'] },
+      { role: 'VEHICLE_RESOURCE', workspaces: ['*'], groups: [], scopes: ['Vehicle', 'Chassis', 'ADC', 'CDC'], envs: ['development', 'testing', 'production'] },
+    ];
+    w.as('admin', (c) => replaceGrants(c, 'workspace_manager', grants));
+    w.fails('SELF_APPROVAL', () => w.as('workspace_manager', (c) => ln.decideLoan(c, id, { approve: true })));
+  });
+
+  test('a car the workspace can simply add is not borrowed, and a car it already has is not lent to it', () => {
+    const w = new World(demoState());
+    w.as('resource', (c) => fleet.registerPhysical(c, { id: 'VEH-092', vin: 'LSDEM0X8900000092', vehicleModelId: 'X89', env: 'development', pool: 'Chassis', displayName: '底盘公共车' }));
+    w.fails('LOAN_NOT_NEEDED', () => ask(w, 'VEH-092'));
+    // Steering uses it; brake asks; steering agrees and lets it go; brake then adds it directly.
+    w.as('workspace_manager', (c) => fleet.addWorkspaceVehicle(c, 'team-steering', 'VEH-092'));
+    const id = ask(w, 'VEH-092');
+    w.as('workspace_manager', (c) => ln.answerLoanAsLender(c, id, { workspaceId: 'team-steering', agree: true }));
+    w.as('workspace_manager', (c) => fleet.removeWorkspaceVehicle(c, 'team-steering', 'VEH-092'));
+    w.as('workspace_manager', (c) => fleet.addWorkspaceVehicle(c, 'team-brake', 'VEH-092'));
+    assert.ok(ln.approvalProblems(w.s, w.s.loans[id]!).includes('already a vehicle of the borrowing workspace'));
+    w.fails('LOAN_NOT_APPROVABLE', () => w.as('resource', (c) => ln.decideLoan(c, id, { approve: true })));
+  });
+
+  test('the lender reaches a lent car by no path: direct tests, reservations', () => {
+    const w = new World(demoState());
+    lendIntegrationCar(w);
+    const check = { vehicleModelId: 'X89', version: '1.0', testWorkspaceId: 'x89-integration' } as unknown as Parameters<typeof checkVehicleProblems>[1];
+    assert.ok(checkVehicleProblems(w.s, check, 'VEH-031').some((p) => p.startsWith('VEH-031: lent to ADC 域集成 until')));
+    w.as('adc_integrator', (c) => fleet.removeGroupMember(c, groupId(w, 'ADC 域集成测试车组'), 'VEH-031', '单独测试'));
+    w.as('adc_integrator', (c) => fleet.reserveVehicle(c, 'x89-adc-integration', 'VEH-031', '联调'));
+    w.fails('VEHICLE_ON_LOAN', () => w.as('integration_admin', (c) => fleet.releaseReservation(c, 'x89-integration', 'VEH-031')));
+    w.fails('VEHICLE_NOT_IN_WORKSPACE', () => w.as('cdc_integrator', (c) => fleet.releaseReservation(c, 'team-cdc-hmi', 'VEH-031')));
+  });
+
+  test('an overdue car is blocked, not a mismatch; an extension to a day gone is refused', () => {
+    const w = new World(demoState());
+    const id = lend(w);
+    const q = w.as('business', (c) => vs.requestVehicleSoftware(c, 'team-brake', 'VEH-004', { version: '1.0', reason: '与车组一致' }));
+    w.as('workspace_manager', (c) => ln.requestExtension(c, id, { dueDate: due(w, 9), reason: '还需两天' }));
+    w.sys((c) => advanceClock(c, 10));
+    w.sys((c) => completeVehicleSoftware(c, q, 'APPLIED'));
+    const fit = dl.fitOf(w.s, 'VEH-004')!;
+    assert.equal(fit.state, 'BLOCKED', 'it fits; only the loan stops the push');
+    assert.ok(!kinds(w, 'business', 'team-brake').some(([k]) => k === 'GROUP_MISMATCH'));
+    w.fails('INVALID_DUE_DATE', () => w.as('resource', (c) => ln.decideExtension(c, id, true)));
+  });
+
+  test('answers leave the notification center after two weeks', () => {
+    const w = new World(demoState());
+    const id = lend(w);
+    w.as('workspace_manager', (c) => ln.returnLoan(c, id));
+    assert.ok(kinds(w, 'adc_integrator', 'team-adc-system').some(([k]) => k === 'LOAN_ENDED'));
+    w.sys((c) => advanceClock(c, 15));
+    assert.ok(!kinds(w, 'adc_integrator', 'team-adc-system').some(([k]) => k === 'LOAN_ENDED'));
   });
 });

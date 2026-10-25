@@ -74,6 +74,9 @@ export const ACTIONS = {
   'simulation.manage': { roles: ['WORKSPACE_ADMIN', 'VEHICLE_RESOURCE'], env: 'target' },
   'workspace.resources': { roles: ['WORKSPACE_ADMIN', 'VEHICLE_RESOURCE'], env: 'target' },
   'vehicleGroup.manage': { roles: ['WORKSPACE_ADMIN', 'CONFIG_RELEASE'], env: 'target' },
+  /** Borrowing (借用): the borrowing workspace's admin asks, extends and returns; a using workspace's admin lends. */
+  'loan.request': { roles: ['WORKSPACE_ADMIN'], env: 'target' },
+  'loan.lend': { roles: ['WORKSPACE_ADMIN'], env: 'target' },
   /** Asking the vehicle OTA system to put a vehicle on another software version (整车软件更新). */
   'vehicle.updateSoftware': { roles: ['BUSINESS_DEV', 'BUSINESS_TEST', 'WORKSPACE_ADMIN', 'VEHICLE_RESOURCE'], env: 'target', excludeDispatchOnly: true },
   /** What a vehicle's client reports it runs: for those who work with the vehicle in a workspace. */

@@ -128,7 +128,7 @@ function versionInSet(s: State, releaseId: string | null, groupId: string, dataK
   return s.manifestVersions[s.commits[commitId]!.manifestVersionId]!.entries.find((e) => e.dataKey === dataKey)?.fileSpecVersionId ?? null;
 }
 
-const emptyCheck = (outcome: ChangeOutcome): PublicationCheck => ({
+export const emptyCheck = (outcome: ChangeOutcome): PublicationCheck => ({
   outcome,
   vehicleGroupId: null,
   featureId: null,

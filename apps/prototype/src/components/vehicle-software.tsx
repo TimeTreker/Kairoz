@@ -4,7 +4,8 @@
 
 import { Alert, Button, Descriptions, Drawer, Input, Modal, Select, Space, Tag, Typography } from 'antd';
 import { useState } from 'react';
-import { useCan, useRun } from '../app/hooks.ts';
+import { useActor, useCan, useRun } from '../app/hooks.ts';
+import { authorize } from '../domain/authz.ts';
 import { navigate } from '../app/router.ts';
 import { useEngineState } from '../app/store.ts';
 import { dispatchToVehicle, fitOf } from '../engine/delivery.ts';
@@ -21,12 +22,14 @@ import { ChangesToRedo, CheckCards, CheckOutcomeTag, NewFeatureOnBaseModal, outc
 /** Whether the account may ask for a software update of the vehicle in the workspace. */
 export function useCanUpdateSoftware() {
   const state = useEngineState();
-  const can = useCan();
+  const actor = useActor();
   return (workspaceId: string, r: Resource) => {
-    if (r.type !== 'PHYSICAL' || r.env === 'production' || r.personal) return false;
+    if (!actor || r.type !== 'PHYSICAL' || r.env === 'production' || r.personal) return false;
     const g = state.vehicleGroups[state.groupMembers[r.id] ?? ''];
     const groupId = g && g.workspaceId === workspaceId ? (g.groupId ?? undefined) : undefined;
-    return can('vehicle.updateSoftware', { workspaceId, ...(groupId ? { groupId } : {}), scope: r.pool, env: r.env });
+    // Business development and testing update only the vehicles of their own group's vehicle groups.
+    const grants = groupId ? actor.grants : actor.grants.filter((x) => x.role === 'WORKSPACE_ADMIN' || x.role === 'VEHICLE_RESOURCE');
+    return authorize(grants, 'vehicle.updateSoftware', { workspaceId, ...(groupId ? { groupId } : {}), scope: r.pool, env: r.env }).ok;
   };
 }
 
@@ -154,7 +157,8 @@ export function GroupFitDrawer({ resourceId, onClose }: { resourceId: string | n
   const check = fit.check;
   const canDispatch = !!feature && !!group && can('feature.dispatch', { workspaceId: g.workspaceId, groupId: group.id, scope: group.domain, env: g.env });
   const canCreate = !!feature && can('feature.create', { workspaceId: feature.workspaceId, groupId: feature.groupId });
-  const resolvable = !['NO_BASE', 'NEW_FEATURE', 'NOT_PUBLISHED', 'PRODUCTION'].includes(check.outcome);
+  // Groups that take approved team tests are reached through a team test request, never one vehicle at a time.
+  const resolvable = !['NO_BASE', 'NEW_FEATURE', 'NOT_PUBLISHED', 'PRODUCTION'].includes(check.outcome) && !g.requiresApproval;
   const explain: Record<string, string> = {
     NONE: L('这辆车与车辆组用同一个基线，本组文件与策略都可运行。', 'The vehicle uses the group’s base and every file and policy of the group runs on it.'),
     REPUBLISH: L('这辆车的软件对应另一个基线，本组内容不受影响。确认并下发后，云端在它的基线上生成配置并推送；也可以把车辆更新到与车辆组相同的版本。', 'The vehicle’s software takes another base that leaves the group’s content alone. Confirm and dispatch to build the configuration on its base and push it, or update the vehicle to the group’s version.'),
@@ -165,7 +169,7 @@ export function GroupFitDrawer({ resourceId, onClose }: { resourceId: string | n
     CANNOT_CHECK: L('这辆车的软件没有登记软件清单，无法逐条检查。请车辆资源补录清单，或确认并下发。', 'The vehicle’s software has no recorded manifest, so nothing can be checked. Ask vehicle resources to record it, or confirm and dispatch.'),
   };
   return (
-    <Drawer open size={820} title={`${L('与车辆组的发布不匹配', 'Does not fit the group')} · ${r.id}`} onClose={onClose}>
+    <Drawer open size={820} title={`${fit.state === 'MISMATCH' ? L('与车辆组的发布不匹配', 'Does not fit the group') : L('跟随车辆组', 'Following the group')} · ${r.id}`} onClose={onClose}>
       <Space orientation="vertical" size={16} style={{ width: '100%' }}>
         <Descriptions size="small" column={{ xs: 1, sm: 1, md: 2 }} bordered>
           <Descriptions.Item label={L('车辆组', 'Vehicle group')}>{g.name}</Descriptions.Item>
@@ -176,13 +180,19 @@ export function GroupFitDrawer({ resourceId, onClose }: { resourceId: string | n
           <Descriptions.Item label={L('车辆组的发布', 'Group publication')}>{feature && p?.kind === 'FEATURE' ? <Mono>{`${feature.name} · r${String(state.commits[p.commitId]?.sequence ?? 0).padStart(3, '0')}`}</Mono> : '—'}</Descriptions.Item>
         </Descriptions>
         <Alert
-          type={fit.fits ? 'success' : outcomeAlert(check.outcome)}
+          type={fit.state === 'FITS' ? 'success' : fit.state === 'BLOCKED' ? 'info' : outcomeAlert(check.outcome)}
           showIcon
-          title={fit.fits ? L('匹配：车辆下次上报时自动推送', 'Fits: pushed on the vehicle’s next report') : B(CHANGE_OUTCOME_LABELS[check.outcome])}
-          description={explain[check.outcome]}
+          title={
+            fit.state === 'FITS'
+              ? L('匹配：车辆下次上报时自动推送', 'Fits: pushed on the vehicle’s next report')
+              : fit.state === 'BLOCKED'
+                ? L('匹配，但暂不能推送：下列情况解除后，车辆下次上报时推送', 'Fits, but cannot be pushed yet: once the items below clear, it is pushed on the vehicle’s next report')
+                : B(CHANGE_OUTCOME_LABELS[check.outcome])
+          }
+          description={fit.state === 'MISMATCH' ? explain[check.outcome] : undefined}
         />
         {fit.problems.length > 0 && (
-          <Alert type="warning" showIcon title={L('现在还不能下发', 'Not dispatchable yet')} description={fit.problems.map((x) => <div key={x}>{B(issueLabel(x), x)}</div>)} />
+          <Alert type="warning" showIcon title={fit.state === 'BLOCKED' ? L('等待解除', 'Waiting for') : L('现在还不能下发', 'Not dispatchable yet')} description={fit.problems.map((x) => <div key={x}>{B(issueLabel(x), x)}</div>)} />
         )}
         <Space wrap>
           {canDispatch && resolvable && (

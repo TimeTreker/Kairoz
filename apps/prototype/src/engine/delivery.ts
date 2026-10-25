@@ -6,13 +6,13 @@
 // dispatch to the vehicle), or update the vehicle's software and leave the policies as they are.
 
 import { authorize } from '../domain/authz.ts';
-import { notFound, rule } from '../domain/errors.ts';
+import { rule } from '../domain/errors.ts';
 import type { Actor, Ctx } from './engine.ts';
-import { getResource } from './fleet.ts';
+import { getResource, livePublication, membersOf, publicationDispatches } from './fleet.ts';
 import { getGroup } from './org.ts';
 import { answerConfigRequest } from './ota.ts';
 import type { ConfigAnswer } from './ota.ts';
-import { assessPublicationOn } from './software-change.ts';
+import { assessPublicationOn, emptyCheck } from './software-change.ts';
 import type { PublicationCheck } from './software-change.ts';
 import type { DeploymentTarget, GroupFollow, State, VehicleGroup } from './types.ts';
 import { createFeatureDeployment, featureTarget, newTarget, resolveFeatureConfig, vehicleDispatchProblems } from './validation.ts';
@@ -42,13 +42,22 @@ export function pushPending(ctx: Ctx, resourceId: string): number {
   return pushed;
 }
 
-/** The base the group's Feature publication was delivered on: its latest dispatch, else the group's explicit base. */
-export function groupPublicationBase(s: State, g: VehicleGroup): string | null {
-  const p = g.publication;
-  if (p?.kind !== 'FEATURE') return g.baseReleaseId;
-  const latest = Object.values(s.deployments)
-    .filter((d) => d.kind === 'FEATURE' && d.trigger === 'DISPATCH' && d.subjectId === p.featureId && d.commitId === p.commitId && d.vehicleGroupIds.includes(g.id))
-    .sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.id.localeCompare(a.id))[0];
+/**
+ * The base the group runs its Feature publication on: the base most of its other members run it on,
+ * else that of its latest standing dispatch, else the group's explicit base.
+ */
+export function groupPublicationBase(s: State, g: VehicleGroup, except?: string): string | null {
+  const p = livePublication(s, g);
+  if (!p) return g.baseReleaseId;
+  const feature = s.features[p.featureId]!;
+  const counts = new Map<string | null, number>();
+  for (const rid of membersOf(s, g.id)) {
+    const c = rid === except ? undefined : s.resolvedConfigs[s.resources[rid]?.appliedConfigId ?? ''];
+    if (c?.kind === 'FEATURE' && c.sourceId === p.featureId && c.groups[feature.groupId] === p.commitId) counts.set(c.baseReleaseId, (counts.get(c.baseReleaseId) ?? 0) + 1);
+  }
+  const most = [...counts.entries()].sort((a, b) => b[1] - a[1])[0];
+  if (most) return most[0];
+  const latest = publicationDispatches(s, g)[0];
   return latest ? (s.resolvedConfigs[latest.resolvedConfigId]?.baseReleaseId ?? null) : g.baseReleaseId;
 }
 
@@ -62,7 +71,12 @@ export interface GroupFit {
   answer: ConfigAnswer;
   /** Why the vehicle cannot take the publication now, apart from the check. */
   problems: string[];
-  /** The publication fits: the cloud pushes it on the vehicle's next report. */
+  /**
+   * FITS: pushed on the vehicle's next report. BLOCKED: it fits, but something must clear first
+   * (a pending task, an overdue loan, a group that takes approved team tests). MISMATCH: it does
+   * not fit the vehicle's software; the team decides. NOTHING: nothing stands published to follow.
+   */
+  state: 'FITS' | 'BLOCKED' | 'MISMATCH' | 'NOTHING';
   fits: boolean;
 }
 
@@ -72,18 +86,19 @@ export function fitOf(s: State, resourceId: string): GroupFit | null {
   const r = s.resources[resourceId];
   const g = follow ? s.vehicleGroups[follow.vehicleGroupId] : undefined;
   if (!follow || !r || !g || s.groupMembers[resourceId] !== g.id) return null;
-  const check = assessPublicationOn(s, r, g, r.integrationVersion, groupPublicationBase(s, g));
   const answer = answerConfigRequest(s, resourceId);
-  const p = g.publication;
-  const feature = p?.kind === 'FEATURE' ? s.features[p.featureId] : undefined;
-  let problems: string[] = [];
-  if (p?.kind === 'FEATURE' && feature) {
-    // The base problem is the check's own outcome; list only the other reasons.
-    const own = featureTarget(s, feature, p.commitId, g, r, p.disabledPolicies).problem;
-    problems = vehicleDispatchProblems(s, feature, p.commitId, g, r, p.disabledPolicies).filter((x) => x !== own);
-  }
-  const fits = (check.outcome === 'NONE' || check.outcome === 'REPUBLISH') && answer.reason === 'GROUP_TARGET' && problems.length === 0;
-  return { resourceId, follow, vehicleGroupId: g.id, check, answer, problems, fits };
+  const p = livePublication(s, g);
+  if (!p || s.features[p.featureId]!.stage === 'ARCHIVED') return { resourceId, follow, vehicleGroupId: g.id, check: { ...emptyCheck('NOT_PUBLISHED'), vehicleGroupId: g.id }, answer, problems: [], state: 'NOTHING', fits: false };
+  const feature = s.features[p.featureId]!;
+  const check = assessPublicationOn(s, r, g, r.integrationVersion, groupPublicationBase(s, g, r.id));
+  // The base problem is the check's own outcome; list only the other reasons.
+  const own = featureTarget(s, feature, p.commitId, g, r, p.disabledPolicies).problem;
+  const problems = vehicleDispatchProblems(s, feature, p.commitId, g, r, p.disabledPolicies).filter((x) => x !== own);
+  // An approval covers the members it was asked for; a new one comes through a team test request.
+  if (g.requiresApproval) problems.push('the vehicle group takes approved team test requests');
+  const fitsSoftware = (check.outcome === 'NONE' || check.outcome === 'REPUBLISH') && answer.reason === 'GROUP_TARGET';
+  const state = !fitsSoftware ? 'MISMATCH' : problems.length ? 'BLOCKED' : 'FITS';
+  return { resourceId, follow, vehicleGroupId: g.id, check, answer, problems, state, fits: state === 'FITS' };
 }
 
 /**
@@ -95,27 +110,24 @@ export function followGroup(ctx: Ctx, resourceId: string): string | null {
   const follow = ctx.s.groupFollows[resourceId];
   if (!follow) return null;
   const g = ctx.s.vehicleGroups[follow.vehicleGroupId];
-  const p = g?.publication;
-  const feature = p?.kind === 'FEATURE' ? ctx.s.features[p.featureId] : undefined;
-  if (!g || ctx.s.groupMembers[resourceId] !== g.id || g.status !== 'ACTIVE' || p?.kind !== 'FEATURE' || !feature || feature.stage === 'ARCHIVED') {
+  const p = g ? livePublication(ctx.s, g) : null;
+  // An archived Feature's publication keeps running where it was applied, but no new vehicle follows it.
+  if (!g || ctx.s.groupMembers[resourceId] !== g.id || g.status !== 'ACTIVE' || !p || ctx.s.features[p.featureId]!.stage === 'ARCHIVED') {
     delete ctx.s.groupFollows[resourceId];
     return null;
   }
   const fit = fitOf(ctx.s, resourceId)!;
   if (!fit.fits) return null;
   const r = ctx.s.resources[resourceId]!;
+  const feature = ctx.s.features[p.featureId]!;
   delete ctx.s.groupFollows[resourceId];
   if (fit.answer.configId === r.appliedConfigId) return null;
-  // The vehicle just reported, so it is connected: the push happens now.
+  // The vehicle just reported, so it is connected: the push happens now. It follows the dispatch
+  // that stands, so the push is credited to whoever made it.
   const target = newTarget(ctx, r, g.id);
   target.pushedAt = ctx.now;
-  return createFeatureDeployment(ctx, feature, p.commitId, fit.answer.configId!, g.env, [g.id], [target], 'GROUP_FOLLOW', lastDispatcher(ctx.s, g) ?? feature.createdBy);
-}
-
-function lastDispatcher(s: State, g: VehicleGroup): string | undefined {
-  return Object.values(s.deployments)
-    .filter((d) => d.trigger === 'DISPATCH' && d.vehicleGroupIds.includes(g.id))
-    .sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.id.localeCompare(a.id))[0]?.dispatchedBy;
+  const by = publicationDispatches(ctx.s, g)[0]?.dispatchedBy ?? feature.createdBy;
+  return createFeatureDeployment(ctx, feature, p.commitId, fit.answer.configId!, g.env, [g.id], [target], 'GROUP_FOLLOW', by);
 }
 
 /**
@@ -128,12 +140,11 @@ export function dispatchToVehicle(ctx: Ctx, resourceId: string): string {
   const vgId = ctx.s.groupMembers[r.id];
   const g = vgId ? ctx.s.vehicleGroups[vgId] : undefined;
   if (!g) throw rule('NOT_IN_VEHICLE_GROUP', `${r.id} routes through no vehicle group`);
-  const p = g.publication;
-  const feature = p?.kind === 'FEATURE' ? ctx.s.features[p.featureId] : undefined;
-  if (p?.kind !== 'FEATURE' || !feature) throw rule('NO_FEATURE_PUBLICATION', `nothing of a Feature was dispatched to ${g.name} yet; dispatch to the group`);
+  const p = livePublication(ctx.s, g);
+  const feature = p ? ctx.s.features[p.featureId] : undefined;
+  if (!p || !feature || feature.stage === 'ARCHIVED') throw rule('NO_FEATURE_PUBLICATION', `nothing of a Feature stands dispatched to ${g.name}; dispatch to the group`);
   const group = getGroup(ctx.s, feature.groupId);
   ctx.allow('feature.dispatch', { type: 'vehicle', id: r.id, workspaceId: g.workspaceId, groupId: group.id, scope: group.domain, env: g.env });
-  if (feature.stage === 'ARCHIVED') throw notFound('feature', feature.id);
   if (g.requiresApproval) throw rule('APPROVAL_REQUIRED', 'this vehicle group takes approved team test requests', { issues: [g.name] });
   const problems = vehicleDispatchProblems(ctx.s, feature, p.commitId, g, r, p.disabledPolicies);
   if (problems.length) throw rule('DISPATCH_BLOCKED', 'the dispatch would not reach the vehicle safely', { issues: problems.map((x) => `${r.id}: ${x}`) });
@@ -153,7 +164,7 @@ export function mismatchesFor(s: State, actor: Actor, workspaceId: string): Grou
   return Object.keys(s.groupFollows)
     .map((rid) => fitOf(s, rid))
     .filter((f): f is GroupFit => {
-      if (!f || f.fits || f.check.outcome === 'NOT_PUBLISHED') return false;
+      if (!f || f.state !== 'MISMATCH') return false;
       const g = s.vehicleGroups[f.vehicleGroupId]!;
       const group = g.groupId ? s.groups[g.groupId] : undefined;
       return g.workspaceId === workspaceId && !!group && authorize(actor.grants, 'feature.dispatch', { workspaceId, groupId: group.id, scope: group.domain, env: g.env }).ok;

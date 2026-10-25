@@ -105,6 +105,33 @@ describe('dispatch and push', () => {
     assert.equal(feature(w, 'brake_monitor').stage, 'VERIFIED');
   });
 
+  test('after a cancelled dispatch the group runs what still stands; a joining car follows that', () => {
+    const w = new World(demoState());
+    const vg = groupId(w, '制动研发车组');
+    const guided = feature(w, 'guided_brake');
+    const monitor = feature(w, 'brake_monitor');
+    const [d] = w.as('brake_tester', (c) => v.dispatchFeature(c, guided.id, { commitId: guided.headCommitId!, vehicleGroupIds: [vg] }));
+    w.as('brake_tester', (c) => v.cancelDeployment(c, d!, '换个时间'));
+    const p = w.s.vehicleGroups[vg]!.publication;
+    assert.equal(p?.kind === 'FEATURE' && p.featureId, monitor.id, 'back to brake_monitor, which the cars still run');
+    moveToBrake(w);
+    w.sys((c) => reportNow(c, 'VEH-003'));
+    const [push] = follows(w, 'VEH-003');
+    assert.equal(push?.subjectId, monitor.id, 'never the cancelled guided_brake');
+  });
+
+  test('a group that takes approved team tests does not push to a joining car', () => {
+    const w = new World(demoState());
+    w.as('workspace_manager', (c) => fleet.setGroupApproval(c, groupId(w, '制动研发车组'), true));
+    moveToBrake(w);
+    w.sys((c) => reportNow(c, 'VEH-003'));
+    const fit = dl.fitOf(w.s, 'VEH-003')!;
+    assert.deepEqual([fit.state, fit.problems], ['BLOCKED', ['the vehicle group takes approved team test requests']]);
+    assert.equal(follows(w, 'VEH-003').length, 0);
+    assert.deepEqual(dl.mismatchesFor(w.s, w.actor('business'), 'team-brake'), [], 'blocked is not a mismatch');
+    w.fails('APPROVAL_REQUIRED', () => w.as('business', (c) => dl.dispatchToVehicle(c, 'VEH-003')));
+  });
+
   test('a cancelled dispatch is not pushed again by a later report', () => {
     const w = new World(demoState());
     const f = feature(w, 'guided_brake');

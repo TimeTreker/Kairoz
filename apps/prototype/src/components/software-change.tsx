@@ -91,7 +91,7 @@ export function SoftwareChangeDrawer({ changeId, onClose }: { changeId: string |
                     {L('打开 Feature', 'Open the Feature')}
                   </Button>
                 )}
-                {a.outcome === 'REPUBLISH' && canAct && !c.acknowledgedBy && (
+                {a.outcome === 'REPUBLISH' && canAct && !c.acknowledgedBy && !(a.vehicleGroupId && state.vehicleGroups[a.vehicleGroupId]?.requiresApproval) && (
                   <Button size="small" type="primary" onClick={() => run((x) => dispatchToVehicle(x, r.id), L('已确认并下发到该车', 'Confirmed and dispatched to the vehicle'))}>
                     {L('确认并下发', 'Confirm and dispatch')}
                   </Button>

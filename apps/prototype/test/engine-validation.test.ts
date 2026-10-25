@@ -116,8 +116,9 @@ describe('dispatch, receipts and tests', () => {
     assert.equal(v.featureTestStatus(e.getState(), e.getState().features[feature.id]!).every((t) => t.applied), true);
   });
 
-  test('offline vehicles keep their targets pending; cancelling keeps the group binding', () => {
+  test('offline vehicles keep their targets pending; a dispatch cancelled everywhere gives the group back what stands', () => {
     const { e, feature, vg } = setup();
+    const before = e.getState().vehicleGroups[vg.id]!.publication;
     e.run(null, (c) => setAgent(c, 'VEH-001', { online: false, autoAck: true }));
     const d = one(e.run('brake_tester', (c) => v.dispatchFeature(c, feature.id, { commitId: feature.headCommitId!, vehicleGroupIds: [vg.id] })));
     e.run(null, (c) => tick(c));
@@ -125,7 +126,9 @@ describe('dispatch, receipts and tests', () => {
     e.run('brake_tester', (c) => v.cancelDeployment(c, d, '车辆离线'));
     const s = e.getState();
     assert.equal(s.deployments[d]!.status, 'CANCELLED');
-    assert.deepEqual(s.vehicleGroups[vg.id]!.publication, { kind: 'FEATURE', featureId: feature.id, commitId: feature.headCommitId, disabledPolicies: [] });
+    // No member took it, so the group's publication is what its vehicles still run.
+    assert.deepEqual(s.vehicleGroups[vg.id]!.publication, before);
+    assert.notEqual(before?.kind === 'FEATURE' && before.featureId, feature.id);
   });
 });
 

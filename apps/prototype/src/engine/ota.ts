@@ -7,7 +7,7 @@ import type { Draft } from 'immer';
 import { notFound, rule } from '../domain/errors.ts';
 import { newId } from '../domain/ids.ts';
 import type { Ctx } from './engine.ts';
-import { directTargetProblems, membersOf, openOtaOf, pendingDeploymentOf, recordGroupBinding } from './fleet.ts';
+import { directTargetProblems, livePublication, membersOf, openOtaOf, pendingDeploymentOf, recordGroupBinding } from './fleet.ts';
 
 export { openOtaOf };
 import { appliesTo, getRelease, releaseFor } from './release.ts';
@@ -341,7 +341,8 @@ export function answerConfigRequest(s: State, resourceId: string): ConfigAnswer 
     return resolved.release ? { configId: resolved.release.resolvedConfigId, reason: 'LATEST_RELEASE', detail: `policy set ${resolved.release.dclVersion}` } : { configId: null, reason: 'BLOCKED', detail: resolved.problem };
   }
   const group = s.groupMembers[r.id] ? s.vehicleGroups[s.groupMembers[r.id]!] : undefined;
-  const p = group?.publication;
+  // A Feature publication whose dispatches were all cancelled no longer stands.
+  const p = group?.publication?.kind === 'FEATURE' ? livePublication(s, group) : group?.publication;
   if (group && p) {
     if (p.kind !== 'FEATURE') return { configId: p.configId, reason: 'GROUP_TARGET', detail: group.name };
     const feature = s.features[p.featureId];

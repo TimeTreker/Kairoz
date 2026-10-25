@@ -431,9 +431,14 @@ function VehicleGroups() {
                                   {L('软件', 'Software')} {change.fromVersion ?? '—'} → {change.toVersion} · {L('待确认', 'to confirm')}
                                 </Tag>
                               )}
-                              {fit && !fit.fits && fit.check.outcome !== 'NOT_PUBLISHED' && (
+                              {fit?.state === 'MISMATCH' && (
                                 <Tag color="red" style={{ cursor: 'pointer' }} onClick={() => setFitOf(id)}>
                                   {L('与车辆组不匹配', 'Does not fit')} · {B(CHANGE_OUTCOME_LABELS[fit.check.outcome])}
+                                </Tag>
+                              )}
+                              {fit?.state === 'BLOCKED' && (
+                                <Tag color="gold" style={{ cursor: 'pointer' }} onClick={() => setFitOf(id)}>
+                                  {L('待推送', 'Push waiting')} · {B(issueLabel(fit.problems[0]!), fit.problems[0]!)}
                                 </Tag>
                               )}
                               {fit?.fits && (
@@ -1129,7 +1134,7 @@ export function FleetPage({ tab = 'workspace' }: { tab?: string }) {
   const { workspace } = useWorkspace();
   const { L } = useI18n();
   const isResourceAdmin = actor.grants.some((g) => g.role === 'VEHICLE_RESOURCE');
-  const loans = isResourceAdmin || (!!workspace && actor.grants.some((g) => g.role === 'WORKSPACE_ADMIN') && ENVS.some((env) => can('workspace.resources', { workspaceId: workspace.id, env })));
+  const loans = isResourceAdmin || (!!workspace && ENVS.some((env) => can('loan.request', { workspaceId: workspace.id, env })));
   const personal =
     !!workspace &&
     workspace.groupIds.some((id) => {

@@ -13,7 +13,7 @@ import { openCheckForNewSoftware } from './applicability.ts';
 import type { Actor, Ctx } from './engine.ts';
 import { getWorkspace } from './org.ts';
 import { displayName } from './config.ts';
-import type { ControllerState, GroupPublication, Loan, Resource, SoftwareChange, State, VehicleGroup, VehicleGroupEvent, VehicleGroupPurpose } from './types.ts';
+import type { ControllerState, Deployment, GroupPublication, Loan, Resource, SoftwareChange, State, VehicleGroup, VehicleGroupEvent, VehicleGroupPurpose } from './types.ts';
 import { todayOf } from './clock.ts';
 
 const RESOURCE_ID = /^[A-Z][A-Z0-9-]{2,40}$/;
@@ -72,6 +72,19 @@ export function activeLoanOf(s: State, resourceId: string): Loan | undefined {
 /** A loan past its last day: no new dispatches until it is extended or the vehicle returned. */
 export function isOverdue(s: State, l: Loan): boolean {
   return l.status === 'APPROVED' && todayOf(s) > l.dueDate;
+}
+
+/**
+ * What occupies a vehicle beyond its dispatches, for a workspace about to dispatch or test on it:
+ * a pending software update, a loan to another workspace, or its own loan running out.
+ */
+export function occupancyProblems(s: State, resourceId: string, workspaceId: string): string[] {
+  const problems: string[] = [];
+  if (pendingSoftwareUpdateOf(s, resourceId)) problems.push('waiting for a software update');
+  const l = activeLoanOf(s, resourceId);
+  if (l && l.workspaceId !== workspaceId) problems.push(`lent to ${s.workspaces[l.workspaceId]?.name ?? l.workspaceId} until ${l.dueDate}`);
+  else if (l && isOverdue(s, l)) problems.push(`loan overdue since ${l.dueDate}; extend or return it`);
+  return problems;
 }
 
 /** While a vehicle is lent, only the borrowing workspace works with it. */
@@ -349,6 +362,8 @@ export function reserveVehicle(ctx: Ctx, workspaceId: string, resourceId: string
 export function releaseReservation(ctx: Ctx, workspaceId: string, resourceId: string): void {
   const r = getResource(ctx.s, resourceId) as Draft<Resource>;
   ctx.allow('workspace.resources', { type: 'reservation', id: r.id, workspaceId, scope: r.pool, env: r.env });
+  if (!(ctx.s.workspaceResources[workspaceId] ?? []).includes(r.id)) throw rule('VEHICLE_NOT_IN_WORKSPACE', `${r.id} is not a vehicle of this workspace`);
+  assertNotLentAway(ctx.s, r.id, workspaceId);
   if (!r.reservation) throw rule('NOT_RESERVED', `${r.id} is not reserved`);
   r.reservation = null;
 }
@@ -510,17 +525,23 @@ export function addGroupMember(ctx: Ctx, vehicleGroupId: string, resourceId: str
  * Puts a vehicle in a group. In a development or testing group it waits to follow the group: on
  * its next report the cloud pushes what was dispatched to the group, if it fits (跟随车辆组).
  */
-export function joinGroup(ctx: Ctx, g: VehicleGroup, resourceId: string, reason: string): void {
+export function joinGroup(ctx: Ctx, g: VehicleGroup, resourceId: string, reason: string, kind: 'MEMBER_ADDED' | 'BORROWED_IN' = 'MEMBER_ADDED'): void {
   ctx.s.groupMembers[resourceId] = g.id;
   if (g.purpose !== 'PRODUCTION') ctx.s.groupFollows[resourceId] = { vehicleGroupId: g.id, reason: 'JOINED', since: ctx.now };
-  groupEvent(ctx, g.id, 'MEMBER_ADDED', resourceId, reason);
+  groupEvent(ctx, g.id, kind, resourceId, reason);
 }
 
 /** Takes a vehicle out of its group; its applied configuration stays. */
-export function leaveGroup(ctx: Ctx, vehicleGroupId: string, resourceId: string, reason: string): void {
+export function leaveGroup(
+  ctx: Ctx,
+  vehicleGroupId: string,
+  resourceId: string,
+  reason: string | null,
+  kind: 'MEMBER_REMOVED' | 'LENT_OUT' | 'LOAN_RETURNED' | 'LOAN_RECALLED' = 'MEMBER_REMOVED',
+): void {
   delete ctx.s.groupMembers[resourceId];
   delete ctx.s.groupFollows[resourceId];
-  groupEvent(ctx, vehicleGroupId, 'MEMBER_REMOVED', resourceId, reason);
+  groupEvent(ctx, vehicleGroupId, kind, resourceId, reason);
 }
 
 /** Removing a member never rolls back its applied configuration. */
@@ -591,6 +612,32 @@ export function vehicleGroupsOf(s: State, workspaceId: string): VehicleGroup[] {
 }
 
 /** Records what was published to a vehicle group; the event names it. */
+/**
+ * The group's Feature publication if it still stands: some dispatch of it to the group was not
+ * cancelled for every member of the group (null otherwise, or for other publications).
+ */
+export function livePublication(s: State, g: VehicleGroup): Extract<GroupPublication, { kind: 'FEATURE' }> | null {
+  const p = g.publication;
+  if (p?.kind !== 'FEATURE' || !s.features[p.featureId]) return null;
+  return publicationDispatches(s, g).length ? p : null;
+}
+
+/** Dispatches of the group's Feature publication that still stand, newest first. */
+export function publicationDispatches(s: State, g: VehicleGroup): Deployment[] {
+  const p = g.publication;
+  if (p?.kind !== 'FEATURE') return [];
+  return Object.values(s.deployments)
+    .filter(
+      (d) =>
+        d.kind === 'FEATURE' &&
+        d.trigger === 'DISPATCH' &&
+        d.subjectId === p.featureId &&
+        d.commitId === p.commitId &&
+        d.targets.some((t) => t.vehicleGroupId === g.id && t.status !== 'CANCELLED'),
+    )
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.id.localeCompare(a.id));
+}
+
 export function recordGroupBinding(ctx: Ctx, vehicleGroupId: string, publication: GroupPublication): number {
   const g = ctx.s.vehicleGroups[vehicleGroupId]!;
   g.publication = publication;

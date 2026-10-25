@@ -107,7 +107,7 @@ export function previewVehicleSoftware(s: State, resourceId: string, version: st
   const p = g.publication;
   const applied = r.appliedConfigId ? s.resolvedConfigs[r.appliedConfigId] : undefined;
   const runsIt = p?.kind === 'FEATURE' && applied?.kind === 'FEATURE' && applied.sourceId === p.featureId && !s.groupFollows[r.id];
-  return assessPublicationOn(s, r, g, version, runsIt ? applied.baseReleaseId : groupPublicationBase(s, g));
+  return assessPublicationOn(s, r, g, version, runsIt ? applied.baseReleaseId : groupPublicationBase(s, g, r.id));
 }
 
 /** Software updates of a vehicle, newest first. */

@@ -172,11 +172,25 @@ function CatalogModal({ workspaceId, onClose }: { workspaceId: string; onClose: 
           },
           {
             title: '',
-            render: (_, e) => (
-              <Button size="small" type="primary" disabled={!!e.openLoanId} onClick={() => setAsking(e)}>
-                {L('申请借用', 'Ask to borrow')}
-              </Button>
-            ),
+            render: (_, e) => {
+              // A loan cannot start now: already asked, lent elsewhere, not available, or simply addable.
+              const why = e.openLoanId
+                ? L('已申请', 'Already asked for')
+                : e.lentTo
+                  ? L('已借给其他工作区，归还后再申请', 'Lent to another workspace; ask after it is returned')
+                  : e.status !== 'AVAILABLE'
+                    ? L('车辆不可用', 'The vehicle is not available')
+                    : e.direct
+                      ? L('本资源池且无人使用：在“工作区车辆”中直接加入', 'Own pool and unused: add it under Workspace vehicles')
+                      : null;
+              return (
+                <Tooltip title={why}>
+                  <Button size="small" type="primary" disabled={!!why} onClick={() => setAsking(e)}>
+                    {L('申请借用', 'Ask to borrow')}
+                  </Button>
+                </Tooltip>
+              );
+            },
           },
         ]}
       />
@@ -215,10 +229,15 @@ function BorrowedCard({ workspaceId }: { workspaceId: string }) {
   const state = useEngineState();
   const run = useRun();
   const { L, B } = useI18n();
+  const can = useCan();
   const [catalog, setCatalog] = useState(false);
   const [extending, setExtending] = useState<Loan | null>(null);
   const [returning, setReturning] = useState<Loan | null>(null);
   const loans = borrowedBy(state, workspaceId);
+  const mine = (l: Loan) => {
+    const r = state.resources[l.resourceId]!;
+    return can('loan.request', { workspaceId, scope: r.pool, env: r.env });
+  };
   return (
     <Card
       title={L('借入', 'Borrowed')}
@@ -257,17 +276,17 @@ function BorrowedCard({ workspaceId }: { workspaceId: string }) {
             title: '',
             render: (_, l) => (
               <Space size={0}>
-                {l.status === 'REQUESTED' && (
+                {l.status === 'REQUESTED' && mine(l) && (
                   <Button type="link" size="small" onClick={() => run((c) => withdrawLoan(c, l.id), L('已撤回', 'Withdrawn'))}>
                     {L('撤回', 'Withdraw')}
                   </Button>
                 )}
-                {l.status === 'APPROVED' && !l.extensions.some((x) => x.status === 'PENDING') && (
+                {l.status === 'APPROVED' && mine(l) && !l.extensions.some((x) => x.status === 'PENDING') && (
                   <Button type="link" size="small" onClick={() => setExtending(l)}>
                     {L('申请延期', 'Extend')}
                   </Button>
                 )}
-                {l.status === 'APPROVED' && (
+                {l.status === 'APPROVED' && mine(l) && (
                   <Button type="link" size="small" danger onClick={() => setReturning(l)}>
                     {L('归还', 'Return')}
                   </Button>
@@ -305,7 +324,7 @@ function LentCard({ workspaceId }: { workspaceId: string }) {
   const loans = lentBy(state, workspaceId);
   const mayAnswer = (l: Loan) => {
     const r = state.resources[l.resourceId]!;
-    return l.status === 'REQUESTED' && l.lenders.some((x) => x.workspaceId === workspaceId && x.decision === 'PENDING') && can('workspace.resources', { workspaceId, scope: r.pool, env: r.env });
+    return l.status === 'REQUESTED' && l.lenders.some((x) => x.workspaceId === workspaceId && x.decision === 'PENDING') && can('loan.lend', { workspaceId, scope: r.pool, env: r.env });
   };
   return (
     <Card title={L('借出', 'Lent')}>
@@ -408,10 +427,12 @@ function ApprovalsCard() {
                     title: '',
                     render: (_: unknown, l: Loan) => (
                       <Space size={0}>
-                        <Button type="link" size="small" disabled={approvalProblems(state, l).length > 0} onClick={() => run((c) => decideLoan(c, l.id, { approve: true }), L('已批准借用', 'Loan approved'))}>
-                          {L('批准', 'Approve')}
-                        </Button>
-                        <Button type="link" size="small" danger onClick={() => setRejecting(l)}>
+                        <Tooltip title={l.requestedBy === actor.username ? L('不能审批自己的申请', 'Nobody decides their own request') : undefined}>
+                          <Button type="link" size="small" disabled={approvalProblems(state, l).length > 0 || l.requestedBy === actor.username} onClick={() => run((c) => decideLoan(c, l.id, { approve: true }), L('已批准借用', 'Loan approved'))}>
+                            {L('批准', 'Approve')}
+                          </Button>
+                        </Tooltip>
+                        <Button type="link" size="small" danger disabled={l.requestedBy === actor.username} onClick={() => setRejecting(l)}>
                           {L('驳回', 'Reject')}
                         </Button>
                       </Space>
@@ -512,7 +533,7 @@ export function LoansPanel() {
   const { workspace } = useWorkspace();
   const { L } = useI18n();
   if (!workspace) return null;
-  const admin = ENVS.some((env) => can('workspace.resources', { workspaceId: workspace.id, env })) && actor.grants.some((g) => g.role === 'WORKSPACE_ADMIN');
+  const admin = ENVS.some((env) => can('loan.request', { workspaceId: workspace.id, env }));
   const resources = actor.grants.some((g) => g.role === 'VEHICLE_RESOURCE');
   return (
     <Space orientation="vertical" size={16} style={{ width: '100%' }}>

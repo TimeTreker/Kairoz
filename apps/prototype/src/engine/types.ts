@@ -573,7 +573,20 @@ export interface TestRequest {
 export interface VehicleGroupEvent {
   id: string;
   vehicleGroupId: string;
-  kind: 'CREATED' | 'MEMBER_ADDED' | 'MEMBER_REMOVED' | 'BOUND' | 'BASE_SET' | 'ARCHIVED' | 'APPROVAL_REQUIRED' | 'APPROVAL_NOT_REQUIRED';
+  /** LENT_OUT / BORROWED_IN / LOAN_RETURNED / LOAN_RECALLED: membership changes made by a loan. */
+  kind:
+    | 'CREATED'
+    | 'MEMBER_ADDED'
+    | 'MEMBER_REMOVED'
+    | 'LENT_OUT'
+    | 'BORROWED_IN'
+    | 'LOAN_RETURNED'
+    | 'LOAN_RECALLED'
+    | 'BOUND'
+    | 'BASE_SET'
+    | 'ARCHIVED'
+    | 'APPROVAL_REQUIRED'
+    | 'APPROVAL_NOT_REQUIRED';
   resourceId: string | null;
   reason: string | null;
   actor: string;
