@@ -6,6 +6,7 @@ import { navigate } from '../app/router.ts';
 import { useEngineState } from '../app/store.ts';
 import { Hint, Mono, PageHeader, StageTag, when } from '../components/common.tsx';
 import { PatchedTag, patchTargetLabel } from '../components/patch.tsx';
+import { TechnicalTag } from '../components/technical.tsx';
 import { createFeature, displayName, mainlineRelease, visibleFeatures } from '../engine/config.ts';
 import { patchTargets } from '../engine/release.ts';
 import { useI18n } from '../i18n/i18n.tsx';
@@ -57,6 +58,7 @@ export function FeaturesPage() {
               render: (_, f) => (
                 <>
                   <StageTag stage={f.stage} />
+                  <TechnicalTag feature={f} />
                   <PatchedTag feature={f} />
                 </>
               ),

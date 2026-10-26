@@ -51,6 +51,8 @@ export const ACTIONS = {
   'feature.review': { roles: ['DCL_ENGINEER'], env: 'development' },
   'feature.return': { roles: ['DCL_ENGINEER'], env: 'development' },
   'feature.editBinding': { roles: ['DCL_ENGINEER'], env: 'development' },
+  /** DCL's own technical change (技术变更): a branch that only changes processing bindings, created and submitted by DCL. */
+  'technical.manage': { roles: ['DCL_ENGINEER'], env: 'development' },
   'merge.confirmProcessing': { roles: ['DCL_ENGINEER'], env: 'testing' },
   // Business development (业务研发)
   'feature.create': { roles: ['BUSINESS_DEV'], env: 'development' },

@@ -6,6 +6,7 @@ import { navigate } from '../app/router.ts';
 import { engine, useEngineState } from '../app/store.ts';
 import { Mono, StageTag, when } from '../components/common.tsx';
 import { PatchedTag } from '../components/patch.tsx';
+import { TechnicalTag } from '../components/technical.tsx';
 import { draftSelfTest } from '../components/personal-sim.tsx';
 import { canReadFeature, displayName, draftReviewRequired, EDITABLE_STAGES, featureChanges, submitFeature } from '../engine/config.ts';
 import { returnFeature } from '../engine/intake.ts';
@@ -37,8 +38,10 @@ export function FeatureDetailPage({ featureId }: { featureId: string }) {
   const target = { workspaceId: feature.workspaceId, groupId: group.id, scope: group.domain };
   const unsubmitted = !featureChanges(state, feature).sinceHead.empty;
   // Submitting an unchanged draft only reuses the head commit, so offer it when there is something to submit.
-  const canSubmit = EDITABLE_STAGES.includes(feature.stage) && (feature.stage === 'DRAFT' || unsubmitted) && can('feature.submit', target);
-  const canReturn = (feature.stage === 'SUBMITTED' || feature.stage === 'DCL_READY') && can('feature.return', target);
+  // A DCL technical change is submitted by DCL itself and never returned to business authors.
+  const technical = feature.kind === 'TECHNICAL';
+  const canSubmit = EDITABLE_STAGES.includes(feature.stage) && (feature.stage === 'DRAFT' || unsubmitted) && can(technical ? 'technical.manage' : 'feature.submit', target);
+  const canReturn = !technical && (feature.stage === 'SUBMITTED' || feature.stage === 'DCL_READY') && can('feature.return', target);
   const verifiedHeadCollectible = feature.stage === 'DRAFT' && unsubmitted && isCollectible(state, feature);
   const latestFeedback = state.feedback.filter((f) => f.featureId === feature.id && f.commitId === feature.headCommitId).at(-1);
   const integratedIn = Object.values(state.candidates).filter((c) => c.sources.some((x) => x.featureId === feature.id));
@@ -60,6 +63,7 @@ export function FeatureDetailPage({ featureId }: { featureId: string }) {
                 <Mono>{feature.name}</Mono>
               </Typography.Title>
               <StageTag stage={feature.stage} />
+              <TechnicalTag feature={feature} />
               <PatchedTag feature={feature} />
             </Space>
             <Space>

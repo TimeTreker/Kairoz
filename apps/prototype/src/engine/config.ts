@@ -6,7 +6,7 @@
 import type { Draft } from 'immer';
 import type { Action } from '../domain/authz.ts';
 import { canReadGroupConfig } from '../domain/authz.ts';
-import { digestOf } from '../domain/canonical.ts';
+import { canonicalJson, digestOf } from '../domain/canonical.ts';
 import {
   assertPolicyIdForGroup,
   capturableKeys,
@@ -188,12 +188,86 @@ export function createFeature(ctx: Ctx, input: { workspaceId: string; groupId: s
 
 type FeatureAction = Extract<Action, `feature.${string}`>;
 
-/** Authorizes against a Feature's workspace and group. */
+/**
+ * Authorizes against a Feature's workspace and group. A DCL technical change is edited and
+ * submitted by DCL engineering, never by the group's business developers.
+ */
 export function authorizeFeature(ctx: Ctx, action: FeatureAction, featureId: string): { feature: Draft<Feature>; group: BusinessGroup } {
   const feature = getFeature(ctx.s, featureId) as Draft<Feature>;
   const group = getGroup(ctx.s, feature.groupId);
-  ctx.allow(action, { type: 'feature', id: featureId, workspaceId: feature.workspaceId, groupId: group.id, scope: group.domain });
+  const effective: Action = feature.kind === 'TECHNICAL' && (action === 'feature.edit' || action === 'feature.submit') ? 'technical.manage' : action;
+  ctx.allow(effective, { type: 'feature', id: featureId, workspaceId: feature.workspaceId, groupId: group.id, scope: group.domain });
   return { feature, group };
+}
+
+/** Fields a DCL technical change may change: the processing binding of the group's files. */
+const TECHNICAL_FIELDS = new Set(['templateId', 'format', 'schema', 'edgePipelineId', 'cloudPipelineId', 'requiresReview']);
+
+/** What a technical change changes beyond processing bindings, as problem lines; empty when it keeps to them. */
+export function technicalScopeIssues(base: GroupConfig, draft: GroupConfig): string[] {
+  const issues: string[] = [];
+  const keys = (o: object) => Object.keys(o).sort().join(',');
+  if (keys(base.files) !== keys(draft.files)) issues.push('adds or removes files');
+  if (canonicalJson(base.policies) !== canonicalJson(draft.policies)) issues.push('changes policies');
+  if (canonicalJson(base.references) !== canonicalJson(draft.references)) issues.push('changes references');
+  for (const [dataKey, spec] of Object.entries(draft.files)) {
+    const before = base.files[dataKey];
+    if (!before) continue;
+    for (const field of Object.keys({ ...before, ...spec }) as (keyof typeof spec)[]) {
+      if (!TECHNICAL_FIELDS.has(field) && canonicalJson(before[field] ?? null) !== canonicalJson(spec[field] ?? null)) issues.push(`changes ${field} of ${spec.name}`);
+    }
+  }
+  return issues;
+}
+
+/**
+ * DCL engineering opens a technical change (技术变更) of one business group on a base set: an
+ * own branch that only changes processing bindings, tested by the group's testers and
+ * integrated like any Feature, never a direct change of a released set.
+ */
+export function createTechnicalChange(ctx: Ctx, input: { workspaceId: string; groupId: string; name: string; description?: string; baseReleaseId?: string | null }): string {
+  const group = getGroup(ctx.s, input.groupId);
+  ctx.allow('technical.manage', { type: 'feature', workspaceId: input.workspaceId, groupId: group.id, scope: group.domain });
+  const workspace = getWorkspace(ctx.s, input.workspaceId);
+  if (workspace.status !== 'ACTIVE') throw rule('WORKSPACE_ARCHIVED', `workspace ${workspace.id} is archived`);
+  if (!workspace.groupIds.includes(group.id)) throw rule('GROUP_NOT_IN_WORKSPACE', `group ${group.id} does not work in workspace ${workspace.id}`);
+  if (group.status !== 'ACTIVE') throw rule('GROUP_ARCHIVED', `group ${group.id} is archived`);
+  if (group.purpose !== 'DEV') throw rule('TEST_GROUP_CANNOT_OWN_CONFIG', 'test groups do not maintain files or policies');
+  if (!FEATURE_NAME.test(input.name)) throw rule('INVALID_FEATURE_NAME', `feature name must match ${FEATURE_NAME.source}`);
+  if (Object.values(ctx.s.features).some((f) => f.groupId === group.id && f.name === input.name)) {
+    throw conflict('FEATURE_NAME_TAKEN', `group ${group.id} already has a feature named ${input.name}`);
+  }
+  let base = mainlineRelease(ctx.s, workspace.vehicleModelId)?.id ?? null;
+  if (input.baseReleaseId) {
+    const release = ctx.s.releases[input.baseReleaseId];
+    if (!release) throw notFound('policy set', input.baseReleaseId);
+    if (release.vehicleModelId !== workspace.vehicleModelId) throw rule('MODEL_MISMATCH', `policy set ${release.dclVersion} is for ${release.vehicleModelId}`);
+    base = release.id;
+  }
+  const id = newId('ft');
+  const feature: Feature = {
+    id,
+    workspaceId: workspace.id,
+    groupId: group.id,
+    vehicleModelId: workspace.vehicleModelId,
+    projectId: workspace.projectId,
+    name: input.name,
+    description: input.description ?? '',
+    kind: 'TECHNICAL',
+    stage: 'DRAFT',
+    baseReleaseId: base,
+    headCommitId: null,
+    verifiedCommitId: null,
+    sequence: 0,
+    draft: emptyConfig(),
+    createdBy: ctx.user().username,
+    createdAt: ctx.now,
+    updatedAt: ctx.now,
+  };
+  feature.draft = baseConfig(ctx.s, feature);
+  if (Object.keys(feature.draft.files).length === 0) throw rule('NOTHING_TO_REBIND', `policy set ${base ? ctx.s.releases[base]!.dclVersion : '(initial)'} has no files of group ${group.id} to rebind`);
+  ctx.s.features[id] = feature;
+  return id;
 }
 
 export function addFeedback(
@@ -224,6 +298,7 @@ export function editDraft(
 ): void {
   const { feature, group } = authorizeFeature(ctx, options.action ?? 'feature.edit', featureId);
   if (!EDITABLE_STAGES.includes(feature.stage)) throw rule('FEATURE_IMMUTABLE', `feature in stage ${feature.stage} cannot change`);
+  if (feature.kind === 'TECHNICAL' && options.action !== 'feature.editBinding') throw rule('TECHNICAL_BINDINGS_ONLY', 'a DCL technical change only changes processing bindings');
   if (getWorkspace(ctx.s, feature.workspaceId).status !== 'ACTIVE') throw rule('WORKSPACE_ARCHIVED', 'the workspace is archived');
   const before = JSON.parse(JSON.stringify(feature.draft)) as GroupConfig;
   change(feature.draft, feature, group);
@@ -591,6 +666,10 @@ export function submitFeature(ctx: Ctx, featureId: string, input: { message?: st
   const { feature, group } = authorizeFeature(ctx, 'feature.submit', featureId);
   if (!EDITABLE_STAGES.includes(feature.stage)) throw rule('FEATURE_IMMUTABLE', `feature in stage ${feature.stage} cannot change`);
   const draft = JSON.parse(JSON.stringify(feature.draft)) as GroupConfig;
+  if (feature.kind === 'TECHNICAL') {
+    const scope = technicalScopeIssues(baseConfig(ctx.s, feature), draft);
+    if (scope.length) throw rule('TECHNICAL_BINDINGS_ONLY', 'a DCL technical change only changes processing bindings', { issues: scope });
+  }
   const issues = submitIssues(ctx.s, group, draft);
   if (issues.length > 0) throw rule('SUBMIT_BLOCKED', 'the draft cannot be submitted yet', { issues });
   // DCL Ready at once unless a file needs sensitive review without a current approval.

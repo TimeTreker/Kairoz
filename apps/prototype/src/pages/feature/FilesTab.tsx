@@ -7,7 +7,7 @@ import { Hint, LabelTag, Mono } from '../../components/common.tsx';
 import type { FileSpecContent } from '../../domain/config.ts';
 import { FILE_TYPES, inferFileType, PRIVACY_LEVELS } from '../../domain/file-types.ts';
 import { addFile, EDITABLE_STAGES, putReference, removeFile, removeReference, reviewRequiredBefore, updateFile, visibleSuspects } from '../../engine/config.ts';
-import { setBinding } from '../../engine/intake.ts';
+import { setBinding, setTechnicalBinding } from '../../engine/intake.ts';
 import { referenceCatalog } from '../../engine/references.ts';
 import { latestCommittedVersion } from '../../engine/snapshots.ts';
 import type { Feature } from '../../engine/types.ts';
@@ -35,7 +35,9 @@ export function FilesTab({ feature }: { feature: Feature }) {
   const group = state.groups[feature.groupId]!;
   const target = { workspaceId: feature.workspaceId, groupId: group.id, scope: group.domain };
   const editable = EDITABLE_STAGES.includes(feature.stage);
-  const canEdit = editable && can('feature.edit', target);
+  // A DCL technical change keeps the group's files as they are; DCL only rebinds them.
+  const technical = feature.kind === 'TECHNICAL';
+  const canEdit = editable && !technical && can('feature.edit', target);
   const canBind = editable && can('feature.editBinding', target);
 
   const [adding, setAdding] = useState(false);
@@ -317,11 +319,19 @@ export function FilesTab({ feature }: { feature: Feature }) {
         onCancel={() => setBindingKey(null)}
         onOk={() =>
           bindForm.validateFields().then((v) => {
-            if (run((c) => setBinding(c, feature.id, binding!, v), L('已调整，Feature 回到草稿', 'Changed; the Feature is back in Draft')) !== undefined) setBindingKey(null);
+            const done = technical
+              ? run((c) => setTechnicalBinding(c, feature.id, binding!, v), L('已调整处理绑定，提交后由本组测试验证', 'Binding changed; submit it for the group’s testers'))
+              : run((c) => setBinding(c, feature.id, binding!, v), L('已调整，Feature 回到草稿', 'Changed; the Feature is back in Draft'));
+            if (done !== undefined) setBindingKey(null);
           })
         }
       >
-        <Alert type="info" showIcon style={{ marginBottom: 12 }} title={L('调整后 Feature 回到草稿，由业务方重新提交。', 'The Feature returns to Draft and the business resubmits.')} />
+        <Alert
+          type="info"
+          showIcon
+          style={{ marginBottom: 12 }}
+          title={technical ? L('技术变更由 DCL 自己提交，再由本组测试验证。', 'DCL submits its technical change itself; the group’s testers then verify it.') : L('调整后 Feature 回到草稿，由业务方重新提交。', 'The Feature returns to Draft and the business resubmits.')}
+        />
         <Form form={bindForm} name="binding" layout="vertical">
           <Space>
             <Form.Item name="format" label="Format" rules={[{ required: true }]}>
@@ -337,9 +347,11 @@ export function FilesTab({ feature }: { feature: Feature }) {
           <Form.Item name="cloudPipelineId" label={L('云端处理', 'Cloud pipeline')} rules={[{ required: true }]}>
             <Select options={pipelines.filter((p) => p.side === 'CLOUD').map((p) => ({ value: p.id, label: `${p.id} · ${p.formats.join(',')} · ${p.capability}` }))} />
           </Form.Item>
-          <Form.Item name="reason" label={L('原因（会作为反馈给业务方）', 'Reason (sent to the authors)')} rules={[{ required: true }]}>
-            <Input.TextArea rows={2} />
-          </Form.Item>
+          {!technical && (
+            <Form.Item name="reason" label={L('原因（会作为反馈给业务方）', 'Reason (sent to the authors)')} rules={[{ required: true }]}>
+              <Input.TextArea rows={2} />
+            </Form.Item>
+          )}
         </Form>
       </Modal>
 

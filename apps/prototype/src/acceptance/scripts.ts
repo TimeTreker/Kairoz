@@ -3542,6 +3542,103 @@ export const SCRIPTS: Script[] = [
         "fail": "拒绝不改变任何状态。"
       }
     ]
+  },
+  {
+    "id": "technical",
+    "name": "DCL 技术变更 · 自有技术分支交付",
+    "start": "demo",
+    "scenes": [
+      {
+        "id": "TC01",
+        "title": "DCL 发布新的处理版本并开技术分支",
+        "actor": "dcl",
+        "accounts": [
+          "dcl"
+        ],
+        "workspace": null,
+        "page": "处理目录 → 处理版本；技术变更",
+        "pre": "演示数据。",
+        "steps": [
+          "以 dcl 登录，“处理目录 → 处理版本 → 发布处理版本”：default-edge-bin-log，EDGE，格式 binary，步骤 Receive、Compress、Encrypt：生成 default-edge-bin-log@2，已有文件仍绑定 @1。",
+          "“技术变更 → 新建技术变更”：转向团队工作区 · 转向分组，名称 bin_log_edge_v2，基线默认主线 1.0.0。"
+        ],
+        "done": "技术分支从主线开始，内容与基线相同，标注“DCL 技术变更”。",
+        "fail": "技术修复不能直接改已发布的策略集。"
+      },
+      {
+        "id": "TC02",
+        "title": "只调整处理绑定，DCL 自己提交",
+        "actor": "dcl",
+        "accounts": [
+          "dcl"
+        ],
+        "workspace": "team-steering",
+        "page": "研发 Feature → 文件列表 → 调整处理绑定",
+        "pre": "TC01 完成。",
+        "steps": [
+          "在 bin_log_edge_v2 的文件列表对 EPS 转向轨迹“调整处理绑定”，车端处理改为 default-edge-bin-log@2（没有原因栏，不发反馈）。",
+          "文件与策略没有添加、编辑入口；“提交”后直接 DCL Ready。"
+        ],
+        "done": "提交只改了处理绑定；每次采集的车端 CPU 由 0.75 秒降到 0.45 秒。",
+        "fail": "技术变更不能增删文件、改策略或引用。"
+      },
+      {
+        "id": "TC03",
+        "title": "本组测试验证技术变更",
+        "actor": "steering_tester",
+        "accounts": [
+          "steering_tester"
+        ],
+        "workspace": "team-steering",
+        "page": "研发 Feature → 下发与测试",
+        "pre": "TC02 完成。",
+        "steps": [
+          "steering_tester 把 bin_log_edge_v2 下发到转向研发车组，回执后先仿真后实车登记 PASS，确认 Verified。"
+        ],
+        "done": "技术变更由业务所有者的测试验证。",
+        "fail": "—"
+      },
+      {
+        "id": "TC04",
+        "title": "集成、集成测试与发布",
+        "actor": "integrator；dcl；integration_tester；release",
+        "accounts": [
+          "integrator",
+          "dcl",
+          "integration_tester",
+          "release"
+        ],
+        "workspace": "x89-project",
+        "page": "配置集成；发布与配置 OTA",
+        "pre": "TC03 完成。",
+        "steps": [
+          "integrator 预览合并（来源标注“DCL 技术变更”），dcl 确认处理集合，冻结 X89-C2。",
+          "integration_tester 在 X89 集成测试车组先仿真后实车 PASS，确认验证；release 发布 1.0.1。",
+          "与上一版比较：没有策略变化，转向组只有 EPS 转向轨迹的车端处理变化。"
+        ],
+        "done": "DCL 的技术修复经过独立测试、集成和发布交付。",
+        "fail": "—"
+      },
+      {
+        "id": "N01",
+        "title": "技术变更只由 DCL 工程负责",
+        "actor": "steering；integrator；dcl",
+        "accounts": [
+          "steering",
+          "integrator",
+          "dcl"
+        ],
+        "workspace": null,
+        "page": "引擎回放",
+        "pre": "TC01 完成（支线）。",
+        "steps": [
+          "业务研发与配置集成不能新建技术变更；业务研发不能提交 DCL 的技术变更。",
+          "没有任何调整时提交被拒绝（与基线相同）。"
+        ],
+        "done": "技术分支归 DCL 所有。",
+        "fail": "拒绝不改变任何状态。"
+      }
+    ]
   }
 ];
 

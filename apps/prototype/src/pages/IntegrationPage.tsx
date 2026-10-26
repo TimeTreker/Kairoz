@@ -12,6 +12,7 @@ import { ApplicabilityChecks } from '../components/applicability.tsx';
 import { Hint, LabelTag, Mono, PageHeader, ShortId, StageTag, when } from '../components/common.tsx';
 import { ResourceCheck } from '../components/budget.tsx';
 import { PatchedTag, TargetSet, patchTargetLabel } from '../components/patch.tsx';
+import { TechnicalTag } from '../components/technical.tsx';
 import { DeploymentsTable, DispatchModal, RecordTestModal, TargetsTable } from '../components/testing.tsx';
 import { WILDCARD } from '../domain/vocabulary.ts';
 import type { Scope } from '../domain/vocabulary.ts';
@@ -334,6 +335,7 @@ function MergeTab({ projectId, onCandidate }: { projectId: string; onCandidate: 
               render: (_, f) => (
                 <Space size={4} wrap>
                   <a onClick={() => navigate(`features/${f.id}`)}><Mono>{f.name}</Mono></a>
+                  <TechnicalTag feature={f} />
                   <PatchedTag feature={f} />
                 </Space>
               ),

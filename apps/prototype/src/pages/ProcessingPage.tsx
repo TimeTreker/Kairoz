@@ -6,6 +6,7 @@ import { navigate } from '../app/router.ts';
 import { useEngineState } from '../app/store.ts';
 import { BudgetLine, BudgetModal, HoldTag, PauseButton, UsageMeter } from '../components/budget.tsx';
 import { Hint, Mono, PageHeader, when } from '../components/common.tsx';
+import { TechnicalChanges } from '../components/technical.tsx';
 import type { Budget } from '../domain/budget.ts';
 import { FILE_TYPES, PRIVACY_LEVELS, typeAlwaysRequiresReview } from '../domain/file-types.ts';
 import type { FileType } from '../domain/file-types.ts';
@@ -82,6 +83,7 @@ export function ProcessingPage({ tab = 'templates' }: { tab?: string }) {
               </Card>
             ),
           },
+          { key: 'technical', label: L('技术变更', 'Technical changes'), children: <TechnicalChanges /> },
           { key: 'budget', label: L('资源预算', 'Collection budgets'), children: <BudgetTab /> },
         ]}
       />

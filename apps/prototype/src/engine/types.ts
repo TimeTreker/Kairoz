@@ -179,7 +179,8 @@ export interface Feature {
   projectId: string | null;
   name: string;
   description: string;
-  kind: 'BUSINESS';
+  /** BUSINESS: the group's own files and policies; TECHNICAL: a DCL technical change of processing bindings (技术变更). */
+  kind: 'BUSINESS' | 'TECHNICAL';
   stage: FeatureStage;
   /** NULL: the vehicle model's platform-managed, empty initial development configuration. */
   baseReleaseId: string | null;

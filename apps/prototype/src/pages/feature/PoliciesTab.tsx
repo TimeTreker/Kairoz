@@ -17,7 +17,7 @@ export function PoliciesTab({ feature }: { feature: Feature }) {
   const can = useCan();
   const run = useRun();
   const group = state.groups[feature.groupId]!;
-  const canEdit = EDITABLE_STAGES.includes(feature.stage) && can('feature.edit', { workspaceId: feature.workspaceId, groupId: group.id, scope: group.domain });
+  const canEdit = feature.kind !== 'TECHNICAL' && EDITABLE_STAGES.includes(feature.stage) && can('feature.edit', { workspaceId: feature.workspaceId, groupId: group.id, scope: group.domain });
   const [editing, setEditing] = useState<string | null | 'new'>(null);
   const [form] = Form.useForm();
   const trigger: string = Form.useWatch('trigger', form) ?? '';

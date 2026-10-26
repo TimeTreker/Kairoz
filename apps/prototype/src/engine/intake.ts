@@ -114,8 +114,27 @@ export function returnFeature(ctx: Ctx, featureId: string, input: { reason: stri
   addFeedback(ctx, { featureId: feature.id, commitId: feature.headCommitId, kind: 'RETURNED', reason: input.reason.trim() });
 }
 
+/** DCL rebinds a file in its own technical change: no feedback, DCL submits the change itself. */
+export function setTechnicalBinding(ctx: Ctx, featureId: string, dataKey: string, input: Binding): void {
+  editDraft(
+    ctx,
+    featureId,
+    (draft, feature) => {
+      if (feature.kind !== 'TECHNICAL') throw rule('NOT_TECHNICAL', 'only a DCL technical change is rebound this way; adjust a business Feature in intake');
+      const spec = draft.files[dataKey];
+      if (!spec) throw notFound('owned file in draft', dataKey);
+      const binding: Binding = { format: input.format, schema: input.schema, edgePipelineId: input.edgePipelineId, cloudPipelineId: input.cloudPipelineId };
+      const issues = bindingIssues(ctx.s, binding);
+      if (issues.length) throw rule('INCOMPATIBLE_BINDING', 'the Edge/Cloud binding is not compatible', { issues });
+      Object.assign(spec, binding);
+    },
+    { action: 'feature.editBinding' },
+  );
+}
+
 /** DCL adjusts the processing binding of a file in a draft. Business authors resubmit. */
 export function setBinding(ctx: Ctx, featureId: string, dataKey: string, input: Binding & { reason: string }): void {
+  if (ctx.s.features[featureId]?.kind === 'TECHNICAL') throw rule('NOT_IN_INTAKE', 'a technical change is DCL’s own; rebind it directly');
   if (!input.reason.trim()) throw rule('REASON_REQUIRED', 'explain the binding change');
   editDraft(
     ctx,

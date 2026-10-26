@@ -1,10 +1,10 @@
 # 验收结果（引擎层逐幕回放）
 
-运行时间：2026-10-26T13:17:18.653Z。由 `npm run acceptance` 生成；每次重新执行，不沿用历史结果。
+运行时间：2026-10-26T13:24:17.862Z。由 `npm run acceptance` 生成；每次重新执行，不沿用历史结果。
 
 状态：PASS 通过；FAIL 失败；GAP 设计要求尚未实现；BLOCKED 前置幕未通过；NOT_APPLICABLE 浏览器原型不适用（如服务端部署）。
 
-合计：PASS 195 · FAIL 0 · GAP 0 · BLOCKED 0 · NOT_APPLICABLE 3 · NOT_WRITTEN 0
+合计：PASS 200 · FAIL 0 · GAP 0 · BLOCKED 0 · NOT_APPLICABLE 3 · NOT_WRITTEN 0
 
 ## 从零启动 · 角色协作
 
@@ -264,6 +264,16 @@
 | Q02 团队与个人仿真共用配额 | business；workspace_manager | PASS |  |
 | Q03 停止后腾出名额，取消限制 | workspace_manager；resource | PASS |  |
 | N01 配额只由车辆资源设置 | workspace_manager；business；dcl；release；integration_admin | PASS |  |
+
+## DCL 技术变更 · 自有技术分支交付
+
+| 幕 | 执行人 | 状态 | 说明 |
+|---|---|---|---|
+| TC01 DCL 发布新的处理版本并开技术分支 | dcl | PASS |  |
+| TC02 只调整处理绑定，DCL 自己提交 | dcl | PASS |  |
+| TC03 本组测试验证技术变更 | steering_tester | PASS |  |
+| TC04 集成、集成测试与发布 | integrator；dcl；integration_tester；release | PASS |  |
+| N01 技术变更只由 DCL 工程负责 | steering；integrator；dcl | PASS |  |
 
 ## 反向用例 T-N01–T-N24
 

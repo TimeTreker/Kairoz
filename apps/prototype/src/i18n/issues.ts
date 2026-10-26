@@ -160,6 +160,11 @@ const PROBLEMS: Pattern[] = [
     ([p, m, dims]) =>
       `策略 ${p}：单次采集就超出 ${m} 预算（${dims!.replace(/ s > /g, ' 秒 > ').replace(/\bmemory\b/g, '内存').replace(/\bstorage\b/g, '存储').replace(/\bupload\b/g, '上传').replace(/ s per hour/g, ' 秒/小时').replace(/ per hour/g, '/小时').replace(/, /g, '；')}）`,
   ],
+  // DCL technical changes
+  [/adds or removes files/, () => '增删了文件'],
+  [/changes policies/, () => '改了策略'],
+  [/changes references/, () => '改了引用'],
+  [/changes (\w+) of (.+)/, ([f, n]) => `改了 ${n} 的 ${f}`],
   // Patches and the mainline
   [/software (\S+) runs patch (\S+); merge (.+) into the mainline, or close them for it, first/, ([v, p, f]) => `软件 ${v} 运行补丁 ${p}；先把 ${f} 合入主线（或写明不合入）`],
   // Training data

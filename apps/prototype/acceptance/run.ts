@@ -25,6 +25,7 @@ import * as patch from './patch.ts';
 import * as policySets from './policy-sets.ts';
 import * as quota from './quota.ts';
 import * as startup from './startup.ts';
+import * as technical from './technical.ts';
 import { GapError, NotApplicableError, World } from './world.ts';
 import type { SceneSpec } from './world.ts';
 
@@ -70,6 +71,7 @@ const suites = [
   { id: 'patch', mod: patch },
   { id: 'budget', mod: budget },
   { id: 'quota', mod: quota },
+  { id: 'technical', mod: technical },
 ] as const;
 
 const report: { script: string; name: string; rows: Row[] }[] = [];

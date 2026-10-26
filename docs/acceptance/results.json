@@ -1,8 +1,8 @@
 {
-  "runAt": "2026-10-26T13:17:18.653Z",
+  "runAt": "2026-10-26T13:24:17.862Z",
   "layer": "engine",
   "counts": {
-    "PASS": 195,
+    "PASS": 200,
     "FAIL": 0,
     "GAP": 0,
     "BLOCKED": 0,
@@ -1671,6 +1671,57 @@
           "id": "N01",
           "title": "配额只由车辆资源设置",
           "actor": "workspace_manager；business；dcl；release；integration_admin",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        }
+      ]
+    },
+    {
+      "script": "technical",
+      "name": "DCL 技术变更 · 自有技术分支交付",
+      "rows": [
+        {
+          "id": "TC01",
+          "title": "DCL 发布新的处理版本并开技术分支",
+          "actor": "dcl",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "TC02",
+          "title": "只调整处理绑定，DCL 自己提交",
+          "actor": "dcl",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "TC03",
+          "title": "本组测试验证技术变更",
+          "actor": "steering_tester",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "TC04",
+          "title": "集成、集成测试与发布",
+          "actor": "integrator；dcl；integration_tester；release",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "N01",
+          "title": "技术变更只由 DCL 工程负责",
+          "actor": "steering；integrator；dcl",
           "adaptation": null,
           "status": "PASS",
           "detail": null,
