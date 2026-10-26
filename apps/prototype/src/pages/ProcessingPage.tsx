@@ -110,13 +110,13 @@ export function ProcessingPage({ tab = 'templates' }: { tab?: string }) {
             <Input />
           </Form.Item>
           <Form.Item name="formats" label="Formats" rules={[{ required: true }]}>
-            <Select mode="tags" placeholder="binary" />
+            <Select mode="tags" placeholder={L('输入后回车，例如 binary', 'Type and press Enter, e.g. binary')} />
           </Form.Item>
           <Form.Item name="schemas" label={L('Schemas（留空 = 任意）', 'Schemas (blank = any)')}>
             <Select mode="tags" />
           </Form.Item>
           <Form.Item name="steps" label={L('步骤', 'Steps')} rules={[{ required: true }]}>
-            <Select mode="tags" placeholder="Receive" />
+            <Select mode="tags" placeholder={L('按执行顺序输入，例如 Receive、Parse', 'In order, e.g. Receive, Parse')} />
           </Form.Item>
           <Form.Item name="capability" label={L('能力', 'Capability')}>
             <Select options={['RawStorage', 'Parse', 'Desensitize', 'Index'].map((c) => ({ value: c, label: c }))} />
