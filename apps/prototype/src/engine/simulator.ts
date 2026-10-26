@@ -10,6 +10,7 @@ import { acceptClientReport, checkClientReport, configurationContents } from './
 import { DAY_MS, nowOf } from './clock.ts';
 import type { Ctx } from './engine.ts';
 import type { AgentState, DeviceState, Resource, State, UnsentReceipt } from './types.ts';
+import { answerCaptureRequest } from './aftersales.ts';
 import { releaseHeld } from './budget.ts';
 import { confirmHold, isCollectionPaused } from './collection-hold.ts';
 import { syncIfChanged } from './company-directory.ts';
@@ -170,6 +171,13 @@ export function tick(ctx: Ctx): number {
       confirmHold(ctx, r.id);
       answered += 1;
     }
+  }
+  // A connected vehicle answers after-sales requests first, then uploads what its budget allows.
+  for (const q of Object.values(ctx.s.captureRequests)) {
+    const r = ctx.s.resources[q.resourceId];
+    if (q.status !== 'PENDING' || !r || !r.agent.online || !clientRunning(r) || isCollectionPaused(ctx.s, r.id)) continue;
+    answerCaptureRequest(ctx, q.id);
+    answered += 1;
   }
   for (const r of Object.values(ctx.s.resources)) {
     if (!r.agent.online || !clientRunning(r) || isCollectionPaused(ctx.s, r.id)) continue;

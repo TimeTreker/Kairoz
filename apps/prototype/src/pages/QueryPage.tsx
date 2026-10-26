@@ -8,6 +8,7 @@ import { navigate } from '../app/router.ts';
 import { useEngineState } from '../app/store.ts';
 import { JsonExportModal, downloadJson } from '../components/JsonExport.tsx';
 import type { JsonFile } from '../components/JsonExport.tsx';
+import { AfterSalesRequests, CaptureSourceTag } from '../components/aftersales.tsx';
 import { EnvTag, Hint, LabelTag, Mono, PageHeader, when } from '../components/common.tsx';
 import { displayName } from '../engine/config.ts';
 import { aftersalesQuery, carriesData, eventTarget, exportManifest, reprocessEvent, trainingQuery } from '../engine/events.ts';
@@ -53,6 +54,8 @@ function AftersalesTab({ workspaceId }: { workspaceId: string }) {
   const event = open ? state.events[open] : undefined;
 
   return (
+    <Space orientation="vertical" size={16} style={{ width: '100%' }}>
+    <AfterSalesRequests workspaceId={workspaceId} />
     <Card>
       <Hint>
         {L(
@@ -111,6 +114,7 @@ function AftersalesTab({ workspaceId }: { workspaceId: string }) {
             ),
           },
           { title: L('时间', 'When'), render: (_, e) => when(e.occurredAt) },
+          { title: L('采集方式', 'Captured by'), render: (_, e) => <CaptureSourceTag source={e.source} /> },
           { title: L('采集文件', 'Files'), render: (_, e) => e.files.length },
           { title: L('处理状态', 'Status'), render: (_, e) => <LabelTag map={EVENT_STATUS_LABELS} value={e.status} color={EVENT_STATUS_COLORS[e.status]} /> },
           { title: L('失败原因', 'Failure'), render: (_, e) => (e.failure ? <Typography.Text type="danger">{B(issueLabel(e.failure), e.failure)}</Typography.Text> : '—') },
@@ -121,6 +125,7 @@ function AftersalesTab({ workspaceId }: { workspaceId: string }) {
         {event && <EventDetail event={event} />}
       </Drawer>
     </Card>
+    </Space>
   );
 }
 

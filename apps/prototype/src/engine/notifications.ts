@@ -60,7 +60,8 @@ export type NotificationKind =
   | 'GRANT_REVIEW'
   | 'ORPHANED_UNIT'
   | 'BUDGET_DROPS'
-  | 'COLLECTION_PAUSED';
+  | 'COLLECTION_PAUSED'
+  | 'AFTERSALES_READY';
 
 export interface Notification {
   /** Role, kind, object and state: stable while nothing changes, new when the state does. */
@@ -231,6 +232,15 @@ export function notificationsFor(s: State, actor: Actor, workspaceId: string): N
       if (u.dropped + u.suppressed === 0) continue;
       const last = Object.values(s.events).filter((e) => e.resourceId === r.id && !carriesData(e)).sort((a, b) => b.seq - a.seq)[0];
       add('DCL_ENGINEER', 'BUDGET_DROPS', [r.id, last?.id ?? null], { severity: 'WARNING', subject: r.id, detail: `${u.dropped}/${u.suppressed}`, link: 'processing/budget', at: last?.occurredAt ?? null });
+    }
+  }
+  // The answer to the account's own after-sales request: its data is ready, or the vehicle could not take it.
+  const asker = (['BUSINESS_DEV', 'BUSINESS_TEST', 'DCL_ENGINEER'] as const).find(has);
+  if (asker) {
+    for (const q of Object.values(s.captureRequests).filter((x) => x.workspaceId === workspaceId && x.requestedBy === actor.username && fresh(x.answeredAt))) {
+      const e = q.eventId ? s.events[q.eventId] : undefined;
+      if (q.status === 'CAPTURED' && e?.status === 'DONE') add(asker, 'AFTERSALES_READY', [q.id, 'DONE'], { severity: 'INFO', subject: q.resourceId, detail: `DONE · ${e.policyName}`, link: 'query', at: q.answeredAt });
+      else if (q.status === 'CANCELLED' || (e && !carriesData(e))) add(asker, 'AFTERSALES_READY', [q.id, 'NONE'], { severity: 'WARNING', subject: q.resourceId, detail: `NONE · ${q.policyId}`, link: 'query', at: q.answeredAt });
     }
   }
   // A vehicle the workspace works with had its collection paused (紧急停采).

@@ -296,6 +296,8 @@ Object.assign(ERROR_LABELS, {
   RESOURCE_BUDGET: b('有策略单次采集就超出车型资源预算，DCL 不能确认', 'A policy’s single capture exceeds the vehicle model’s budget; DCL cannot confirm'),
   INVALID_BUDGET: b('预算值必须为正数，触发上限为整数', 'Budget values must be positive; the trigger limit a whole number'),
   NO_VEHICLE_BUDGET: b('该车辆没有单独的预算', 'The vehicle has no budget of its own'),
+  REQUEST_PENDING: b('该车辆对这条策略已有等待执行的售后请求', 'The vehicle already has a pending after-sales request for this policy'),
+  REQUEST_ANSWERED: b('车辆已处理该请求', 'The vehicle already answered the request'),
   TECHNICAL_BINDINGS_ONLY: b('DCL 技术变更只能调整处理绑定，不能改文件、策略或引用', 'A DCL technical change only changes processing bindings, never files, policies or references'),
   NOTHING_TO_REBIND: b('基线中没有该业务分组的文件可以调整', 'The base has no files of this group to rebind'),
   NOT_TECHNICAL: b('只有 DCL 技术变更可以这样调整；业务 Feature 请在接入中调整', 'Only a DCL technical change is rebound this way; adjust a business Feature in intake'),
@@ -346,7 +348,23 @@ export const BUDGET_NOTE_LABELS: Record<string, Bilingual> = {
   FLOOD: b('超过策略每小时触发上限', 'over the policy’s hourly trigger limit'),
   EMERGENCY_HOLD: b('紧急停采', 'emergency collection pause'),
   OVER_BUDGET_HIGH: b('高优先级，超预算仍采集', 'HIGH priority, collected over budget'),
+  DEFERRED: b('售后优先，Grader 延迟', 'deferred: after-sales first'),
 };
+
+/** Where a capture came from. */
+export const CAPTURE_SOURCE_LABELS: Record<string, Bilingual> = {
+  TRIGGER: b('触发', 'Trigger'),
+  AFTERSALES: b('售后', 'After-sales'),
+  GRADER: b('Grader', 'Grader'),
+};
+export const CAPTURE_SOURCE_COLORS: Record<string, string> = { TRIGGER: 'default', AFTERSALES: 'magenta', GRADER: 'cyan' };
+
+export const CAPTURE_REQUEST_LABELS: Record<string, Bilingual> = {
+  PENDING: b('等待车辆执行', 'Waiting for the vehicle'),
+  CAPTURED: b('已采集', 'Captured'),
+  CANCELLED: b('已取消', 'Cancelled'),
+};
+export const CAPTURE_REQUEST_COLORS: Record<string, string> = { PENDING: 'processing', CAPTURED: 'green', CANCELLED: 'default' };
 
 /** The four budget dimensions. */
 export const BUDGET_DIMENSION_LABELS: Record<string, Bilingual> = {

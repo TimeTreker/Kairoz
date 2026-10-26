@@ -9,7 +9,7 @@ import type { FileType } from '../domain/file-types.ts';
 import { notFound, rule } from '../domain/errors.ts';
 import { sha256Hex } from '../domain/canonical.ts';
 import { newId } from '../domain/ids.ts';
-import { admitCapture } from './budget.ts';
+import { admitCapture, afterSalesOpen } from './budget.ts';
 import { isCollectionPaused } from './collection-hold.ts';
 import type { Actor, Ctx } from './engine.ts';
 import type { CollectionEvent, EventFile, Quality, State, TrainingUse } from './types.ts';
@@ -55,6 +55,11 @@ export function captureEvent(
     policyId: string;
     failParse?: boolean;
     origin?: CollectionEvent['origin'];
+    /** Who asked: the trigger (default), an after-sales request, or the periodic grader. */
+    source?: CollectionEvent['source'];
+    requestId?: string;
+    /** The workspace whose data query shows it; by default the one that put the configuration there. */
+    workspaceId?: string;
     occurredAt?: string;
     quality?: Quality;
     trainingUse?: TrainingUse;
@@ -104,7 +109,15 @@ export function captureEvent(
     files.map((f) => ({ fileType: f.fileType as FileType, edgeSteps: ctx.s.pipelines[f.edgePipelineId]?.steps.length ?? 1 })),
     window,
   );
-  const admission = admitCapture(ctx.s, r.id, hit.policyId, policy.priority, cost, at);
+  const source = input.source ?? 'TRIGGER';
+  // After-sales captures are core business: they go first, whatever the policy's own priority.
+  const priority = source === 'AFTERSALES' ? 'HIGH' : policy.priority;
+  const admission = admitCapture(ctx.s, r.id, hit.policyId, priority, cost, at);
+  // Grader captures wait while after-sales work is open on the vehicle (售后优先，Grader 延迟).
+  if (source === 'GRADER' && admission.status === 'UPLOADING' && afterSalesOpen(ctx.s, r.id)) {
+    admission.status = 'HELD';
+    admission.note = 'DEFERRED';
+  }
   for (const evicted of admission.evict) {
     const e = ctx.s.events[evicted]!;
     e.status = 'DROPPED';
@@ -123,7 +136,7 @@ export function captureEvent(
     vehicleModelId: r.vehicleModelId,
     env: r.env,
     integrationVersion: r.integrationVersion,
-    workspaceId: sourceWorkspace(ctx.s, r.id, config.id) ?? r.homeWorkspaceId ?? '',
+    workspaceId: input.workspaceId ?? sourceWorkspace(ctx.s, r.id, config.id) ?? r.homeWorkspaceId ?? '',
     groupId: hit.groupId,
     resolvedConfigId: config.id,
     configLabel: config.label,
@@ -139,7 +152,9 @@ export function captureEvent(
     files,
     status: admission.status,
     failure: admission.status === 'SUPPRESSED' ? `TriggerFlood: ${policy.name} fired more often than its hourly limit` : admission.status === 'DROPPED' ? `BudgetExceeded: ${admission.note?.toLowerCase()}` : null,
-    priority: policy.priority,
+    priority,
+    source,
+    requestId: input.requestId ?? null,
     cost,
     writtenAt: stored ? at : null,
     uploadAt: admission.status === 'UPLOADING' ? at : null,

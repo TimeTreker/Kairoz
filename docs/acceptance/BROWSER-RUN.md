@@ -25,6 +25,7 @@
 | 资源预算与紧急停采 | BG01–BG07、N01 | 8 | 0 | 0 |
 | 仿真运行配额 | Q01–Q03、N01 | 4 | 0 | 0 |
 | DCL 技术变更 | TC01–TC04、N01 | 5 | 0 | 0 |
+| 售后与 Grader | AS01–AS04、N01 | 5 | 0 | 0 |
 
 U02 首次重放为 FAIL（导出清单没有 MOCK 标识、训练查询没有车型筛选），修复后重放通过；两次结果都留在面板历史中。
 
@@ -331,6 +332,16 @@ U02 首次重放为 FAIL（导出清单没有 MOCK 标识、训练查询没有�
 | TC03 本组测试验证 | steering；steering_tester | PASS | steering 的 Feature 列表行“DCL Ready · DCL 技术变更”，详情页没有提交、添加或编辑按钮。steering_tester 下发到转向研发车组，回执后 SIM-022、VEH-003 登记 PASS，“已确认 Verified，可交给配置集成”。 |
 | TC04 集成与发布 | integrator | PASS（部分） | 合并页的来源行“bin_log_edge_v2 · DCL 技术变更 · chassis.steering · 策略集 1.0.0”。确认、冻结、集成测试与发布与已验证的流程相同，由引擎重放核对（发布差异只有车端处理变化）。 |
 | N01 越权 | steering；integrator | 引擎重放 | 业务研发与配置集成不能新建或提交技术变更。 |
+
+## 售后与 Grader · 售后回捞与优先级仲裁（演示数据）
+
+| 幕 | 执行人 | 结果 | 证据与说明 |
+|---|---|---|---|
+| AS01 请求售后采集 | business | PASS | 制动团队工作区“数据查询 → 售后查询”上方的“售后回捞”：车辆只列 SIM-021、VEH-001，选 VEH-001 后策略只有 chassis.brake.failure_diag、chassis.brake.monitor（本组），没有转向策略。请求 chassis.brake.monitor（客户投诉：低速制动异响）：“已请求，车辆下次连线时采集”，列表“等待车辆执行 · 取消”。（同一策略重复请求被拒由引擎重放核对。） |
+| AS02 售后优先 | 车辆模拟器 | PASS | 模拟器出现“售后请求 · VEH-001 · chassis.brake.monitor · …”与“车辆执行”。对 chassis.brake.failure_diag 点“Grader 周期采集”：“预算排队 1 · 售后优先，Grader 延迟”，事件行“预算排队 · Grader · NORMAL · 售后优先，Grader 延迟”。 |
+| AS03 执行与数据回到业务 | 车辆模拟器；business | PASS | “车辆执行”：新事件“车端上传中 · 售后 · HIGH · 0.4 MB”。执行一步后两条都“处理完成”（Grader 在售后上传后才走）。business 的售后查询行“VEH-001 … 急刹车 … 采集方式 售后 · 处理完成”，请求“已采集 · 处理完成”，通知“VEH-001 的售后采集已就绪”。 |
+| AS04 撤回 | brake_tester | 引擎重放 | 列表的“取消”与已取消请求不能再执行由引擎重放核对。 |
+| N01 越权 | 多个账号 | 引擎重放 | 只列本组策略；其他拒绝码由引擎重放核对。 |
 
 ## 重放发现与处理
 

@@ -17,6 +17,7 @@ import * as personalSim from './personal-sim.ts';
 import * as simSoftware from './sim-software.ts';
 import * as softwareChange from './software-change.ts';
 import * as notifications from './notifications.ts';
+import * as aftersales from './aftersales.ts';
 import * as borrowing from './borrowing.ts';
 import * as budget from './budget.ts';
 import * as lifecycle from './lifecycle.ts';
@@ -72,6 +73,7 @@ const suites = [
   { id: 'budget', mod: budget },
   { id: 'quota', mod: quota },
   { id: 'technical', mod: technical },
+  { id: 'aftersales', mod: aftersales },
 ] as const;
 
 const report: { script: string; name: string; rows: Row[] }[] = [];

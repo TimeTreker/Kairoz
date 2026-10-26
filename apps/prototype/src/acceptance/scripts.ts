@@ -3639,6 +3639,98 @@ export const SCRIPTS: Script[] = [
         "fail": "拒绝不改变任何状态。"
       }
     ]
+  },
+  {
+    "id": "aftersales",
+    "name": "售后与 Grader · 售后回捞与优先级仲裁",
+    "start": "demo",
+    "scenes": [
+      {
+        "id": "AS01",
+        "title": "业务为客户案例请求售后采集",
+        "actor": "business；brake_tester",
+        "accounts": [
+          "business",
+          "brake_tester"
+        ],
+        "workspace": "team-brake",
+        "page": "数据查询 → 售后查询 → 售后回捞",
+        "pre": "演示数据；VEH-001 离线（车辆模拟器关闭“在线”）。",
+        "steps": [
+          "以 business 登录（制动团队工作区），“售后回捞”选 VEH-001、策略 chassis.brake.monitor，原因“客户投诉：低速制动异响”，“请求采集”。",
+          "请求列表“等待车辆执行”；brake_tester 再对同一策略请求被拒绝（已有等待执行的请求）。"
+        ],
+        "done": "请求记录车辆、策略、原因与请求人，等车辆连线。",
+        "fail": "只能请求本组的策略，且必须写明原因。"
+      },
+      {
+        "id": "AS02",
+        "title": "售后优先，Grader 延后",
+        "actor": "车辆模拟器",
+        "accounts": [],
+        "workspace": null,
+        "page": "车辆模拟器 → 采集事件",
+        "pre": "AS01 完成。",
+        "steps": [
+          "对 VEH-001 的 chassis.brake.failure_diag 点“Grader 周期采集”：“预算排队 · 售后优先，Grader 延迟”。",
+          "同一策略“触发事件”：照常上传，触发不受售后仲裁影响。"
+        ],
+        "done": "车辆上有售后工作时，周期性的 Grader 采集等待。",
+        "fail": "—"
+      },
+      {
+        "id": "AS03",
+        "title": "车辆执行售后采集，数据回到业务",
+        "actor": "车辆模拟器；business",
+        "accounts": [
+          "business"
+        ],
+        "workspace": "team-brake",
+        "page": "车辆模拟器；数据查询；通知中心",
+        "pre": "AS02 完成。",
+        "steps": [
+          "VEH-001 恢复在线，执行一步：请求“已采集”，事件来源“售后”、优先级 HIGH；Grader 采集仍等待。",
+          "再执行一步：售后采集上传完成后 Grader 采集上传；处理完成后 business 在售后查询中看到“采集方式：售后”的事件，通知“VEH-001 的售后采集已就绪”。"
+        ],
+        "done": "售后采集作为核心业务先走，数据进入业务的查询。",
+        "fail": "—"
+      },
+      {
+        "id": "AS04",
+        "title": "撤回尚未执行的请求",
+        "actor": "brake_tester；车辆模拟器",
+        "accounts": [
+          "brake_tester"
+        ],
+        "workspace": "team-brake",
+        "page": "数据查询 → 售后回捞",
+        "pre": "AS01 完成。",
+        "steps": [
+          "VEH-001 离线时 brake_tester 请求 chassis.brake.failure_diag，再“取消”：状态“已取消”。",
+          "车辆连线后不再执行；已取消的请求不能再执行。"
+        ],
+        "done": "未执行的请求可以撤回。",
+        "fail": "—"
+      },
+      {
+        "id": "N01",
+        "title": "售后请求的越权",
+        "actor": "business；dispatch_operator；resource",
+        "accounts": [
+          "business",
+          "dispatch_operator",
+          "resource"
+        ],
+        "workspace": null,
+        "page": "引擎回放",
+        "pre": "AS01 完成。",
+        "steps": [
+          "business 不能请求转向组的策略；仅下发的测试账号与车辆资源不能请求；没有原因被拒绝。"
+        ],
+        "done": "售后请求只针对本组的策略。",
+        "fail": "拒绝不改变任何状态。"
+      }
+    ]
   }
 ];
 

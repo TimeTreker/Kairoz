@@ -251,6 +251,17 @@ export const SCENARIOS: Scenario[] = [
     ],
   },
   {
+    key: 'aftersales',
+    titleZh: '售后回捞与 Grader',
+    titleEn: 'After-sales captures and the grader',
+    steps: [
+      { account: 'business', workspace: 'team-brake', page: 'query', zh: '在“售后回捞”对 VEH-001 请求 chassis.brake.monitor，写明客户案例', en: 'Under After-sales ask VEH-001 for chassis.brake.monitor with the customer case', expectZh: '请求等待车辆执行；只能请求本组的策略', expectEn: 'The request waits for the vehicle; only your group’s policies can be asked for' },
+      { account: 'business', page: 'simulator', zh: '在车辆模拟器对 VEH-001 点“Grader 周期采集”（chassis.brake.failure_diag）', en: 'In the simulator run a Grader capture on VEH-001 (chassis.brake.failure_diag)', expectZh: '售后优先，Grader 延迟', expectEn: 'Deferred: after-sales first' },
+      { account: 'business', page: 'simulator', zh: '执行一步两次', en: 'Step twice', expectZh: '车辆先执行售后采集（HIGH），上传后 Grader 采集才走', expectEn: 'The vehicle makes the after-sales capture (HIGH) first; the grader capture goes once it is uploaded' },
+      { account: 'business', workspace: 'team-brake', page: 'query', zh: '处理完成后在售后查询中查看', en: 'Once processed, look in the after-sales query', expectZh: '事件“采集方式：售后”；通知售后采集已就绪', expectEn: 'The event shows Captured by: After-sales; a notification says it is ready' },
+    ],
+  },
+  {
     key: 'directory',
     titleZh: '公司目录与组织授权',
     titleEn: 'Company directory and org grants',

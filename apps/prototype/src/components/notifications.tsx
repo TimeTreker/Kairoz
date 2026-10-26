@@ -54,6 +54,7 @@ export const NOTIFICATION_CATEGORY: Record<NotificationKind, string> = {
   ORPHANED_UNIT: 'ORG',
   BUDGET_DROPS: 'VEHICLE',
   COLLECTION_PAUSED: 'VEHICLE',
+  AFTERSALES_READY: 'FEATURE',
 };
 
 export function useCategoryLabels(): Record<string, string> {
@@ -193,6 +194,12 @@ export function useNotificationText() {
           title: L(`${s} 的采集超出预算`, `${s} ran over its collection budget`),
           body: L(`近一小时未保留 ${dropped} 次、洪峰抑制 ${suppressed} 次；检查车型预算或策略窗口。`, `In the last hour ${dropped} capture(s) dropped and ${suppressed} suppressed as a flood; check the model budget or the policy windows.`),
         };
+      }
+      case 'AFTERSALES_READY': {
+        const [code, ...what] = d.split(' · ');
+        return code === 'DONE'
+          ? { title: L(`${s} 的售后采集已就绪`, `After-sales capture of ${s} is ready`), body: L(`${what.join(' · ')}：在数据查询中查看。`, `${what.join(' · ')}: see it in the data query.`) }
+          : { title: L(`${s} 没有完成售后采集`, `${s} did not complete the after-sales capture`), body: L(`${what.join(' · ')}：车辆不再运行该策略，或采集未保留。`, `${what.join(' · ')}: the vehicle no longer runs the policy, or the capture was dropped.`) };
       }
       case 'COLLECTION_PAUSED': {
         const [code, ...reason] = d.split(' · ');

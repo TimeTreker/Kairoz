@@ -1,10 +1,10 @@
 # 验收结果（引擎层逐幕回放）
 
-运行时间：2026-10-26T13:24:17.862Z。由 `npm run acceptance` 生成；每次重新执行，不沿用历史结果。
+运行时间：2026-10-26T13:30:31.037Z。由 `npm run acceptance` 生成；每次重新执行，不沿用历史结果。
 
 状态：PASS 通过；FAIL 失败；GAP 设计要求尚未实现；BLOCKED 前置幕未通过；NOT_APPLICABLE 浏览器原型不适用（如服务端部署）。
 
-合计：PASS 200 · FAIL 0 · GAP 0 · BLOCKED 0 · NOT_APPLICABLE 3 · NOT_WRITTEN 0
+合计：PASS 205 · FAIL 0 · GAP 0 · BLOCKED 0 · NOT_APPLICABLE 3 · NOT_WRITTEN 0
 
 ## 从零启动 · 角色协作
 
@@ -274,6 +274,16 @@
 | TC03 本组测试验证技术变更 | steering_tester | PASS |  |
 | TC04 集成、集成测试与发布 | integrator；dcl；integration_tester；release | PASS |  |
 | N01 技术变更只由 DCL 工程负责 | steering；integrator；dcl | PASS |  |
+
+## 售后与 Grader · 售后回捞与优先级仲裁
+
+| 幕 | 执行人 | 状态 | 说明 |
+|---|---|---|---|
+| AS01 业务为客户案例请求售后采集 | business；brake_tester | PASS |  |
+| AS02 售后优先，Grader 延后 | 车辆模拟器 | PASS |  |
+| AS03 车辆执行售后采集，数据回到业务 | 车辆模拟器；business | PASS |  |
+| AS04 撤回尚未执行的请求 | brake_tester；车辆模拟器 | PASS |  |
+| N01 售后请求的越权 | business；dispatch_operator；resource | PASS |  |
 
 ## 反向用例 T-N01–T-N24
 

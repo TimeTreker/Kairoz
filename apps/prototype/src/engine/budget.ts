@@ -134,6 +134,17 @@ export interface Admission {
 const RANK: Record<Priority, number> = { HIGH: 0, NORMAL: 1, LOW: 2 };
 
 /**
+ * Whether after-sales work is open on the vehicle: a request it has not answered, or an
+ * after-sales capture still on it. Grader captures wait meanwhile (售后优先).
+ */
+export function afterSalesOpen(s: State, resourceId: string): boolean {
+  return (
+    Object.values(s.captureRequests).some((q) => q.resourceId === resourceId && q.status === 'PENDING') ||
+    Object.values(s.events).some((e) => e.resourceId === resourceId && e.source === 'AFTERSALES' && (e.status === 'HELD' || e.status === 'UPLOADING'))
+  );
+}
+
+/**
  * The agent's decision on a new capture, against the vehicle's rolling hour at `at`. HIGH
  * captures are never dropped or held for budget: they make room by evicting waiting captures,
  * lowest priority and newest first, and are flagged when they still run over.
@@ -180,8 +191,10 @@ export function releaseHeld(ctx: Ctx, resourceId: string): number {
   const at = nowOf(ctx.s);
   const { budget: b } = budgetOf(ctx.s, resourceId);
   let network = usageOf(ctx.s, resourceId, at).networkMb;
+  // Grader captures wait while after-sales is open; they never hold up the captures behind them.
+  const deferGrader = afterSalesOpen(ctx.s, resourceId);
   const waiting = Object.values(ctx.s.events)
-    .filter((e) => e.resourceId === resourceId && e.status === 'HELD')
+    .filter((e) => e.resourceId === resourceId && e.status === 'HELD' && !(deferGrader && e.source === 'GRADER'))
     .sort((x, y) => RANK[x.priority] - RANK[y.priority] || x.occurredAt.localeCompare(y.occurredAt) || x.seq - y.seq);
   let released = 0;
   for (const e of waiting) {
@@ -194,6 +207,7 @@ export function releaseHeld(ctx: Ctx, resourceId: string): number {
     if (network + cost(e).networkMb > b.networkMbPerHour) break;
     e.status = 'UPLOADING';
     e.uploadAt = at;
+    if (e.budgetNote === 'DEFERRED') e.budgetNote = null;
     network += cost(e).networkMb;
     released += 1;
   }

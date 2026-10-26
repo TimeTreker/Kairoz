@@ -15,6 +15,8 @@ import type { DeviceFault, Quality, TrainingUse } from '../engine/types.ts';
 import { advanceClock, advanceClockHours, applyNow, completeImageChange, completeVehicleSoftware, deviceSummary, flushOutbox, heldReceipt, pendingForVehicles, reportNow, resendReceipts, restartClient, sendFault, sendReceipt, setAgent, simulateSoftwareOta, tick, upgradeClient } from '../engine/simulator.ts';
 import { DAY_MS, nowOf } from '../engine/clock.ts';
 import { HoldTag, UsageMeter } from '../components/budget.tsx';
+import { CaptureSourceTag } from '../components/aftersales.tsx';
+import { answerCaptureRequest, graderCapture, pendingCaptureRequests } from '../engine/aftersales.ts';
 import { confirmHold, pendingHolds } from '../engine/collection-hold.ts';
 import { pendingSoftwareRequests } from '../engine/vehicle-software.ts';
 import { DeliveryTag } from '../components/testing.tsx';
@@ -232,6 +234,10 @@ export function SimulatorPage() {
   };
   const fire = () => {
     const id = system((c) => captureEvent(c, { resourceId: vehicle!, policyId: policy!, failParse }));
+    if (id) outcome([id]);
+  };
+  const graded = () => {
+    const id = system((c) => graderCapture(c, vehicle!, policy!));
     if (id) outcome([id]);
   };
   const burst = () => {
@@ -500,6 +506,11 @@ export function SimulatorPage() {
                 <Button type="primary" disabled={!vehicle || !policy} onClick={fire}>
                   {L('触发事件', 'Fire event')}
                 </Button>
+                <Tooltip title={L('云端 Grader 周期计算后请求采集：车辆上有售后请求或售后采集未上传完时延后', 'The cloud grader’s periodic capture: it waits while the vehicle has after-sales work open')}>
+                  <Button disabled={!vehicle || !policy} onClick={() => graded()}>
+                    {L('Grader 周期采集', 'Grader capture')}
+                  </Button>
+                </Tooltip>
                 <Tooltip title={L('同一策略连续触发 10 次，演示洪峰抑制与预算排队', 'Fire the policy 10 times in a row: flood suppression and budget queuing')}>
                   <Button disabled={!vehicle || !policy} onClick={burst}>
                     {L('模拟洪峰（连发 10 次）', 'Flood (10 in a row)')}
@@ -515,6 +526,21 @@ export function SimulatorPage() {
               <HoldTag resourceId={vehicle} />
             </Space>
           )}
+          {pendingCaptureRequests(state).map((q) => (
+            <Alert
+              key={q.id}
+              type="info"
+              showIcon
+              style={{ marginBottom: 8 }}
+              title={L(`售后请求 · ${q.resourceId} · ${q.policyId} · ${q.reason}`, `After-sales request · ${q.resourceId} · ${q.policyId} · ${q.reason}`)}
+              description={L('车辆在线时“执行一步”会自动执行；也可以在这里扮演车辆执行。', 'A step runs it while the vehicle is online; or play the vehicle here.')}
+              action={
+                <Button size="small" onClick={() => system((c) => answerCaptureRequest(c, q.id), L('车辆已执行售后采集', 'The vehicle made the after-sales capture'))}>
+                  {L('车辆执行', 'Vehicle runs it')}
+                </Button>
+              }
+            />
+          ))}
           {pendingHolds(state).map((h) => (
             <Alert
               key={h.resourceId}
@@ -547,6 +573,7 @@ export function SimulatorPage() {
                 title: L('预算', 'Budget'),
                 render: (_, e) => (
                   <Space size={4} wrap>
+                    <CaptureSourceTag source={e.source} />
                     <Tag color={e.priority === 'HIGH' ? 'magenta' : undefined}>{e.priority}</Tag>
                     {e.cost && <Typography.Text type="secondary">{`${e.cost.networkMb} MB`}</Typography.Text>}
                     {e.budgetNote && <Typography.Text type={e.budgetNote === 'OVER_BUDGET_HIGH' ? 'warning' : 'danger'}>{B(BUDGET_NOTE_LABELS[e.budgetNote]!)}</Typography.Text>}

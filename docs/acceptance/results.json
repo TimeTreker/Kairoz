@@ -1,8 +1,8 @@
 {
-  "runAt": "2026-10-26T13:24:17.862Z",
+  "runAt": "2026-10-26T13:30:31.037Z",
   "layer": "engine",
   "counts": {
-    "PASS": 200,
+    "PASS": 205,
     "FAIL": 0,
     "GAP": 0,
     "BLOCKED": 0,
@@ -1722,6 +1722,57 @@
           "id": "N01",
           "title": "技术变更只由 DCL 工程负责",
           "actor": "steering；integrator；dcl",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        }
+      ]
+    },
+    {
+      "script": "aftersales",
+      "name": "售后与 Grader · 售后回捞与优先级仲裁",
+      "rows": [
+        {
+          "id": "AS01",
+          "title": "业务为客户案例请求售后采集",
+          "actor": "business；brake_tester",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "AS02",
+          "title": "售后优先，Grader 延后",
+          "actor": "车辆模拟器",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "AS03",
+          "title": "车辆执行售后采集，数据回到业务",
+          "actor": "车辆模拟器；business",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "AS04",
+          "title": "撤回尚未执行的请求",
+          "actor": "brake_tester；车辆模拟器",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "N01",
+          "title": "售后请求的越权",
+          "actor": "business；dispatch_operator；resource",
           "adaptation": null,
           "status": "PASS",
           "detail": null,

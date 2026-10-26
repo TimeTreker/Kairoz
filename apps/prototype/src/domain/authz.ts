@@ -112,6 +112,8 @@ export const ACTIONS = {
     excludeDispatchOnly: true,
   },
   'event.reprocess': { roles: ['DCL_ENGINEER'], env: 'target' },
+  /** An after-sales request (售后回捞): a vehicle captures one of the group's policies now. */
+  'event.requestCapture': { roles: ['BUSINESS_DEV', 'BUSINESS_TEST', 'DCL_ENGINEER'], env: 'target', excludeDispatchOnly: true },
   // Resource protection (资源保护)
   /** A vehicle model's collection budget, and per-vehicle overrides: DCL engineering, for every environment. */
   'budget.manage': { roles: ['DCL_ENGINEER'], env: 'all' },

@@ -11,7 +11,7 @@ import type { FileType, Privacy } from '../domain/file-types.ts';
 import type { ReviewControls } from '../domain/intake.ts';
 import type { Domain, Env, GroupPurpose, Role, Scope, WorkspaceKind } from '../domain/vocabulary.ts';
 
-export const STATE_SCHEMA = 18;
+export const STATE_SCHEMA = 19;
 
 export interface Account {
   username: string;
@@ -857,7 +857,29 @@ export type EventStatus = 'HELD' | 'UPLOADING' | 'PROCESSING' | 'DONE' | 'FAILED
  * buffer full, evicted for a HIGH capture, a trigger flood, an emergency hold, or a HIGH capture
  * collected over budget.
  */
-export type BudgetNote = 'CPU' | 'IO' | 'MEMORY' | 'NETWORK' | 'EVICTED' | 'FLOOD' | 'EMERGENCY_HOLD' | 'OVER_BUDGET_HIGH';
+export type BudgetNote = 'CPU' | 'IO' | 'MEMORY' | 'NETWORK' | 'EVICTED' | 'FLOOD' | 'EMERGENCY_HOLD' | 'OVER_BUDGET_HIGH' | 'DEFERRED';
+
+/**
+ * Where a capture came from: the policy's trigger on the vehicle, an after-sales request (售后,
+ * core business, first), or the periodic grader (Grader), which waits for after-sales.
+ */
+export type CaptureSource = 'TRIGGER' | 'AFTERSALES' | 'GRADER';
+
+/** An after-sales request (售后回捞) for one vehicle to capture one policy's files now. */
+export interface CaptureRequest {
+  id: string;
+  seq: number;
+  resourceId: string;
+  policyId: string;
+  /** The workspace the request was made in; its data query shows the capture. */
+  workspaceId: string;
+  reason: string;
+  requestedBy: string;
+  requestedAt: string;
+  status: 'PENDING' | 'CAPTURED' | 'CANCELLED';
+  eventId: string | null;
+  answeredAt: string | null;
+}
 
 /** A vehicle's collection pause: asked (PAUSING), confirmed by the vehicle (PAUSED), being lifted (RESUMING), or lifted (ACTIVE). */
 export interface CollectionHold {
@@ -919,8 +941,11 @@ export interface CollectionEvent {
   files: EventFile[];
   status: EventStatus;
   failure: string | null;
-  /** The policy's priority when it fired: HIGH captures are collected even over budget. */
+  /** The policy's priority when it fired (HIGH for after-sales): HIGH captures are collected even over budget. */
   priority: Priority;
+  source: CaptureSource;
+  /** The after-sales request it answers, if any. */
+  requestId: string | null;
   /** What the capture costs the vehicle; null for events recorded before budgets existed. */
   cost: CaptureCost | null;
   /** When the vehicle stored the capture, and when its upload started; null if it never did. */
@@ -1288,6 +1313,7 @@ export interface State {
   collectionHolds: Record<string, CollectionHold>;
   /** How many simulations a workspace may run at once (team and personal together); none means no limit. */
   simulationQuotas: Record<string, number>;
+  captureRequests: Record<string, CaptureRequest>;
   audit: AuditEvent[];
 }
 
@@ -1356,6 +1382,7 @@ export function emptyState(): State {
     collectionBudgets: { models: {}, vehicles: {} },
     collectionHolds: {},
     simulationQuotas: {},
+    captureRequests: {},
     audit: [],
   };
 }

@@ -179,7 +179,17 @@ function to18(s: Saved): void {
   s.schema = 18;
 }
 
-const STEPS: Record<number, (s: Saved) => void> = { 6: to7, 7: to8, 8: to9, 9: to10, 10: to11, 11: to12, 12: to13, 13: to14, 14: to15, 15: to16, 16: to17, 17: to18 };
+/** Schema 19: capture sources and after-sales requests; every earlier capture came from a trigger. */
+function to19(s: Saved): void {
+  s.captureRequests ??= {};
+  for (const e of Object.values((s.events ?? {}) as Rows)) {
+    e.source ??= 'TRIGGER';
+    e.requestId ??= null;
+  }
+  s.schema = 19;
+}
+
+const STEPS: Record<number, (s: Saved) => void> = { 6: to7, 7: to8, 8: to9, 9: to10, 10: to11, 11: to12, 12: to13, 13: to14, 14: to15, 15: to16, 16: to17, 17: to18, 18: to19 };
 
 /** The state at the current schema, or null when it cannot be read or is too old. Mutates `raw`. */
 export function migrate(raw: unknown): State | null {
