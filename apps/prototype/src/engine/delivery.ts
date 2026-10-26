@@ -80,6 +80,9 @@ export interface GroupFit {
   fits: boolean;
 }
 
+/** The vehicle group's workspace or business group was archived: nothing is followed there any more. */
+const closedGroup = (s: State, g: VehicleGroup) => s.workspaces[g.workspaceId]?.status !== 'ACTIVE' || (g.groupId !== null && s.groups[g.groupId]?.status !== 'ACTIVE');
+
 /** How a vehicle waiting to follow its group fits what the group published (null when it does not wait). */
 export function fitOf(s: State, resourceId: string): GroupFit | null {
   const follow = s.groupFollows[resourceId];
@@ -87,7 +90,7 @@ export function fitOf(s: State, resourceId: string): GroupFit | null {
   const g = follow ? s.vehicleGroups[follow.vehicleGroupId] : undefined;
   if (!follow || !r || !g || s.groupMembers[resourceId] !== g.id) return null;
   const answer = answerConfigRequest(s, resourceId);
-  const p = livePublication(s, g);
+  const p = closedGroup(s, g) ? null : livePublication(s, g);
   if (!p || s.features[p.featureId]!.stage === 'ARCHIVED') return { resourceId, follow, vehicleGroupId: g.id, check: { ...emptyCheck('NOT_PUBLISHED'), vehicleGroupId: g.id }, answer, problems: [], state: 'NOTHING', fits: false };
   const feature = s.features[p.featureId]!;
   const check = assessPublicationOn(s, r, g, r.integrationVersion, groupPublicationBase(s, g, r.id));
@@ -111,8 +114,9 @@ export function followGroup(ctx: Ctx, resourceId: string): string | null {
   if (!follow) return null;
   const g = ctx.s.vehicleGroups[follow.vehicleGroupId];
   const p = g ? livePublication(ctx.s, g) : null;
-  // An archived Feature's publication keeps running where it was applied, but no new vehicle follows it.
-  if (!g || ctx.s.groupMembers[resourceId] !== g.id || g.status !== 'ACTIVE' || !p || ctx.s.features[p.featureId]!.stage === 'ARCHIVED') {
+  // An archived Feature's publication keeps running where it was applied, but no new vehicle follows
+  // it; nor one of an archived business group or workspace.
+  if (!g || ctx.s.groupMembers[resourceId] !== g.id || g.status !== 'ACTIVE' || closedGroup(ctx.s, g) || !p || ctx.s.features[p.featureId]!.stage === 'ARCHIVED') {
     delete ctx.s.groupFollows[resourceId];
     return null;
   }
@@ -145,6 +149,7 @@ export function dispatchToVehicle(ctx: Ctx, resourceId: string): string {
   if (!p || !feature || feature.stage === 'ARCHIVED') throw rule('NO_FEATURE_PUBLICATION', `nothing of a Feature stands dispatched to ${g.name}; dispatch to the group`);
   const group = getGroup(ctx.s, feature.groupId);
   ctx.allow('feature.dispatch', { type: 'vehicle', id: r.id, workspaceId: g.workspaceId, groupId: group.id, scope: group.domain, env: g.env });
+  if (group.status !== 'ACTIVE') throw rule('GROUP_ARCHIVED', `group ${group.id} is archived`);
   if (g.requiresApproval) throw rule('APPROVAL_REQUIRED', 'this vehicle group takes approved team test requests', { issues: [g.name] });
   const problems = vehicleDispatchProblems(ctx.s, feature, p.commitId, g, r, p.disabledPolicies);
   if (problems.length) throw rule('DISPATCH_BLOCKED', 'the dispatch would not reach the vehicle safely', { issues: problems.map((x) => `${r.id}: ${x}`) });

@@ -216,7 +216,7 @@ export function OrgPage() {
                               {L('编辑', 'Edit')}
                             </Button>
                           )}
-                          {w.status === 'ACTIVE' && can('workspace.archive', { workspaceId: w.id }) && (
+                          {w.status === 'ACTIVE' && (canWorkspaces || can('workspace.archive', { workspaceId: w.id })) && (
                             <Button type="link" size="small" danger onClick={() => setLifecycle({ object: 'workspace', action: 'archive', id: w.id })}>
                               {L('归档', 'Archive')}
                             </Button>
@@ -269,9 +269,9 @@ export function OrgPage() {
                     {
                       title: '',
                       render: (_, g) => {
-                        // Archived by the admin of every workspace holding the group, or by platform operations.
+                        // Archived by platform operations, or by the admin of every (active) workspace holding the group.
                         const holders = workspacesOfGroup(state, g.id);
-                        const may = holders.length ? holders.every((ws) => can('group.archive', { workspaceId: ws })) : canOrg;
+                        const may = canOrg || (holders.length > 0 && holders.every((ws) => state.workspaces[ws]?.status === 'ACTIVE' && can('group.archive', { workspaceId: ws })));
                         return (
                           g.status === 'ACTIVE' &&
                           may && (

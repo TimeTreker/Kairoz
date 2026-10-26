@@ -469,6 +469,7 @@ export function createVehicleGroup(
   if (ws.kind === 'TEAM') {
     if (input.purpose === 'PRODUCTION') throw rule('PRODUCTION_IN_TEAM', 'production vehicle groups belong to project workspaces');
     if (!groupId || !ws.groupIds.includes(groupId)) throw rule('GROUP_NOT_IN_WORKSPACE', 'choose a business group of this workspace');
+    if (ctx.s.groups[groupId]?.status !== 'ACTIVE') throw rule('GROUP_ARCHIVED', `group ${groupId} is archived`);
   }
   if (!input.name.trim()) throw rule('NAME_REQUIRED', 'name the vehicle group');
   if (Object.values(ctx.s.vehicleGroups).some((g) => g.workspaceId === ws.id && g.name === input.name.trim())) {
@@ -509,6 +510,8 @@ export function addGroupMember(ctx: Ctx, vehicleGroupId: string, resourceId: str
   assertShared(r);
   if (!reason.trim()) throw rule('REASON_REQUIRED', 'give a reason for the membership change');
   if (!(ctx.s.workspaceResources[g.workspaceId] ?? []).includes(r.id)) throw rule('VEHICLE_NOT_IN_WORKSPACE', 'add the vehicle to the workspace first');
+  // A vehicle group of an archived business group takes no new vehicles; it can still be emptied.
+  if (g.groupId && ctx.s.groups[g.groupId]?.status !== 'ACTIVE') throw rule('GROUP_ARCHIVED', `group ${g.groupId} is archived`);
   assertNotLentAway(ctx.s, r.id, g.workspaceId);
   if (r.env !== g.env) throw rule('ENV_MISMATCH', `vehicle ${r.id} is a ${r.env} vehicle; the group is ${g.env}`);
   if (r.vehicleModelId !== getWorkspace(ctx.s, g.workspaceId).vehicleModelId) throw rule('MODEL_MISMATCH', 'the vehicle is of another model');

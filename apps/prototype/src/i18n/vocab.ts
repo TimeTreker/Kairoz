@@ -232,6 +232,7 @@ Object.assign(ERROR_LABELS, {
   INVALID_VIN: b('VIN 为 17 位，不含 I、O、Q', 'A VIN has 17 characters without I, O or Q'),
   RECEIPT_CONFLICT: b('该尝试已有不同的回执', 'A different receipt exists for this attempt'),
   STALE_ATTEMPT: b('回执的尝试次数已过期', 'The receipt is for an old attempt'),
+  RECEIPT_HELD: b('车辆已应用这次尝试，回执等待补发', 'The vehicle already applied this attempt; its receipt waits to be sent again'),
   TARGET_NOT_PENDING: b('该目标未在等待回执', 'The target is not awaiting a receipt'),
 });
 

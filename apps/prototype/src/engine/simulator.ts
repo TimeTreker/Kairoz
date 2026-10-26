@@ -13,6 +13,7 @@ import type { AgentState, DeviceState, Resource, State, UnsentReceipt } from './
 import { syncIfChanged } from './company-directory.ts';
 import { pushPending } from './delivery.ts';
 import { advanceEvent } from './events.ts';
+import { answerImageChange } from './sim-software.ts';
 import { acceptReceipt } from './validation.ts';
 import { answerVehicleSoftware } from './vehicle-software.ts';
 
@@ -64,13 +65,14 @@ export const FAULT_ERRORS = {
  */
 function applyOnVehicle(ctx: Ctx, deploymentId: string, r: Resource): void {
   const d = ctx.s.deployments[deploymentId]!;
+  const runs = ctx.s.devices[r.id]?.config ?? r.appliedConfigId;
   switch (r.agent.fault) {
     case 'CHECKSUM':
     case 'SIGNATURE':
       sendReceipt(ctx, d.id, r.id, 'FAILED', FAULT_ERRORS[r.agent.fault]);
       return;
     case 'APPLY_INTERRUPTED':
-      sendReceipt(ctx, d.id, r.id, 'FAILED', r.appliedConfigId ? FAULT_ERRORS.APPLY_INTERRUPTED : FAULT_ERRORS.APPLY_INTERRUPTED_FIRST);
+      sendReceipt(ctx, d.id, r.id, 'FAILED', runs ? FAULT_ERRORS.APPLY_INTERRUPTED : FAULT_ERRORS.APPLY_INTERRUPTED_FIRST);
       return;
     case 'DROP_RECEIPT': {
       const t = d.targets.find((x) => x.resourceId === r.id)!;
@@ -87,6 +89,29 @@ function applyOnVehicle(ctx: Ctx, deploymentId: string, r: Resource): void {
 /** The receipt the vehicle holds for this attempt (it applied it; the platform has not received it). */
 export function heldReceipt(s: State, resourceId: string, deploymentId: string, attempt: number): UnsentReceipt | undefined {
   return s.devices[resourceId]?.unsent.find((u) => u.deploymentId === deploymentId && u.attempt === attempt);
+}
+
+/** The vehicle applies one pushed configuration now, playing its fault (the simulator's manual answer). */
+export function applyNow(ctx: Ctx, deploymentId: string, resourceId: string): void {
+  const d = ctx.s.deployments[deploymentId];
+  const t = d?.targets.find((x) => x.resourceId === resourceId);
+  if (!d || !t) throw notFound('deployment target', `${deploymentId}/${resourceId}`);
+  if (holdsReceipt(ctx.s, resourceId, d.id, t.attempt)) throw rule('RECEIPT_HELD', 'the vehicle already applied this attempt; its receipt is waiting to be sent');
+  applyOnVehicle(ctx, d.id, ctx.s.resources[resourceId]!);
+}
+
+/**
+ * The simulation provider answers an image change. A new image starts a fresh DCL client with no
+ * configuration: whatever the old image ran without the platform knowing, and its receipts, are gone.
+ */
+export function completeImageChange(ctx: Ctx, changeId: string, result: 'APPLIED' | 'FAILED', error?: string): void {
+  const resourceId = ctx.s.imageChanges[changeId]?.resourceId;
+  answerImageChange(ctx, changeId, result, error);
+  const device = resourceId ? ctx.s.devices[resourceId] : undefined;
+  if (device && result === 'APPLIED') {
+    device.config = null;
+    device.unsent = [];
+  }
 }
 
 /** The vehicle applied this attempt and holds its receipt: it is not applied again. */

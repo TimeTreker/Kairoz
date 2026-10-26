@@ -4,7 +4,10 @@ import { World } from '../acceptance/world.ts';
 import * as env from '../src/engine/environment.ts';
 import * as fleet from '../src/engine/fleet.ts';
 import * as lc from '../src/engine/lifecycle.ts';
-import { createGroup, createOrgUnit, createWorkspace, updateWorkspace, visibleWorkspaces } from '../src/engine/org.ts';
+import { addDays, todayOf } from '../src/engine/clock.ts';
+import { createAccount } from '../src/engine/identity.ts';
+import * as loans from '../src/engine/loans.ts';
+import { createGroup, createOrgUnit, createWorkspace, moveWorkspaceUnit, updateWorkspace, visibleWorkspaces } from '../src/engine/org.ts';
 import { demoState } from '../src/engine/seed.ts';
 
 const groupId = (w: World, name: string) => Object.values(w.s.vehicleGroups).find((g) => g.name === name)!.id;
@@ -102,5 +105,58 @@ describe('archiving and restoring', () => {
     assert.equal(w.s.orgUnits['x89-lab-unit']!.status, 'ARCHIVED');
     assert.deepEqual(lc.workspaceRestoreProblems(w.s, 'x89-lab'), ['organization unit 试验组 is archived']);
     w.fails('DIRECTORY_MANAGED', () => w.as('admin', (c) => lc.archiveOrgUnit(c, 'brake-team', 'x')));
+  });
+
+  test('a workspace whose vehicle groups still route vehicles is not archived; an archived one uses no vehicle', () => {
+    const w = new World(demoState());
+    labWorkspace(w);
+    w.as('resource', (c) => fleet.registerPhysical(c, { id: 'VEH-900', vin: 'LVX89000000000900', licensePlate: '沪A900', vehicleModelId: 'X89', env: 'testing', pool: 'Vehicle', displayName: 'V900' }));
+    w.as('resource', (c) => fleet.addWorkspaceVehicle(c, 'x89-lab', 'VEH-900'));
+    w.as('admin', (c) => createAccount(c, { username: 'lab_admin', displayName: '试验区管理员', grants: [{ role: 'WORKSPACE_ADMIN', workspaces: ['x89-lab'], groups: [], scopes: [], envs: ['development', 'testing'], dispatchOnly: false }] }));
+    const vg = w.as('lab_admin', (c) => fleet.createVehicleGroup(c, { workspaceId: 'x89-lab', groupId: null, name: '试验车组', purpose: 'TEST', env: 'testing' }));
+    w.as('lab_admin', (c) => fleet.addGroupMember(c, vg, 'VEH-900', '试验'));
+    const e = w.fails('ARCHIVE_BLOCKED', () => w.as('admin', (c) => lc.archiveWorkspace(c, 'x89-lab', '试验结束')));
+    assert.deepEqual(issues(e), ['vehicle group 试验车组 has vehicles']);
+    w.as('lab_admin', (c) => fleet.removeGroupMember(c, vg, 'VEH-900', '试验结束'));
+    w.as('lab_admin', (c) => lc.archiveWorkspace(c, 'x89-lab', '试验结束'));
+    // The car stays listed (history), but the archived workspace no longer counts as a user: nobody has to lend it.
+    assert.deepEqual(loans.usersOf(w.s, 'VEH-900'), []);
+    w.fails('ALREADY_ARCHIVED', () => w.as('admin', (c) => lc.archiveWorkspace(c, 'x89-lab', '再次')));
+  });
+
+  test('platform operations archive only with a grant for every environment', () => {
+    const w = new World(demoState());
+    labWorkspace(w);
+    w.as('admin', (c) => createAccount(c, { username: 'ops_dev', displayName: '研发运维', grants: [{ role: 'PLATFORM_OPS', workspaces: ['*'], groups: [], scopes: [], envs: ['development'], dispatchOnly: false }] }));
+    w.denied('ops_dev', (c) => lc.archiveWorkspace(c, 'x89-lab', 'x'));
+    w.as('admin', (c) => createGroup(c, { id: 'orphan', code: 'chassis.orphan', name: '无主分组', domain: 'Chassis', purpose: 'DEV', orgUnitId: 'brake-team' }));
+    w.denied('ops_dev', (c) => lc.archiveGroup(c, 'orphan', 'x'));
+    w.as('admin', (c) => lc.archiveGroup(c, 'orphan', '不再使用'));
+  });
+
+  test('a team workspace keeps its claim while archived: its car does not go to production', () => {
+    const w = new World(demoState());
+    w.as('admin', (c) => createWorkspace(c, { id: 'team-lab', name: '制动试验区', kind: 'TEAM', orgUnitId: 'brake-team', vehicleModelId: 'X89', groupIds: [], scopes: ['Vehicle'], sourceWorkspaceIds: [] }));
+    w.as('release', (c) => fleet.removeGroupMember(c, groupId(w, 'X89 量产车组'), 'VEH-202', '台架'));
+    w.as('resource', (c) => env.setResourceEnvironment(c, 'VEH-202', { env: 'testing', reason: '台架' }));
+    w.as('resource', (c) => fleet.addWorkspaceVehicle(c, 'team-lab', 'VEH-202'));
+    w.as('admin', (c) => lc.archiveWorkspace(c, 'team-lab', '试验结束'));
+    assert.ok(env.environmentMoveProblems(w.s, w.s.resources['VEH-202']!, 'production').includes('team workspace 制动试验区 uses it; production vehicles never serve team workspaces'));
+  });
+
+  test('an archived group never takes vehicles, loans or pushes; its workspace can still be re-attached', () => {
+    const w = new World(demoState());
+    w.as('workspace_manager', (c) => createGroup(c, { id: 'brake-lab', code: 'chassis.brakelab', name: '制动预研组', domain: 'Chassis', purpose: 'DEV', orgUnitId: 'brake-team', workspaceId: 'team-brake' }));
+    const vg = w.as('workspace_manager', (c) => fleet.createVehicleGroup(c, { workspaceId: 'team-brake', groupId: 'brake-lab', name: '预研车组', purpose: 'DEV', env: 'development' }));
+    const loan = w.as('workspace_manager', (c) => loans.requestLoan(c, { workspaceId: 'team-brake', resourceId: 'VEH-003', vehicleGroupId: vg, dueDate: addDays(todayOf(w.s), 10), purpose: '预研' }));
+    const blocked = w.fails('ARCHIVE_BLOCKED', () => w.as('workspace_manager', (c) => lc.archiveGroup(c, 'brake-lab', '预研结束')));
+    assert.deepEqual(issues(blocked), ['the loan of VEH-003 is open']);
+    w.as('workspace_manager', (c) => loans.withdrawLoan(c, loan));
+    w.as('workspace_manager', (c) => lc.archiveGroup(c, 'brake-lab', '预研结束'));
+    w.fails('GROUP_ARCHIVED', () => w.as('workspace_manager', (c) => fleet.createVehicleGroup(c, { workspaceId: 'team-brake', groupId: 'brake-lab', name: '新车组', purpose: 'DEV', env: 'development' })));
+    w.fails('GROUP_ARCHIVED', () => w.as('workspace_manager', (c) => fleet.addGroupMember(c, vg, 'VEH-001', '预研')));
+    // Re-attaching the workspace keeps the archived group it holds.
+    w.as('admin', (c) => moveWorkspaceUnit(c, 'team-brake', 'brake-team'));
+    assert.ok(w.s.workspaces['team-brake']!.groupIds.includes('brake-lab'));
   });
 });

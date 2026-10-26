@@ -33,7 +33,8 @@ export function environmentMoveProblems(s: State, r: Resource, to: Env): string[
   }
   if (to === 'production') {
     for (const ws of Object.values(s.workspaces)) {
-      if (ws.kind === 'TEAM' && ws.status === 'ACTIVE' && (s.workspaceResources[ws.id] ?? []).includes(r.id)) problems.push(`team workspace ${ws.name} uses it; production vehicles never serve team workspaces`);
+      // An archived team workspace counts too: restored, it would hold a production vehicle.
+      if (ws.kind === 'TEAM' && (s.workspaceResources[ws.id] ?? []).includes(r.id)) problems.push(`team workspace ${ws.name} uses it; production vehicles never serve team workspaces`);
     }
     if (!r.integrationVersion || r.softwareStatus !== 'CONSISTENT') problems.push('software version unknown');
     else {

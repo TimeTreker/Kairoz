@@ -5,7 +5,9 @@ import { clientReportView } from '../src/engine/client-report.ts';
 import { deliveryState } from '../src/engine/delivery.ts';
 import { migrate } from '../src/engine/migrate.ts';
 import { demoState } from '../src/engine/seed.ts';
-import { FAULT_ERRORS, reportNow, resendReceipts, sendReceipt, setAgent, tick } from '../src/engine/simulator.ts';
+import { stopSimulation } from '../src/engine/fleet.ts';
+import { catalogImages, switchImage } from '../src/engine/sim-software.ts';
+import { FAULT_ERRORS, applyNow, completeImageChange, reportNow, resendReceipts, sendReceipt, setAgent, tick } from '../src/engine/simulator.ts';
 import * as v from '../src/engine/validation.ts';
 
 const feature = (w: World, name: string) => Object.values(w.s.features).find((f) => f.name === name)!;
@@ -102,6 +104,44 @@ describe('device faults', () => {
     w.sys((c) => tick(c));
     assert.equal(target(w, again, 'VEH-001').status, 'APPLIED');
     assert.equal(w.s.devices['VEH-001']!.config, null, 'the platform and the vehicle agree again');
+  });
+
+  test('answered by hand, the vehicle still plays its fault', () => {
+    const w = new World(demoState());
+    w.sys((c) => setAgent(c, 'VEH-001', { fault: 'CHECKSUM' }));
+    const d = dispatch(w, 'guided_brake');
+    w.sys((c) => applyNow(c, d, 'VEH-001'));
+    assert.equal(target(w, d, 'VEH-001').error, FAULT_ERRORS.CHECKSUM);
+    w.sys((c) => setAgent(c, 'SIM-021', { fault: 'DROP_RECEIPT' }));
+    w.sys((c) => applyNow(c, d, 'SIM-021'));
+    assert.equal(target(w, d, 'SIM-021').status, 'PENDING');
+    w.fails('RECEIPT_HELD', () => w.sys((c) => applyNow(c, d, 'SIM-021')));
+  });
+
+  test('an interrupted apply after a lost receipt restores what the vehicle really ran', () => {
+    const w = brakeWorld();
+    w.sys((c) => setAgent(c, 'VEH-001', { fault: 'DROP_RECEIPT' }));
+    const lost = dispatch(w, 'guided_brake');
+    w.sys((c) => tick(c));
+    w.as('brake_tester', (c) => v.cancelDeployment(c, lost, '回执未到'));
+    w.sys((c) => setAgent(c, 'VEH-001', { fault: 'APPLY_INTERRUPTED' }));
+    const d = dispatch(w, 'brake_monitor');
+    w.sys((c) => tick(c));
+    assert.equal(target(w, d, 'VEH-001').error, FAULT_ERRORS.APPLY_INTERRUPTED);
+  });
+
+  test('a new simulation image starts a fresh client: what the old image ran unrecorded is gone', () => {
+    const w = brakeWorld();
+    w.sys((c) => setAgent(c, 'SIM-021', { fault: 'DROP_RECEIPT' }));
+    const d = dispatch(w, 'guided_brake');
+    w.sys((c) => tick(c));
+    w.as('brake_tester', (c) => v.cancelDeployment(c, d, '回执未到'));
+    w.as('workspace_manager', (c) => stopSimulation(c, 'SIM-021'));
+    const other = catalogImages(w.s, 'X89').map((i) => i.id).find((i) => i !== w.s.resources['SIM-021']!.imageId)!;
+    w.as('workspace_manager', (c) => switchImage(c, 'SIM-021', other));
+    const change = Object.values(w.s.imageChanges).find((c) => c.resourceId === 'SIM-021' && c.status === 'PENDING')!;
+    w.sys((c) => completeImageChange(c, change.id, 'APPLIED'));
+    assert.deepEqual([w.s.devices['SIM-021']!.config, w.s.devices['SIM-021']!.unsent], [null, []]);
   });
 
   test('a schema 14 save: fail-next becomes a lasting interrupted apply; devices gain empty receipts', () => {

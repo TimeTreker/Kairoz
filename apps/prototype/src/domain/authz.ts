@@ -39,8 +39,9 @@ export const ACTIONS = {
   'workspace.manage': { roles: ['PLATFORM_OPS'], env: 'all' },
   'group.create': { roles: ['PLATFORM_OPS', 'WORKSPACE_ADMIN'], env: 'development' },
   /** Archiving a workspace or a business group (归档): its admin, or platform operations. */
-  'workspace.archive': { roles: ['WORKSPACE_ADMIN', 'PLATFORM_OPS'], env: 'none' },
-  'group.archive': { roles: ['WORKSPACE_ADMIN', 'PLATFORM_OPS'], env: 'none' },
+  // A workspace's admin archives it and the groups only it holds; platform operations archive with workspace.manage / org.manage.
+  'workspace.archive': { roles: ['WORKSPACE_ADMIN'], env: 'none' },
+  'group.archive': { roles: ['WORKSPACE_ADMIN'], env: 'none' },
   'reference.administer': { roles: ['PLATFORM_OPS'], env: 'all' },
   'audit.read': { roles: ['PLATFORM_OPS'], env: 'all' },
   // Processing catalog and intake (DCL 工程)

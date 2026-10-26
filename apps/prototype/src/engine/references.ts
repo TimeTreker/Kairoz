@@ -52,6 +52,7 @@ export function requestReference(ctx: Ctx, input: { dataKey: string; readerGroup
   const reader = getGroup(ctx.s, input.readerGroupId);
   ctx.allow('reference.request', { type: 'referenceRequest', groupId: reader.id, scope: reader.domain });
   if (reader.purpose !== 'DEV') throw rule('TEST_GROUP_CANNOT_OWN_CONFIG', 'test groups do not maintain configuration');
+  if (reader.status !== 'ACTIVE') throw rule('GROUP_ARCHIVED', `group ${reader.id} is archived`);
   const item = ctx.s.dataItems[input.dataKey];
   if (!item) throw notFound('data item', input.dataKey);
   if (item.ownerGroupId === reader.id) throw rule('OWN_DATA_ITEM', 'a group does not need a reference to its own data');

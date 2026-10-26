@@ -10,9 +10,9 @@ import { CompanyDirectoryCard } from '../components/company-directory.tsx';
 import type { Ctx } from '../engine/engine.ts';
 import { advanceEvent, assessEvent, capturablePolicies, captureEvent, deliverCallback, receiveChunk, setFailParse } from '../engine/events.ts';
 import { personalCapturablePolicies, trialCapture } from '../engine/personal-sim.ts';
-import { answerImageChange, completeBuild } from '../engine/sim-software.ts';
+import { completeBuild } from '../engine/sim-software.ts';
 import type { DeviceFault, Quality, TrainingUse } from '../engine/types.ts';
-import { advanceClock, completeVehicleSoftware, deviceSummary, flushOutbox, heldReceipt, pendingForVehicles, reportNow, resendReceipts, restartClient, sendFault, sendReceipt, setAgent, simulateSoftwareOta, tick, upgradeClient } from '../engine/simulator.ts';
+import { advanceClock, applyNow, completeImageChange, completeVehicleSoftware, deviceSummary, flushOutbox, heldReceipt, pendingForVehicles, reportNow, resendReceipts, restartClient, sendFault, sendReceipt, setAgent, simulateSoftwareOta, tick, upgradeClient } from '../engine/simulator.ts';
 import { DAY_MS, todayOf } from '../engine/clock.ts';
 import { pendingSoftwareRequests } from '../engine/vehicle-software.ts';
 import { DeliveryTag } from '../components/testing.tsx';
@@ -157,10 +157,10 @@ function SoftwareProviderCard({ system }: { system: <R>(op: (c: Ctx) => R, ok?: 
               title: '',
               render: (_, c) => (
                 <Space size={0}>
-                  <Button type="link" size="small" onClick={() => system((x) => answerImageChange(x, c.id, 'APPLIED'), L('部署成功，镜像已生效', 'Deployed; the image is running'))}>
+                  <Button type="link" size="small" onClick={() => system((x) => completeImageChange(x, c.id, 'APPLIED'), L('部署成功，镜像已生效', 'Deployed; the image is running'))}>
                     {L('部署成功', 'Deployment succeeds')}
                   </Button>
-                  <Button type="link" size="small" danger onClick={() => system((x) => answerImageChange(x, c.id, 'FAILED'), L('部署失败，保留原镜像', 'Deployment failed; the previous image stays'))}>
+                  <Button type="link" size="small" danger onClick={() => system((x) => completeImageChange(x, c.id, 'FAILED'), L('部署失败，保留原镜像', 'Deployment failed; the previous image stays'))}>
                     {L('部署失败', 'Deployment fails')}
                   </Button>
                 </Space>
@@ -281,11 +281,19 @@ export function SimulatorPage() {
                         </Tooltip>
                       );
                     }
+                    // With a device fault set, the vehicle plays it instead of answering applied.
+                    const faulty = vehicle.agent.fault !== 'NONE';
                     return (
                       <Space>
-                        <Button size="small" type="primary" disabled={!online} onClick={() => system((c) => sendReceipt(c, p.deployment.id, p.target.resourceId, 'APPLIED'), L('车辆已回执：应用成功', 'Receipt sent: applied'))}>
-                          {L('回执：应用成功', 'Receipt: applied')}
-                        </Button>
+                        {faulty ? (
+                          <Button size="small" type="primary" disabled={!online} onClick={() => system((c) => applyNow(c, p.deployment.id, p.target.resourceId), L('车辆已按故障应用', 'Applied with the device fault'))}>
+                            {`${L('应用', 'Apply')} · ${B(DEVICE_FAULT_LABELS[vehicle.agent.fault]!)}`}
+                          </Button>
+                        ) : (
+                          <Button size="small" type="primary" disabled={!online} onClick={() => system((c) => sendReceipt(c, p.deployment.id, p.target.resourceId, 'APPLIED'), L('车辆已回执：应用成功', 'Receipt sent: applied'))}>
+                            {L('回执：应用成功', 'Receipt: applied')}
+                          </Button>
+                        )}
                         <Button size="small" danger disabled={!online} onClick={() => system((c) => sendReceipt(c, p.deployment.id, p.target.resourceId, 'FAILED', 'simulated apply failure'), L('车辆已回执：失败', 'Receipt sent: failed'))}>
                           {L('回执：失败', 'Receipt: failed')}
                         </Button>

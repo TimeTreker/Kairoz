@@ -27,10 +27,10 @@ export function getLoan(s: State, id: string): Loan {
   return l;
 }
 
-/** Workspaces other than `except` that use the vehicle now. */
+/** Workspaces other than `except` that use the vehicle now; an archived workspace uses nothing. */
 export function usersOf(s: State, resourceId: string, except?: string): string[] {
   return Object.keys(s.workspaceResources)
-    .filter((ws) => ws !== except && (s.workspaceResources[ws] ?? []).includes(resourceId))
+    .filter((ws) => ws !== except && s.workspaces[ws]?.status !== 'ARCHIVED' && (s.workspaceResources[ws] ?? []).includes(resourceId))
     .sort();
 }
 
@@ -202,7 +202,8 @@ export function approvalProblems(s: State, l: Loan): string[] {
   if (r.instance === 'RUNNING') problems.push('simulation running; stop the instance first');
   if (r.reservation) problems.push(`reserved for ${r.reservation.purpose}; release it first`);
   const g = s.vehicleGroups[l.vehicleGroupId];
-  if (!g || g.status !== 'ACTIVE' || g.env !== r.env) problems.push('the vehicle group asked for is no longer available');
+  const closed = !!g && (s.workspaces[g.workspaceId]?.status !== 'ACTIVE' || (g.groupId !== null && s.groups[g.groupId]?.status !== 'ACTIVE'));
+  if (!g || g.status !== 'ACTIVE' || g.env !== r.env || closed) problems.push('the vehicle group asked for is no longer available');
   return problems;
 }
 

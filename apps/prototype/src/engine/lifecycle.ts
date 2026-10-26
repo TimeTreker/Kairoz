@@ -4,6 +4,7 @@
 // published configurations and events keep pointing at what they referenced. An archived
 // workspace is closed to every action until platform operations restore it.
 
+import { authorize } from '../domain/authz.ts';
 import { conflict, rule } from '../domain/errors.ts';
 import { newId } from '../domain/ids.ts';
 import type { Ctx } from './engine.ts';
@@ -41,6 +42,9 @@ export function workspaceArchiveProblems(s: State, workspaceId: string): string[
   for (const p of Object.values(s.mergePlans)) {
     if (p.workspaceId === ws.id && OPEN_PLAN.includes(p.status)) problems.push(`merge preview ${p.id} is open`);
   }
+  for (const vg of Object.values(s.vehicleGroups)) {
+    if (vg.workspaceId === ws.id && vg.status === 'ACTIVE' && membersOf(s, vg.id).length) problems.push(`vehicle group ${vg.name} has vehicles`);
+  }
   for (const rid of s.workspaceResources[ws.id] ?? []) {
     const r = s.resources[rid];
     if (!r) continue;
@@ -62,7 +66,9 @@ export function workspaceArchiveProblems(s: State, workspaceId: string): string[
 /** The workspace's admin or platform operations archive a workspace whose work is all finished. */
 export function archiveWorkspace(ctx: Ctx, workspaceId: string, reason: string): void {
   const ws = getWorkspace(ctx.s, workspaceId);
-  ctx.allow('workspace.archive', { type: 'workspace', id: ws.id, workspaceId: ws.id });
+  const target = { type: 'workspace' as const, id: ws.id, workspaceId: ws.id };
+  ctx.allow(authorize(ctx.user().grants, 'workspace.manage', target).ok ? 'workspace.manage' : 'workspace.archive', target);
+  if (ws.status !== 'ACTIVE') throw conflict('ALREADY_ARCHIVED', `${ws.name} is already archived`);
   const note = reasonOf(reason);
   const problems = workspaceArchiveProblems(ctx.s, ws.id);
   if (problems.length) throw rule('ARCHIVE_BLOCKED', 'finish what is in flight first', { issues: problems });
@@ -93,10 +99,10 @@ export function restoreWorkspace(ctx: Ctx, workspaceId: string, reason: string):
   record(ctx, 'RESTORED', 'WORKSPACE', ws.id, note);
 }
 
-/** Active workspaces that hold the business group. */
+/** Workspaces that hold the business group, archived ones included. */
 export function workspacesOfGroup(s: State, groupId: string): string[] {
   return Object.values(s.workspaces)
-    .filter((w) => w.status === 'ACTIVE' && w.groupIds.includes(groupId))
+    .filter((w) => w.groupIds.includes(groupId))
     .map((w) => w.id)
     .sort();
 }
@@ -116,6 +122,9 @@ export function groupArchiveProblems(s: State, groupId: string): string[] {
   for (const d of Object.values(s.deployments)) {
     if (d.groupId === groupId && (d.status === 'PENDING' || d.status === 'PAUSED')) problems.push(`dispatch ${d.id} is not finished`);
   }
+  for (const l of Object.values(s.loans)) {
+    if ((l.status === 'REQUESTED' || l.status === 'APPROVED') && s.vehicleGroups[l.vehicleGroupId]?.groupId === groupId) problems.push(`the loan of ${l.resourceId} is open`);
+  }
   return problems;
 }
 
@@ -126,8 +135,10 @@ export function groupArchiveProblems(s: State, groupId: string): string[] {
 export function archiveGroup(ctx: Ctx, groupId: string, reason: string): void {
   const g = getGroup(ctx.s, groupId);
   const holders = workspacesOfGroup(ctx.s, g.id);
-  if (holders.length === 0) ctx.allow('org.manage', { type: 'group', id: g.id });
-  for (const ws of holders) ctx.allow('group.archive', { type: 'group', id: g.id, workspaceId: ws });
+  const asOps = authorize(ctx.user().grants, 'org.manage', {}).ok;
+  // An archived holder refuses its admin's archive (WORKSPACE_ARCHIVED): platform operations decide then.
+  if (asOps || holders.length === 0) ctx.allow('org.manage', { type: 'group', id: g.id });
+  else for (const ws of holders) ctx.allow('group.archive', { type: 'group', id: g.id, workspaceId: ws });
   if (g.status !== 'ACTIVE') throw conflict('ALREADY_ARCHIVED', `${g.name} is already archived`);
   const note = reasonOf(reason);
   const problems = groupArchiveProblems(ctx.s, g.id);

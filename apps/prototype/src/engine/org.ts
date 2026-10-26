@@ -130,7 +130,7 @@ export function moveWorkspaceUnit(ctx: Ctx, workspaceId: string, orgUnitId: stri
     }
   }
   ws.orgUnitId = unit.id;
-  checkMembership(ctx.s, ws, ws);
+  checkMembership(ctx.s, ws, ws, ws.groupIds);
   assertTeamWorkspacesIntact(ctx.s);
 }
 

@@ -42,7 +42,7 @@ export function WorkspaceGroups({ workspaceId, onArchive }: { workspaceId: strin
       {groups.map((g) => {
         // A group other workspaces also hold is archived by all their admins, or by platform operations.
         const holders = workspacesOfGroup(state, g.id);
-        const may = g.status === 'ACTIVE' && holders.every((ws) => can('group.archive', { workspaceId: ws }));
+        const may = g.status === 'ACTIVE' && holders.every((ws) => state.workspaces[ws]?.status === 'ACTIVE' && can('group.archive', { workspaceId: ws }));
         return (
           <Space key={g.id} style={{ width: '100%', justifyContent: 'space-between', padding: '4px 0' }}>
             <Space size={6} wrap>
