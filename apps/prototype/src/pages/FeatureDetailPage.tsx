@@ -83,7 +83,7 @@ export function FeatureDetailPage({ featureId }: { featureId: string }) {
             <Descriptions.Item label={L('车型', 'Vehicle model')}>{feature.vehicleModelId}</Descriptions.Item>
             <Descriptions.Item label={L('更新', 'Updated')}>{when(feature.updatedAt)}</Descriptions.Item>
             {integratedIn.length > 0 && (
-              <Descriptions.Item label={L('集成与发布', 'Integrated in')} span={3}>
+              <Descriptions.Item label={L('集成与发布', 'Integrated in')} span="filled">
                 <Space wrap>
                   {integratedIn.map((c) => {
                     const release = Object.values(state.releases).find((r) => r.candidateId === c.id);

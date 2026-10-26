@@ -1,10 +1,10 @@
 # 验收结果（引擎层逐幕回放）
 
-运行时间：2026-10-26T12:48:25.423Z。由 `npm run acceptance` 生成；每次重新执行，不沿用历史结果。
+运行时间：2026-10-26T12:54:09.632Z。由 `npm run acceptance` 生成；每次重新执行，不沿用历史结果。
 
 状态：PASS 通过；FAIL 失败；GAP 设计要求尚未实现；BLOCKED 前置幕未通过；NOT_APPLICABLE 浏览器原型不适用（如服务端部署）。
 
-合计：PASS 191 · FAIL 0 · GAP 0 · BLOCKED 0 · NOT_APPLICABLE 3 · NOT_WRITTEN 0
+合计：PASS 195 · FAIL 0 · GAP 0 · BLOCKED 0 · NOT_APPLICABLE 3 · NOT_WRITTEN 0
 
 ## 从零启动 · 角色协作
 
@@ -255,6 +255,15 @@
 | BG06 紧急暂停与恢复采集 | release；dcl；车辆模拟器 | PASS |  |
 | BG07 测试车的单独预算 | dcl；车辆模拟器 | PASS |  |
 | N01 预算与停采的越权 | business；brake_tester；resource；integrator；workspace_manager | PASS |  |
+
+## 仿真运行配额
+
+| 幕 | 执行人 | 状态 | 说明 |
+|---|---|---|---|
+| Q01 车辆资源设定工作区的仿真运行配额 | resource | PASS |  |
+| Q02 团队与个人仿真共用配额 | business；workspace_manager | PASS |  |
+| Q03 停止后腾出名额，取消限制 | workspace_manager；resource | PASS |  |
+| N01 配额只由车辆资源设置 | workspace_manager；business；dcl；release；integration_admin | PASS |  |
 
 ## 反向用例 T-N01–T-N24
 

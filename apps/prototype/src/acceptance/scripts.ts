@@ -3462,6 +3462,86 @@ export const SCRIPTS: Script[] = [
         "fail": "拒绝不改变任何状态。"
       }
     ]
+  },
+  {
+    "id": "quota",
+    "name": "仿真运行配额",
+    "start": "demo",
+    "scenes": [
+      {
+        "id": "Q01",
+        "title": "车辆资源设定工作区的仿真运行配额",
+        "actor": "resource",
+        "accounts": [
+          "resource"
+        ],
+        "workspace": "team-brake",
+        "page": "车辆与车辆组 → 工作区车辆 → 仿真配额",
+        "pre": "演示数据。",
+        "steps": [
+          "以 resource 登录，切到制动团队工作区：卡片显示“仿真运行 n · 不限”。",
+          "“仿真配额”填比正在运行的少一个：被拒绝（不能低于正在运行的数量）；填 n+1：保存。"
+        ],
+        "done": "工作区同时运行的仿真不超过配额。",
+        "fail": "配额不能低于正在运行的数量。"
+      },
+      {
+        "id": "Q02",
+        "title": "团队与个人仿真共用配额",
+        "actor": "business；workspace_manager",
+        "accounts": [
+          "business",
+          "workspace_manager"
+        ],
+        "workspace": "team-brake",
+        "page": "车辆与车辆组；个人仿真",
+        "pre": "Q01 完成。",
+        "steps": [
+          "business 创建个人仿真：占用最后一个名额，卡片显示“仿真运行 n+1 / n+1”。",
+          "workspace_manager“创建仿真车”被拒绝：工作区的仿真运行配额已用满；business 再建个人仿真同样被拒绝。"
+        ],
+        "done": "个人仿真计入工作区的运行配额。",
+        "fail": "—"
+      },
+      {
+        "id": "Q03",
+        "title": "停止后腾出名额，取消限制",
+        "actor": "workspace_manager；resource",
+        "accounts": [
+          "workspace_manager",
+          "resource"
+        ],
+        "workspace": "team-brake",
+        "page": "车辆与车辆组 → 工作区车辆",
+        "pre": "Q02 完成。",
+        "steps": [
+          "workspace_manager 停止 SIM-021，再创建仿真车 SIM-029：成功。",
+          "resource 把配额清空：不再限制。"
+        ],
+        "done": "名额在停止后回收。",
+        "fail": "—"
+      },
+      {
+        "id": "N01",
+        "title": "配额只由车辆资源设置",
+        "actor": "workspace_manager；business；dcl；release；integration_admin",
+        "accounts": [
+          "workspace_manager",
+          "business",
+          "dcl",
+          "release",
+          "integration_admin"
+        ],
+        "workspace": null,
+        "page": "引擎回放",
+        "pre": "Q01 完成。",
+        "steps": [
+          "工作区管理员、业务、DCL、发布与集成工作区管理员都不能设置配额；负数被拒绝。"
+        ],
+        "done": "配额治理只在车辆资源。",
+        "fail": "拒绝不改变任何状态。"
+      }
+    ]
   }
 ];
 

@@ -14,7 +14,7 @@ import { reviewItems } from './approvals.ts';
 import { EDITABLE_STAGES, getFeature, submitIssues } from './config.ts';
 import type { Ctx } from './engine.ts';
 import { sizeOf } from './events.ts';
-import { assertIdle, authorizePersonal, baseResource, getResource } from './fleet.ts';
+import { assertIdle, assertSimulationQuota, authorizePersonal, baseResource, getResource } from './fleet.ts';
 import { getGroup, getWorkspace } from './org.ts';
 import { commitSnapshot, resolveFiles } from './snapshots.ts';
 import type { PersonalCapture, PersonalTest, Resource, State } from './types.ts';
@@ -73,6 +73,8 @@ export function createPersonalSim(ctx: Ctx, input: { workspaceId: string; groupI
   if (activePersonalCount(ctx.s, owner, workspace.id) >= PERSONAL_SIM_QUOTA) {
     throw rule('PERSONAL_QUOTA', `you already hold ${PERSONAL_SIM_QUOTA} personal simulations in this workspace; release one first`);
   }
+  // Personal instances run within the workspace's run quota, shared with its team simulations.
+  assertSimulationQuota(ctx.s, workspace.id);
   const id = nextPersonalId(ctx.s);
   const base = baseResource(ctx, { id, vehicleModelId: workspace.vehicleModelId, env: 'development', pool: group.domain, displayName: input.displayName });
   ctx.s.resources[id] = {

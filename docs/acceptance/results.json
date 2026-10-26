@@ -1,8 +1,8 @@
 {
-  "runAt": "2026-10-26T12:48:25.423Z",
+  "runAt": "2026-10-26T12:54:09.632Z",
   "layer": "engine",
   "counts": {
-    "PASS": 191,
+    "PASS": 195,
     "FAIL": 0,
     "GAP": 0,
     "BLOCKED": 0,
@@ -1629,6 +1629,48 @@
           "id": "N01",
           "title": "预算与停采的越权",
           "actor": "business；brake_tester；resource；integrator；workspace_manager",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        }
+      ]
+    },
+    {
+      "script": "quota",
+      "name": "仿真运行配额",
+      "rows": [
+        {
+          "id": "Q01",
+          "title": "车辆资源设定工作区的仿真运行配额",
+          "actor": "resource",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "Q02",
+          "title": "团队与个人仿真共用配额",
+          "actor": "business；workspace_manager",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "Q03",
+          "title": "停止后腾出名额，取消限制",
+          "actor": "workspace_manager；resource",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "N01",
+          "title": "配额只由车辆资源设置",
+          "actor": "workspace_manager；business；dcl；release；integration_admin",
           "adaptation": null,
           "status": "PASS",
           "detail": null,

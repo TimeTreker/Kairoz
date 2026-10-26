@@ -1,5 +1,5 @@
 import { MinusCircleOutlined, PlusOutlined } from '@ant-design/icons';
-import { Button, Card, Col, Collapse, Empty, Form, Input, Modal, Row, Select, Space, Switch, Table, Tabs, Tag, Timeline, Tooltip, Typography } from 'antd';
+import { Button, Card, Col, Collapse, Empty, Form, Input, InputNumber, Modal, Row, Select, Space, Switch, Table, Tabs, Tag, Timeline, Tooltip, Typography } from 'antd';
 import { useState } from 'react';
 import { useActor, useCan, useRun, useWorkspace } from '../app/hooks.ts';
 import { engine, useEngineState } from '../app/store.ts';
@@ -38,9 +38,11 @@ import {
   removeWorkspaceVehicle,
   reportControllers,
   reserveVehicle,
+  runningSimulations,
   setGroupApproval,
   setGroupBase,
   setResourceStatus,
+  setSimulationQuota,
   setSoftwareManifest,
   simulationWorkspace,
   softwareKey,
@@ -158,10 +160,14 @@ function WorkspaceVehicles() {
   const [clientOf, setClientOf] = useState<string | null>(null);
   const [imageOf, setImageOf] = useState<string | null>(null);
   const [updateOf, setUpdateOf] = useState<string | null>(null);
+  const [quotaOpen, setQuotaOpen] = useState(false);
+  const [quotaValue, setQuotaValue] = useState<number | null>(null);
   const canUpdate = useCanUpdateSoftware();
   const [form] = Form.useForm();
   if (!workspace) return null;
   const vehicles = workspaceVehicles(state, workspace.id);
+  const quota = state.simulationQuotas[workspace.id];
+  const simRunning = runningSimulations(state, workspace.id).length;
   const canManage = ENVS.some((env) => can('workspace.resources', { workspaceId: workspace.id, env }));
   const canSim = ENVS.some((env) => can('simulation.manage', { workspaceId: workspace.id, env }));
   const manages = (r: Resource) => can('workspace.resources', { workspaceId: workspace.id, scope: r.pool, env: r.env });
@@ -173,10 +179,22 @@ function WorkspaceVehicles() {
     <Card
       extra={
         <Space>
-          {canSim && (
-            <Button icon={<PlusOutlined />} onClick={() => (form.resetFields(), setCreating(true))}>
-              {L('创建仿真车', 'New simulation')}
+          <Tooltip title={L('团队仿真与成员的个人仿真共用工作区的运行配额；由车辆资源设置。', 'Team and personal simulations share the workspace’s run quota, set by vehicle resources.')}>
+            <Tag color={quota !== undefined && simRunning >= quota ? 'gold' : undefined}>
+              {quota === undefined ? L(`仿真运行 ${simRunning} · 不限`, `${simRunning} simulations running · no limit`) : L(`仿真运行 ${simRunning} / ${quota}`, `${simRunning} of ${quota} simulations running`)}
+            </Tag>
+          </Tooltip>
+          {can('quota.manage', { workspaceId: workspace.id }) && (
+            <Button size="small" onClick={() => (setQuotaValue(quota ?? null), setQuotaOpen(true))}>
+              {L('仿真配额', 'Simulation quota')}
             </Button>
+          )}
+          {canSim && (
+            <Tooltip title={quota !== undefined && simRunning >= quota ? L('仿真运行配额已用满：先停止一个', 'The simulation run quota is full: stop one first') : undefined}>
+              <Button icon={<PlusOutlined />} disabled={quota !== undefined && simRunning >= quota} onClick={() => (form.resetFields(), setCreating(true))}>
+                {L('创建仿真车', 'New simulation')}
+              </Button>
+            </Tooltip>
           )}
           {canManage && (
             <Button icon={<PlusOutlined />} onClick={() => setAdding(true)}>
@@ -250,6 +268,17 @@ function WorkspaceVehicles() {
       >
         <Hint>{L('预约期间车辆不能移出工作区或车辆组；任务结束后解除预约。', 'While reserved the vehicle cannot leave the workspace or its group; release it when the task ends.')}</Hint>
         <Input value={purpose} onChange={(e) => setPurpose(e.target.value)} placeholder={L('用途，例如：制动首版验证', 'Purpose, e.g. first brake validation')} />
+      </Modal>
+      <Modal
+        open={quotaOpen}
+        title={`${L('仿真运行配额', 'Simulation run quota')} · ${workspace.name}`}
+        onCancel={() => setQuotaOpen(false)}
+        onOk={() => {
+          if (run((c) => setSimulationQuota(c, workspace.id, quotaValue), quotaValue === null ? L('已取消配额限制', 'Quota lifted') : L('配额已保存', 'Quota saved')) !== undefined) setQuotaOpen(false);
+        }}
+      >
+        <Hint>{L(`同时运行的仿真（团队与个人一起）不超过配额；不能低于正在运行的数量（现在 ${simRunning}）。留空表示不限。`, `Simulations running at once (team and personal together) stay within the quota; it cannot go below those running now (${simRunning}). Leave it empty for no limit.`)}</Hint>
+        <InputNumber min={0} precision={0} value={quotaValue} onChange={(v) => setQuotaValue(typeof v === 'number' ? v : null)} placeholder={L('不限', 'No limit')} style={{ width: 160 }} />
       </Modal>
       <Modal open={adding} title={L('加入车辆', 'Add a vehicle')} footer={null} onCancel={() => setAdding(false)}>
         <Hint>{L('只列出车型、资源池与环境都符合本工作区的车辆；量产车辆只能分配给项目或集成工作区。', 'Only vehicles whose model, pool and environment fit; production vehicles only go to project or integration workspaces.')}</Hint>

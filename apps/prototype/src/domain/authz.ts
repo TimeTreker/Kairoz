@@ -77,6 +77,8 @@ export const ACTIONS = {
   'softwareVersion.record': { roles: ['VEHICLE_RESOURCE'], env: 'all' },
   'resource.manage': { roles: ['VEHICLE_RESOURCE'], env: 'target' },
   'simulation.manage': { roles: ['WORKSPACE_ADMIN', 'VEHICLE_RESOURCE'], env: 'target' },
+  /** How many simulations a workspace may run at once (仿真运行配额): vehicle resources, for every environment. */
+  'quota.manage': { roles: ['VEHICLE_RESOURCE'], env: 'all' },
   'workspace.resources': { roles: ['WORKSPACE_ADMIN', 'VEHICLE_RESOURCE'], env: 'target' },
   'vehicleGroup.manage': { roles: ['WORKSPACE_ADMIN', 'CONFIG_RELEASE'], env: 'target' },
   /** Borrowing (借用): the borrowing workspace's admin asks, extends and returns; a using workspace's admin lends. */

@@ -2,14 +2,14 @@
 // they run, trial captures and self-tests. The owner alone sees and uses them; receipts and trial
 // captures come from the prototype's vehicle simulator, never from this page.
 
-import { Alert, Button, Card, Descriptions, Drawer, Empty, Form, Input, Modal, Popconfirm, Radio, Select, Space, Switch, Table, Tag, Typography } from 'antd';
+import { Alert, Button, Card, Descriptions, Drawer, Empty, Form, Input, Modal, Popconfirm, Radio, Select, Space, Switch, Table, Tag, Tooltip, Typography } from 'antd';
 import { useEffect, useState } from 'react';
 import { useActor, useCan, useRun } from '../app/hooks.ts';
 import { navigate } from '../app/router.ts';
 import { useEngineState } from '../app/store.ts';
 import { configurationContents } from '../engine/client-report.ts';
 import { EDITABLE_STAGES } from '../engine/config.ts';
-import { startSimulation, stopSimulation } from '../engine/fleet.ts';
+import { runningSimulations, startSimulation, stopSimulation } from '../engine/fleet.ts';
 import {
   PERSONAL_SIM_QUOTA,
   activePersonalCount,
@@ -63,6 +63,10 @@ export function PersonalSims({ workspaceId }: { workspaceId: string }) {
   const all = personalSimsOf(state, actor.username, workspaceId);
   const mine = showReleased ? all : all.filter((r) => r.status !== 'RETIRED');
   const active = activePersonalCount(state, actor.username, workspaceId);
+  // Personal instances share the workspace's run quota with its team simulations.
+  const quota = state.simulationQuotas[workspaceId];
+  const wsRunning = runningSimulations(state, workspaceId).length;
+  const quotaFull = quota !== undefined && wsRunning >= quota;
   const images = catalogImages(state, ws.vehicleModelId);
   const [form] = Form.useForm<{ groupId: string; imageId: string; displayName?: string }>();
   useEffect(() => {
@@ -76,7 +80,12 @@ export function PersonalSims({ workspaceId }: { workspaceId: string }) {
         <Space>
           <Typography.Text type="secondary">{L('显示已释放', 'Show released')}</Typography.Text>
           <Switch size="small" checked={showReleased} onChange={setShowReleased} />
-          <Button type="primary" disabled={active >= PERSONAL_SIM_QUOTA || groups.length === 0} onClick={() => setCreating(true)}>
+          {quota !== undefined && (
+            <Tooltip title={L('工作区同时运行的仿真（团队与个人一起）不超过配额', 'Simulations running at once in the workspace, team and personal together, stay within its quota')}>
+              <Tag color={quotaFull ? 'gold' : undefined}>{L(`工作区运行 ${wsRunning}/${quota}`, `Workspace running ${wsRunning}/${quota}`)}</Tag>
+            </Tooltip>
+          )}
+          <Button type="primary" disabled={active >= PERSONAL_SIM_QUOTA || groups.length === 0 || quotaFull} onClick={() => setCreating(true)}>
             {L('新建个人仿真', 'New personal simulation')}
           </Button>
         </Space>
@@ -207,7 +216,7 @@ function PersonalSimDrawer({ id, onClose }: { id: string | null; onClose: () => 
           <Descriptions.Item label={L('状态', 'Status')}><StatusTag r={r} /></Descriptions.Item>
           <Descriptions.Item label={L('镜像', 'Image')}><Mono>{r.imageId}</Mono></Descriptions.Item>
           <Descriptions.Item label={L('整车软件', 'Software')}>{software(r, L)}</Descriptions.Item>
-          <Descriptions.Item label={L('跟随软件的基线', 'Base for its software')} span={2}>
+          <Descriptions.Item label={L('跟随软件的基线', 'Base for its software')} span="filled">
             {followed.problem ? B(issueLabel(followed.problem), followed.problem) : followed.release ? B(setName(followed.release.dclVersion)) : L('初始研发配置', 'Initial configuration')}
           </Descriptions.Item>
         </Descriptions>

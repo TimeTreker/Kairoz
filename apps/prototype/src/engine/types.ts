@@ -11,7 +11,7 @@ import type { FileType, Privacy } from '../domain/file-types.ts';
 import type { ReviewControls } from '../domain/intake.ts';
 import type { Domain, Env, GroupPurpose, Role, Scope, WorkspaceKind } from '../domain/vocabulary.ts';
 
-export const STATE_SCHEMA = 17;
+export const STATE_SCHEMA = 18;
 
 export interface Account {
   username: string;
@@ -1285,6 +1285,8 @@ export interface State {
   collectionBudgets: { models: Record<string, Budget>; vehicles: Record<string, Budget> };
   /** Collection pauses (紧急停采) by vehicle, with their history. */
   collectionHolds: Record<string, CollectionHold>;
+  /** How many simulations a workspace may run at once (team and personal together); none means no limit. */
+  simulationQuotas: Record<string, number>;
   audit: AuditEvent[];
 }
 
@@ -1352,6 +1354,7 @@ export function emptyState(): State {
     lifecycleEvents: [],
     collectionBudgets: { models: {}, vehicles: {} },
     collectionHolds: {},
+    simulationQuotas: {},
     audit: [],
   };
 }

@@ -492,7 +492,7 @@ function PlanCard({ plan, onCandidate }: { plan: MergePlan; onCandidate: (id: st
         <Descriptions.Item label={L('DCL 确认', 'DCL confirmation')}>
           {confirmation ? `${state.accounts[confirmation.confirmedBy]?.displayName} · ${when(confirmation.createdAt)}${confirmation.note ? ` · ${confirmation.note}` : ''}` : L('未确认', 'not yet')}
         </Descriptions.Item>
-        <Descriptions.Item label={L('来源', 'Sources')} span={2}>
+        <Descriptions.Item label={L('来源', 'Sources')} span="filled">
           <Space wrap>
             {plan.subsystems.map((x) => (
               <Tag key={x.subsystemReleaseId} color="geekblue">

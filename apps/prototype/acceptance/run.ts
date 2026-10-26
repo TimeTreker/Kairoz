@@ -23,6 +23,7 @@ import * as lifecycle from './lifecycle.ts';
 import * as deviceFaults from './device-faults.ts';
 import * as patch from './patch.ts';
 import * as policySets from './policy-sets.ts';
+import * as quota from './quota.ts';
 import * as startup from './startup.ts';
 import { GapError, NotApplicableError, World } from './world.ts';
 import type { SceneSpec } from './world.ts';
@@ -68,6 +69,7 @@ const suites = [
   { id: 'device-faults', mod: deviceFaults },
   { id: 'patch', mod: patch },
   { id: 'budget', mod: budget },
+  { id: 'quota', mod: quota },
 ] as const;
 
 const report: { script: string; name: string; rows: Row[] }[] = [];

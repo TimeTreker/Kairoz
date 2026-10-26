@@ -156,10 +156,10 @@ function EventDetail({ event: e }: { event: CollectionEvent }) {
         </Descriptions.Item>
         <Descriptions.Item label={L('实际整车版本', 'Vehicle software')}>{e.integrationVersion ?? L('未知', 'unknown')}</Descriptions.Item>
         <Descriptions.Item label={L('发生时间', 'Occurred')}>{when(e.occurredAt)}</Descriptions.Item>
-        <Descriptions.Item label={L('策略', 'Policy')} span={2}>
+        <Descriptions.Item label={L('策略', 'Policy')} span="filled">
           <Mono>{e.policyId}</Mono> · {e.policyName}
         </Descriptions.Item>
-        <Descriptions.Item label={L('触发条件', 'Trigger')} span={2}><Mono>{e.trigger}</Mono></Descriptions.Item>
+        <Descriptions.Item label={L('触发条件', 'Trigger')} span="filled"><Mono>{e.trigger}</Mono></Descriptions.Item>
         <Descriptions.Item label={L('采集窗口', 'Window')}>{`${e.preSeconds}s / ${e.postSeconds}s`}</Descriptions.Item>
         <Descriptions.Item label={L('质量 / 用途', 'Quality / use')}>
           <Space size={4}>

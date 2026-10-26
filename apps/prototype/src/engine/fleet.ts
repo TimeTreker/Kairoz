@@ -222,6 +222,8 @@ export function createSimulation(ctx: Ctx, input: { id: string; workspaceId: str
   if (!workspace.scopes.includes(input.pool) && !workspace.scopes.includes('Vehicle')) {
     throw rule('POOL_OUTSIDE_WORKSPACE', `pool ${input.pool} is not in the workspace scopes`);
   }
+  // A new instance starts running, so it needs room in the workspace's quota.
+  assertSimulationQuota(ctx.s, workspace.id);
   const base = baseResource(ctx, { ...input, vehicleModelId: workspace.vehicleModelId });
   ctx.s.resources[input.id] = {
     ...base,
@@ -331,10 +333,42 @@ export function simulationWorkspace(s: State, r: Resource): string | null {
   return activeLoanOf(s, r.id)?.workspaceId ?? r.homeWorkspaceId;
 }
 
+/** Simulations running for a workspace: its own, personal ones of its members, and those it borrowed. */
+export function runningSimulations(s: State, workspaceId: string): Resource[] {
+  return Object.values(s.resources).filter((r) => r.type === 'SIMULATION' && r.instance === 'RUNNING' && r.status !== 'RETIRED' && simulationWorkspace(s, r) === workspaceId);
+}
+
+/** Refuses one more running simulation when the workspace is at its run quota. */
+export function assertSimulationQuota(s: State, workspaceId: string): void {
+  const quota = s.simulationQuotas[workspaceId];
+  if (quota === undefined) return;
+  const running = runningSimulations(s, workspaceId).length;
+  if (running >= quota) throw rule('SIMULATION_QUOTA', `${s.workspaces[workspaceId]?.name ?? workspaceId} runs ${running} of its ${quota} simulations; stop one first`);
+}
+
+/**
+ * Vehicle resources set how many simulations a workspace may run at once, team and personal
+ * together, or lift the limit with null. A quota never goes below what runs now: stop first.
+ */
+export function setSimulationQuota(ctx: Ctx, workspaceId: string, limit: number | null): void {
+  ctx.allow('quota.manage', { type: 'simulationQuota', id: workspaceId, workspaceId });
+  getWorkspace(ctx.s, workspaceId);
+  if (limit === null) {
+    delete ctx.s.simulationQuotas[workspaceId];
+    return;
+  }
+  if (!Number.isInteger(limit) || limit < 0) throw rule('INVALID_QUOTA', 'a quota is a whole number, 0 or more');
+  const running = runningSimulations(ctx.s, workspaceId).length;
+  if (limit < running) throw rule('QUOTA_BELOW_RUNNING', `${running} simulations run now; stop some before lowering the quota to ${limit}`);
+  ctx.s.simulationQuotas[workspaceId] = limit;
+}
+
 export function startSimulation(ctx: Ctx, resourceId: string): void {
   const r = authorizeSimulation(ctx, resourceId);
   if (r.status === 'RETIRED') throw rule('VEHICLE_UNAVAILABLE', `${r.id} is retired`);
   if (r.instance === 'RUNNING') throw rule('ALREADY_RUNNING', `${r.id} is already running`);
+  const ws = simulationWorkspace(ctx.s, r);
+  if (ws) assertSimulationQuota(ctx.s, ws);
   r.instance = 'RUNNING';
   r.updatedAt = ctx.now;
 }
