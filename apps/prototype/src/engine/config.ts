@@ -203,13 +203,24 @@ export function authorizeFeature(ctx: Ctx, action: FeatureAction, featureId: str
 /** Fields a DCL technical change may change: the processing binding of the group's files. */
 const TECHNICAL_FIELDS = new Set(['templateId', 'format', 'schema', 'edgePipelineId', 'cloudPipelineId', 'requiresReview']);
 
-/** What a technical change changes beyond processing bindings, as problem lines; empty when it keeps to them. */
-export function technicalScopeIssues(base: GroupConfig, draft: GroupConfig): string[] {
+/**
+ * What a technical change changes beyond processing bindings, as problem lines; empty when it
+ * keeps to them. A reference may move to another version of the same file that differs only in
+ * its binding.
+ */
+export function technicalScopeIssues(s: State, base: GroupConfig, draft: GroupConfig): string[] {
   const issues: string[] = [];
   const keys = (o: object) => Object.keys(o).sort().join(',');
   if (keys(base.files) !== keys(draft.files)) issues.push('adds or removes files');
   if (canonicalJson(base.policies) !== canonicalJson(draft.policies)) issues.push('changes policies');
-  if (canonicalJson(base.references) !== canonicalJson(draft.references)) issues.push('changes references');
+  if (keys(base.references) !== keys(draft.references)) issues.push('changes references');
+  for (const [dataKey, versionId] of Object.entries(draft.references)) {
+    const before = base.references[dataKey];
+    if (!before || before === versionId) continue;
+    const a = s.fileSpecVersions[before]?.content;
+    const b = s.fileSpecVersions[versionId]?.content;
+    if (!a || !b || technicalScopeIssues(s, { files: { [dataKey]: a }, policies: {}, references: {} }, { files: { [dataKey]: b }, policies: {}, references: {} }).length) issues.push('changes references');
+  }
   for (const [dataKey, spec] of Object.entries(draft.files)) {
     const before = base.files[dataKey];
     if (!before) continue;
@@ -667,7 +678,7 @@ export function submitFeature(ctx: Ctx, featureId: string, input: { message?: st
   if (!EDITABLE_STAGES.includes(feature.stage)) throw rule('FEATURE_IMMUTABLE', `feature in stage ${feature.stage} cannot change`);
   const draft = JSON.parse(JSON.stringify(feature.draft)) as GroupConfig;
   if (feature.kind === 'TECHNICAL') {
-    const scope = technicalScopeIssues(baseConfig(ctx.s, feature), draft);
+    const scope = technicalScopeIssues(ctx.s, baseConfig(ctx.s, feature), draft);
     if (scope.length) throw rule('TECHNICAL_BINDINGS_ONLY', 'a DCL technical change only changes processing bindings', { issues: scope });
   }
   const issues = submitIssues(ctx.s, group, draft);

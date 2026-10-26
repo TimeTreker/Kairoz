@@ -14,6 +14,7 @@ import type { State } from '../engine/types.ts';
 import { useI18n } from '../i18n/i18n.tsx';
 import type { Bilingual } from '../i18n/i18n.tsx';
 import { CHANGE_OUTCOME_LABELS, ENV_LABELS, STAGE_LABELS, setName } from '../i18n/vocab.ts';
+import { issueLabel } from '../i18n/issues.ts';
 import { when } from './common.tsx';
 
 /** What a notification is about, for its tag and the filter. */
@@ -199,7 +200,7 @@ export function useNotificationText() {
         const [code, ...what] = d.split(' · ');
         return code === 'DONE'
           ? { title: L(`${s} 的售后采集已就绪`, `After-sales capture of ${s} is ready`), body: L(`${what.join(' · ')}：在数据查询中查看。`, `${what.join(' · ')}: see it in the data query.`) }
-          : { title: L(`${s} 没有完成售后采集`, `${s} did not complete the after-sales capture`), body: L(`${what.join(' · ')}：车辆不再运行该策略，或采集未保留。`, `${what.join(' · ')}: the vehicle no longer runs the policy, or the capture was dropped.`) };
+          : { title: L(`${s} 没有完成售后采集`, `${s} did not complete the after-sales capture`), body: L(`${what[0] ?? ''}：车辆无法为本工作区采集（借出、归还、报废或不再运行该策略），或采集未保留、处理失败。${what[1] ? ` ${B(issueLabel(what.slice(1).join(' · ')), what.slice(1).join(' · '))}` : ''}`, `${what[0] ?? ''}: the vehicle could not capture for this workspace (lent, returned, retired or no longer running the policy), or the capture was dropped or failed.${what[1] ? ` ${what.slice(1).join(' · ')}` : ''}`) };
       }
       case 'COLLECTION_PAUSED': {
         const [code, ...reason] = d.split(' · ');

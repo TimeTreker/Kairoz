@@ -14,7 +14,7 @@ import type { FileType } from '../domain/file-types.ts';
 import { nowOf } from './clock.ts';
 import type { Ctx } from './engine.ts';
 import { resolveFiles } from './snapshots.ts';
-import type { BudgetNote, CollectionEvent, MergePlan, State } from './types.ts';
+import type { BudgetNote, CaptureSource, CollectionEvent, MergePlan, State } from './types.ts';
 
 const HOUR_MS = 3_600_000;
 
@@ -74,7 +74,7 @@ export interface BudgetUsage {
   networkMb: number;
   /** Captures on the vehicle now: waiting or uploading. */
   bufferMb: number;
-  /** Triggers per policy in the hour, suppressed ones not counted. */
+  /** The vehicle's own triggers per policy in the hour (not after-sales or grader captures, nor suppressed ones). */
   triggers: Record<string, number>;
   held: number;
   dropped: number;
@@ -102,7 +102,7 @@ export function usageOf(s: State, resourceId: string, at: string = nowOf(s)): Bu
     if (e.status === 'HELD') u.held += 1;
     if (inHour(e.occurredAt)) {
       if (e.status === 'SUPPRESSED') u.suppressed += 1;
-      else u.triggers[e.policyId] = (u.triggers[e.policyId] ?? 0) + 1;
+      else if (e.source === 'TRIGGER') u.triggers[e.policyId] = (u.triggers[e.policyId] ?? 0) + 1;
       if (e.status === 'DROPPED') u.dropped += 1;
     }
   }
@@ -145,14 +145,15 @@ export function afterSalesOpen(s: State, resourceId: string): boolean {
 }
 
 /**
- * The agent's decision on a new capture, against the vehicle's rolling hour at `at`. HIGH
- * captures are never dropped or held for budget: they make room by evicting waiting captures,
- * lowest priority and newest first, and are flagged when they still run over.
+ * The agent's decision on a new capture, against the vehicle's rolling hour at `at`. The flood
+ * limit counts the vehicle's own triggers only: after-sales and grader captures are asked for, not
+ * fired. HIGH captures are never dropped or held for budget: they make room by evicting waiting
+ * captures, lowest priority and newest first, and are flagged when they still run over.
  */
-export function admitCapture(s: State, resourceId: string, policyId: string, priority: Priority, c: CaptureCost, at: string): Admission {
+export function admitCapture(s: State, resourceId: string, policyId: string, priority: Priority, c: CaptureCost, at: string, source: CaptureSource = 'TRIGGER'): Admission {
   const { budget: b } = budgetOf(s, resourceId);
   const u = usageOf(s, resourceId, at);
-  if ((u.triggers[policyId] ?? 0) >= b.triggersPerPolicyPerHour) return { status: 'SUPPRESSED', note: 'FLOOD', evict: [] };
+  if (source === 'TRIGGER' && (u.triggers[policyId] ?? 0) >= b.triggersPerPolicyPerHour) return { status: 'SUPPRESSED', note: 'FLOOD', evict: [] };
   const overCpu = u.cpuSec + c.cpuSec > b.cpuSecondsPerHour;
   const overIo = u.ioMb + c.ioMb > b.ioMbPerHour;
   const overBuffer = u.bufferMb + c.memoryMb > b.memoryMb;
@@ -198,6 +199,16 @@ export function releaseHeld(ctx: Ctx, resourceId: string): number {
     .sort((x, y) => RANK[x.priority] - RANK[y.priority] || x.occurredAt.localeCompare(y.occurredAt) || x.seq - y.seq);
   let released = 0;
   for (const e of waiting) {
+    // A HIGH capture only waits for after-sales; it then goes whatever the budget, like any HIGH one.
+    if (e.priority === 'HIGH') {
+      const over = network + cost(e).networkMb > b.networkMbPerHour;
+      e.status = 'UPLOADING';
+      e.uploadAt = at;
+      e.budgetNote = over ? 'OVER_BUDGET_HIGH' : null;
+      network += cost(e).networkMb;
+      released += 1;
+      continue;
+    }
     if (cost(e).networkMb > b.networkMbPerHour) {
       e.status = 'DROPPED';
       e.budgetNote = 'NETWORK';

@@ -33,6 +33,9 @@ export function environmentMoveProblems(s: State, r: Resource, to: Env): string[
     if (e.status === 'UPLOADING' || e.status === 'PROCESSING') problems.push(`event ${e.id} is still being processed`);
     else if (e.status === 'HELD') problems.push(`event ${e.id} still waits on the vehicle for upload budget`);
   }
+  for (const q of Object.values(s.captureRequests)) {
+    if (q.resourceId === r.id && q.status === 'PENDING') problems.push(`after-sales request ${q.id} is pending`);
+  }
   if (to === 'production') {
     for (const ws of Object.values(s.workspaces)) {
       // An archived team workspace counts too: restored, it would hold a production vehicle.

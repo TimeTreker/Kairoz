@@ -59,6 +59,22 @@ describe('after-sales requests and the grader', () => {
     w.fails('COLLECTION_PAUSED', () => ask(w));
   });
 
+  test('a schema 19 save: requests take their policy’s group and were not cancelled by anyone', () => {
+    const w = new World(demoState());
+    const q = ask(w);
+    const current = JSON.parse(JSON.stringify(w.s));
+    const old = JSON.parse(JSON.stringify(current));
+    old.schema = 19;
+    for (const r of Object.values(old.captureRequests) as Record<string, unknown>[]) {
+      delete r.groupId;
+      delete r.cancelledBy;
+      delete r.note;
+    }
+    const migrated = migrate(old)!;
+    assert.deepEqual([migrated.captureRequests[q]!.groupId, migrated.captureRequests[q]!.cancelledBy, migrated.captureRequests[q]!.note], ['brake', null, null]);
+    assert.deepEqual(migrated, current);
+  });
+
   test('a schema 18 save: every capture came from a trigger, and there are no requests', () => {
     const current = JSON.parse(JSON.stringify(demoState()));
     const old = JSON.parse(JSON.stringify(current));

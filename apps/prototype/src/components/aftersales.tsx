@@ -7,7 +7,8 @@ import { useActor, useCan, useRun } from '../app/hooks.ts';
 import { useEngineState } from '../app/store.ts';
 import { cancelCaptureRequest, captureRequestsFor, requestAfterSalesCapture } from '../engine/aftersales.ts';
 import { capturablePolicies } from '../engine/events.ts';
-import { workspaceVehicles } from '../engine/fleet.ts';
+import { activeLoanOf, workspaceVehicles } from '../engine/fleet.ts';
+import { issueLabel } from '../i18n/issues.ts';
 import { useI18n } from '../i18n/i18n.tsx';
 import { CAPTURE_REQUEST_COLORS, CAPTURE_REQUEST_LABELS, CAPTURE_SOURCE_COLORS, CAPTURE_SOURCE_LABELS, EVENT_STATUS_COLORS, EVENT_STATUS_LABELS } from '../i18n/vocab.ts';
 import { Hint, LabelTag, Mono, when } from './common.tsx';
@@ -19,14 +20,15 @@ export function CaptureSourceTag({ source }: { source: string }) {
 export function AfterSalesRequests({ workspaceId }: { workspaceId: string }) {
   const state = useEngineState();
   const actor = useActor()!;
-  const { L } = useI18n();
+  const { L, B } = useI18n();
   const can = useCan();
   const run = useRun();
   const [vehicle, setVehicle] = useState<string | undefined>();
   const [policy, setPolicy] = useState<string | undefined>();
   const [reason, setReason] = useState('');
   // Vehicles of the workspace running a confirmed configuration, and the policies the actor may ask for.
-  const vehicles = workspaceVehicles(state, workspaceId).filter((r) => r.appliedConfigId && !r.personal && r.status !== 'RETIRED');
+  // Not those lent to another workspace: while lent, only the borrower works with a vehicle.
+  const vehicles = workspaceVehicles(state, workspaceId).filter((r) => r.appliedConfigId && !r.personal && r.status !== 'RETIRED' && (activeLoanOf(state, r.id)?.workspaceId ?? workspaceId) === workspaceId);
   const r = vehicle ? state.resources[vehicle] : undefined;
   const policies = r ? capturablePolicies(state, r.id).filter((p) => can('event.requestCapture', { workspaceId, groupId: p.groupId, env: r.env })) : [];
   const requests = captureRequestsFor(state, actor, workspaceId);
@@ -67,7 +69,17 @@ export function AfterSalesRequests({ workspaceId }: { workspaceId: string }) {
           { title: L('策略', 'Policy'), render: (_, q) => <Mono>{q.policyId}</Mono> },
           { title: L('原因', 'Reason'), dataIndex: 'reason' },
           { title: L('请求', 'Asked'), render: (_, q) => `${state.accounts[q.requestedBy]?.displayName ?? q.requestedBy} · ${when(q.requestedAt)}` },
-          { title: L('状态', 'Status'), render: (_, q) => <LabelTag map={CAPTURE_REQUEST_LABELS} value={q.status} color={CAPTURE_REQUEST_COLORS[q.status]} /> },
+          {
+            title: L('状态', 'Status'),
+            render: (_, q) => (
+              <Space size={4} wrap>
+                <LabelTag map={CAPTURE_REQUEST_LABELS} value={q.status} color={CAPTURE_REQUEST_COLORS[q.status]} />
+                {q.status === 'CANCELLED' && (
+                  <Typography.Text type="secondary">{q.cancelledBy ? state.accounts[q.cancelledBy]?.displayName ?? q.cancelledBy : q.note ? B(issueLabel(q.note), q.note) : ''}</Typography.Text>
+                )}
+              </Space>
+            ),
+          },
           {
             title: L('采集', 'Capture'),
             render: (_, q) => {

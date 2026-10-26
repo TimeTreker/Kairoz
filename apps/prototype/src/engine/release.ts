@@ -152,7 +152,7 @@ export function pendingPatchFeatures(s: State, release: Release): string[] {
  */
 export function takeOverProblem(
   s: State,
-  release: Pick<Release, 'id' | 'vehicleModelId' | 'patchOf' | 'sequence' | 'dclVersion'>,
+  release: Pick<Release, 'id' | 'vehicleModelId' | 'patchOf' | 'sequence' | 'dclVersion' | 'groups'>,
   version: string,
   including: ReadonlySet<string> = new Set(),
 ): { code: string; message: string } | null {
@@ -177,6 +177,19 @@ export function takeOverProblem(
       message: `software ${version} runs patch ${current.dclVersion}; merge ${missing.map((id) => s.features[id]?.name ?? id).join(', ')} into the mainline, or close them for it, first`,
     };
   }
+  // An emergency stop in the patch line is a fix too: the taking set may run the stopped policy
+  // only in a version made after the stop (a change that answers it), never one that existed then.
+  for (const r of patchChain(s, current.id)) {
+    if (!r.emergency) continue;
+    const policyId = r.emergency.policyId;
+    const runs = Object.values(release.groups)
+      .map((commitId) => s.commits[commitId]?.policies[policyId])
+      .find((v): v is string => !!v);
+    const made = runs ? s.policyVersions[runs]?.createdAt : undefined;
+    if (made && made <= r.publishedAt) {
+      return { code: 'PATCH_FIX_MISSING', message: `software ${version} runs patch ${r.dclVersion}, which stopped policy ${policyId}; this set still runs a version from before the stop` };
+    }
+  }
   return null;
 }
 
@@ -184,7 +197,9 @@ export function takeOverProblem(
 export function promoteVersionProblem(s: State, c: Candidate, version: string): { code: string; message: string } | null {
   const sequence = (releasesOf(s, c.vehicleModelId)[0]?.sequence ?? 0) + 1;
   const patchOf = c.patch ? c.targetReleaseId : null;
-  return takeOverProblem(s, { id: '', vehicleModelId: c.vehicleModelId, patchOf, sequence, dclVersion: 'new' }, version, new Set(c.sources.map((x) => x.featureId)));
+  // Features it brings: its own sources and those inside the subsystem releases it collects.
+  const including = new Set([...c.sources.map((x) => x.featureId), ...c.subsystems.flatMap((ref) => s.subsystemReleases[ref.subsystemReleaseId]?.features.map((f) => f.featureId) ?? [])]);
+  return takeOverProblem(s, { id: '', vehicleModelId: c.vehicleModelId, patchOf, sequence, dclVersion: 'new', groups: c.groups }, version, including);
 }
 
 /** The same-software patches a Feature's current head went into. */

@@ -11,7 +11,7 @@ import type { FileType, Privacy } from '../domain/file-types.ts';
 import type { ReviewControls } from '../domain/intake.ts';
 import type { Domain, Env, GroupPurpose, Role, Scope, WorkspaceKind } from '../domain/vocabulary.ts';
 
-export const STATE_SCHEMA = 19;
+export const STATE_SCHEMA = 20;
 
 export interface Account {
   username: string;
@@ -871,12 +871,18 @@ export interface CaptureRequest {
   seq: number;
   resourceId: string;
   policyId: string;
+  /** The business group owning the policy: only its people see, ask and cancel. */
+  groupId: string;
   /** The workspace the request was made in; its data query shows the capture. */
   workspaceId: string;
   reason: string;
   requestedBy: string;
   requestedAt: string;
   status: 'PENDING' | 'CAPTURED' | 'CANCELLED';
+  /** Who withdrew it; null when the platform cancelled it because the vehicle could not take it. */
+  cancelledBy: string | null;
+  /** Why the platform cancelled it. */
+  note: string | null;
   eventId: string | null;
   answeredAt: string | null;
 }

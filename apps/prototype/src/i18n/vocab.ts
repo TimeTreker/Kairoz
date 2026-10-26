@@ -300,6 +300,7 @@ Object.assign(ERROR_LABELS, {
   REQUEST_ANSWERED: b('车辆已处理该请求', 'The vehicle already answered the request'),
   TECHNICAL_BINDINGS_ONLY: b('DCL 技术变更只能调整处理绑定，不能改文件、策略或引用', 'A DCL technical change only changes processing bindings, never files, policies or references'),
   NOTHING_TO_REBIND: b('基线中没有该业务分组的文件可以调整', 'The base has no files of this group to rebind'),
+  ALREADY_LATEST: b('引用已经固定在对方最新的已提交版本', 'The reference already pins the owner’s latest committed version'),
   NOT_TECHNICAL: b('只有 DCL 技术变更可以这样调整；业务 Feature 请在接入中调整', 'Only a DCL technical change is rebound this way; adjust a business Feature in intake'),
   PATCH_FIX_MISSING: b('该软件版本运行着补丁，补丁里的修复尚未合入主线（或写明不合入）', 'That software runs a patch whose fixes have not reached the mainline (or been closed for it)'),
   VEHICLE_RETIRED: b('报废的车辆不能恢复使用', 'A retired vehicle stays retired'),

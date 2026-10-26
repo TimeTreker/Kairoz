@@ -160,12 +160,19 @@ const PROBLEMS: Pattern[] = [
     ([p, m, dims]) =>
       `策略 ${p}：单次采集就超出 ${m} 预算（${dims!.replace(/ s > /g, ' 秒 > ').replace(/\bmemory\b/g, '内存').replace(/\bstorage\b/g, '存储').replace(/\bupload\b/g, '上传').replace(/ s per hour/g, ' 秒/小时').replace(/ per hour/g, '/小时').replace(/, /g, '；')}）`,
   ],
+  // After-sales requests the platform cancelled
+  [/(\S+) is retired/, ([r]) => `${r} 已报废`],
+  [/workspace (\S+) is archived/, ([w]) => `工作区 ${w} 已归档`],
+  [/(\S+) does not work in workspace (\S+)/, ([r, w]) => `${r} 不在工作区 ${w}`],
+  [/(\S+) is lent to (.+)/, ([r, w]) => `${r} 已借给 ${w}`],
+  [/policy (\S+) is not in the configuration (\S+) runs/, ([p, r]) => `${r} 运行的配置中没有策略 ${p}`],
   // DCL technical changes
   [/adds or removes files/, () => '增删了文件'],
   [/changes policies/, () => '改了策略'],
   [/changes references/, () => '改了引用'],
   [/changes (\w+) of (.+)/, ([f, n]) => `改了 ${n} 的 ${f}`],
   // Patches and the mainline
+  [/software (\S+) runs patch (\S+), which stopped policy (\S+); this set still runs a version from before the stop/, ([v, p, x]) => `软件 ${v} 运行补丁 ${p}（紧急停用了 ${x}）；该策略集仍运行停用前的版本`],
   [/software (\S+) runs patch (\S+); merge (.+) into the mainline, or close them for it, first/, ([v, p, f]) => `软件 ${v} 运行补丁 ${p}；先把 ${f} 合入主线（或写明不合入）`],
   // Training data
   [/upload waiting for budget/, () => '等待上传预算'],

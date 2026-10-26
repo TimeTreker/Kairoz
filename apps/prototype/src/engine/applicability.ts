@@ -10,7 +10,7 @@ import { newId } from '../domain/ids.ts';
 import type { Ctx } from './engine.ts';
 import { directTargetProblems, membersOf, occupancyProblems, pendingDeploymentOf, pendingImageChangeOf, recordGroupBinding, softwareKey } from './fleet.ts';
 import { mainlineRelease } from './config.ts';
-import { appliesTo, getRelease, setInEffect, supersedeMovedPlans, takeOverProblem } from './release.ts';
+import { appliesTo, getRelease, releasesOf, setInEffect, supersedeMovedPlans, takeOverProblem } from './release.ts';
 import { commitSnapshot, resolveFiles } from './snapshots.ts';
 import type { ApplicabilityCheck, Release, Resource, State } from './types.ts';
 import { assertSimulationFirst, blockersFor, testStatusFor } from './validation.ts';
@@ -292,6 +292,22 @@ export function confirmApplicability(ctx: Ctx, checkId: string, input: { note: s
     by: ctx.user().username,
     at: ctx.now,
   });
+  // Newer sets that apply to the version (patches the mainline takes over from) stop applying, so
+  // the confirmed set is the one in effect there.
+  for (const other of releasesOf(ctx.s, release.vehicleModelId).filter((r) => r.sequence > release.sequence && appliesTo(ctx.s, r, check.version))) {
+    ctx.s.applicability.push({
+      id: newId('ap'),
+      seq: ctx.seq(),
+      releaseId: other.id,
+      vehicleModelId: other.vehicleModelId,
+      version: check.version,
+      action: 'WITHDRAW',
+      checkId: check.id,
+      reason: `taken over by policy set ${release.dclVersion}`,
+      by: ctx.user().username,
+      at: ctx.now,
+    });
+  }
   const draft = ctx.s.applicabilityChecks[check.id]!;
   draft.status = 'CONFIRMED';
   supersedeMovedPlans(ctx.s, release.vehicleModelId);

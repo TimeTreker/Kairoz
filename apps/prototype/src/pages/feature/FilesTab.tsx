@@ -7,7 +7,7 @@ import { Hint, LabelTag, Mono } from '../../components/common.tsx';
 import type { FileSpecContent } from '../../domain/config.ts';
 import { FILE_TYPES, inferFileType, PRIVACY_LEVELS } from '../../domain/file-types.ts';
 import { addFile, EDITABLE_STAGES, putReference, removeFile, removeReference, reviewRequiredBefore, updateFile, visibleSuspects } from '../../engine/config.ts';
-import { setBinding, setTechnicalBinding } from '../../engine/intake.ts';
+import { repinTechnicalReference, setBinding, setTechnicalBinding } from '../../engine/intake.ts';
 import { referenceCatalog } from '../../engine/references.ts';
 import { latestCommittedVersion } from '../../engine/snapshots.ts';
 import type { Feature } from '../../engine/types.ts';
@@ -242,6 +242,17 @@ export function FilesTab({ feature }: { feature: Feature }) {
               title: '',
               render: (_, [key, versionId]) => {
                 const latest = latestCommittedVersion(state, key);
+                // A technical change re-pins a reference when the owner's new version only rebinds it.
+                if (technical)
+                  return (
+                    canBind &&
+                    latest &&
+                    latest.id !== versionId && (
+                      <Button type="link" size="small" onClick={() => run((c) => repinTechnicalReference(c, feature.id, key), L('已更新引用的处理绑定', 'Reference re-pinned to the new binding'))}>
+                        {L('更新到当前版本', 'Re-pin')}
+                      </Button>
+                    )
+                  );
                 return (
                   canEdit && (
                     <Space size={0}>

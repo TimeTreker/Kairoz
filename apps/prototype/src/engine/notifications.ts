@@ -104,7 +104,8 @@ export function notificationsFor(s: State, actor: Actor, workspaceId: string): N
   const features = Object.values(s.features).filter((f) => f.workspaceId === workspaceId);
 
   if (has('BUSINESS_DEV')) {
-    for (const f of features) {
+    // A DCL technical change is DCL's own: its feedback goes to DCL, not to the group's developers.
+    for (const f of features.filter((x) => x.kind === 'BUSINESS')) {
       if (!authorize(actor.grants, 'feature.edit', { workspaceId, groupId: f.groupId }).ok) continue;
       const feedback = s.feedback.filter((x) => x.featureId === f.id && x.commitId === f.headCommitId).at(-1);
       if (f.stage === 'DRAFT' && feedback) {
@@ -211,6 +212,10 @@ export function notificationsFor(s: State, actor: Actor, workspaceId: string): N
     }
   }
   if (has('DCL_ENGINEER')) {
+    for (const f of features.filter((x) => x.kind === 'TECHNICAL' && x.stage === 'DRAFT')) {
+      const feedback = s.feedback.filter((x) => x.featureId === f.id && x.commitId === f.headCommitId).at(-1);
+      if (feedback) add('DCL_ENGINEER', 'FEATURE_RETURNED', [f.id, f.headCommitId, feedback.id], { severity: 'WARNING', subject: f.name, detail: feedback.reason, link: `features/${f.id}`, at: feedback.createdAt });
+    }
     const q = intakeQueue(s, actor);
     for (const { feature: f } of q.features.filter((x) => x.feature.workspaceId === workspaceId)) {
       add('DCL_ENGINEER', 'INTAKE_REVIEW', [f.id, f.headCommitId], { severity: 'INFO', subject: f.name, detail: s.groups[f.groupId]?.code ?? f.groupId, link: 'intake', at: f.updatedAt });
@@ -240,7 +245,10 @@ export function notificationsFor(s: State, actor: Actor, workspaceId: string): N
     for (const q of Object.values(s.captureRequests).filter((x) => x.workspaceId === workspaceId && x.requestedBy === actor.username && fresh(x.answeredAt))) {
       const e = q.eventId ? s.events[q.eventId] : undefined;
       if (q.status === 'CAPTURED' && e?.status === 'DONE') add(asker, 'AFTERSALES_READY', [q.id, 'DONE'], { severity: 'INFO', subject: q.resourceId, detail: `DONE · ${e.policyName}`, link: 'query', at: q.answeredAt });
-      else if (q.status === 'CANCELLED' || (e && !carriesData(e))) add(asker, 'AFTERSALES_READY', [q.id, 'NONE'], { severity: 'WARNING', subject: q.resourceId, detail: `NONE · ${q.policyId}`, link: 'query', at: q.answeredAt });
+      // Not delivered: the platform cancelled it (the vehicle could not take it), or the capture was dropped or failed.
+      else if ((q.status === 'CANCELLED' && q.cancelledBy === null) || (e && (!carriesData(e) || e.status === 'FAILED'))) {
+        add(asker, 'AFTERSALES_READY', [q.id, 'NONE'], { severity: 'WARNING', subject: q.resourceId, detail: `NONE · ${q.policyId}${q.note ? ` · ${q.note}` : ''}`, link: 'query', at: q.answeredAt });
+      }
     }
   }
   // A vehicle the workspace works with had its collection paused (紧急停采).

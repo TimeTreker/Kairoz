@@ -9,12 +9,12 @@ import { newId } from '../domain/ids.ts';
 import { WILDCARD } from '../domain/vocabulary.ts';
 import { refreshIntakeStages, reviewItems } from './approvals.ts';
 import type { ReviewItem } from './approvals.ts';
-import { addFeedback, authorizeFeature, editDraft, overlapOwners } from './config.ts';
+import { addFeedback, authorizeFeature, editDraft, overlapOwners, technicalScopeIssues } from './config.ts';
 import type { Actor, Ctx } from './engine.ts';
 import { bindingIssues } from './processing.ts';
 import type { Binding } from './processing.ts';
 import { approvedReference } from './references.ts';
-import { commitSnapshot, resolveFiles } from './snapshots.ts';
+import { commitSnapshot, latestCommittedVersion, resolveFiles } from './snapshots.ts';
 import type { DataItem, Feature, State } from './types.ts';
 
 export interface IntakeQueue {
@@ -70,6 +70,10 @@ export function reviewFile(ctx: Ctx, featureId: string, input: ReviewInput): voi
   const spec = resolveFiles(ctx.s, head)[input.dataKey];
   if (!spec) throw notFound('file in commit', input.dataKey);
   if (!spec.requiresReview) throw rule('REVIEW_NOT_REQUIRED', `file ${input.dataKey} does not need sensitive review`);
+  // A DCL technical change is reviewed by another DCL engineer than the one who submitted it.
+  if (feature.kind === 'TECHNICAL' && ctx.s.commits[feature.headCommitId!]?.author === ctx.user().username) {
+    throw rule('SELF_APPROVAL', 'nobody reviews their own technical change');
+  }
   if (!input.reason.trim()) throw rule('REASON_REQUIRED', 'explain the decision');
   if (input.decision === 'APPROVED') {
     if (!(input.dataKey in head.files) && !approvedReference(ctx.s, input.dataKey, group.id)) {
@@ -107,6 +111,7 @@ export function reviewFile(ctx: Ctx, featureId: string, input: ReviewInput): voi
 /** DCL sends a Feature in intake back to its authors with a reason. */
 export function returnFeature(ctx: Ctx, featureId: string, input: { reason: string }): void {
   const { feature } = authorizeFeature(ctx, 'feature.return', featureId);
+  if (feature.kind === 'TECHNICAL') throw rule('NOT_IN_INTAKE', 'a technical change is DCL’s own; change it directly');
   assertInIntake(feature);
   if (!input.reason.trim()) throw rule('REASON_REQUIRED', 'explain what needs to change');
   feature.stage = 'DRAFT';
@@ -127,6 +132,29 @@ export function setTechnicalBinding(ctx: Ctx, featureId: string, dataKey: string
       const issues = bindingIssues(ctx.s, binding);
       if (issues.length) throw rule('INCOMPATIBLE_BINDING', 'the Edge/Cloud binding is not compatible', { issues });
       Object.assign(spec, binding);
+    },
+    { action: 'feature.editBinding' },
+  );
+}
+
+/**
+ * DCL re-pins a reference in its own technical change to the owner's latest committed version,
+ * when the two differ only in processing binding: the reading group sees the same data, bound the
+ * way the owner's technical change binds it.
+ */
+export function repinTechnicalReference(ctx: Ctx, featureId: string, dataKey: string): void {
+  editDraft(
+    ctx,
+    featureId,
+    (draft, feature) => {
+      if (feature.kind !== 'TECHNICAL') throw rule('NOT_TECHNICAL', 'only a DCL technical change is re-pinned this way; the business re-pins its own references');
+      const pinned = draft.references[dataKey];
+      if (!pinned) throw notFound('reference in draft', dataKey);
+      const latest = latestCommittedVersion(ctx.s, dataKey);
+      if (!latest || latest.id === pinned) throw rule('ALREADY_LATEST', 'the reference already pins the owner’s latest committed version');
+      const scope = technicalScopeIssues(ctx.s, { files: { [dataKey]: ctx.s.fileSpecVersions[pinned]!.content }, policies: {}, references: {} }, { files: { [dataKey]: latest.content }, policies: {}, references: {} });
+      if (scope.length) throw rule('TECHNICAL_BINDINGS_ONLY', 'the owner’s latest version changes more than the processing binding; the reading group re-pins it', { issues: scope });
+      draft.references[dataKey] = latest.id;
     },
     { action: 'feature.editBinding' },
   );

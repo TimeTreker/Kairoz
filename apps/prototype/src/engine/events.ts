@@ -112,7 +112,7 @@ export function captureEvent(
   const source = input.source ?? 'TRIGGER';
   // After-sales captures are core business: they go first, whatever the policy's own priority.
   const priority = source === 'AFTERSALES' ? 'HIGH' : policy.priority;
-  const admission = admitCapture(ctx.s, r.id, hit.policyId, priority, cost, at);
+  const admission = admitCapture(ctx.s, r.id, hit.policyId, priority, cost, at, source);
   // Grader captures wait while after-sales work is open on the vehicle (售后优先，Grader 延迟).
   if (source === 'GRADER' && admission.status === 'UPLOADING' && afterSalesOpen(ctx.s, r.id)) {
     admission.status = 'HELD';

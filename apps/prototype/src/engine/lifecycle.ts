@@ -45,6 +45,9 @@ export function workspaceArchiveProblems(s: State, workspaceId: string): string[
   for (const vg of Object.values(s.vehicleGroups)) {
     if (vg.workspaceId === ws.id && vg.status === 'ACTIVE' && membersOf(s, vg.id).length) problems.push(`vehicle group ${vg.name} has vehicles`);
   }
+  for (const q of Object.values(s.captureRequests)) {
+    if (q.workspaceId === ws.id && q.status === 'PENDING') problems.push(`after-sales request for ${q.resourceId} is pending`);
+  }
   for (const rid of s.workspaceResources[ws.id] ?? []) {
     const r = s.resources[rid];
     if (!r) continue;

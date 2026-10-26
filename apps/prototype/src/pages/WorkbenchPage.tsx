@@ -71,7 +71,7 @@ export function WorkbenchPage() {
   const features = workspace ? visibleFeatures(state, actor, workspace.id) : [];
 
   if (roles.includes('BUSINESS_DEV') && workspace) {
-    const mine = features.filter((f) => authorize(actor.grants, 'feature.edit', { workspaceId: f.workspaceId, groupId: f.groupId }).ok);
+    const mine = features.filter((f) => f.kind === 'BUSINESS' && authorize(actor.grants, 'feature.edit', { workspaceId: f.workspaceId, groupId: f.groupId }).ok);
     const returned = mine.filter((f) => f.stage === 'DRAFT' && state.feedback.some((x) => x.featureId === f.id && x.commitId === f.headCommitId));
     const ownedGroups = workspace.groupIds.filter((g) => authorize(actor.grants, 'reference.decide', { groupId: g }).ok);
     const pendingRefs = ownedGroups.flatMap((g) => referenceRequestsFor(state, actor, g, 'owner').filter((r) => r.status === 'PENDING'));
