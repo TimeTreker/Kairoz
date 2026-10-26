@@ -10,7 +10,7 @@ import { JsonExportModal, downloadJson } from '../components/JsonExport.tsx';
 import type { JsonFile } from '../components/JsonExport.tsx';
 import { EnvTag, Hint, LabelTag, Mono, PageHeader, when } from '../components/common.tsx';
 import { displayName } from '../engine/config.ts';
-import { aftersalesQuery, eventTarget, exportManifest, reprocessEvent, trainingQuery } from '../engine/events.ts';
+import { aftersalesQuery, carriesData, eventTarget, exportManifest, reprocessEvent, trainingQuery } from '../engine/events.ts';
 import type { AftersalesFilter, TrainingFilter } from '../engine/events.ts';
 import type { CollectionEvent, State } from '../engine/types.ts';
 import { useI18n } from '../i18n/i18n.tsx';
@@ -79,7 +79,7 @@ function AftersalesTab({ workspaceId }: { workspaceId: string }) {
         <Form.Item name="status" label={L('处理状态', 'Status')}>
           <Select
             style={{ width: 140 }}
-            options={[{ value: 'ALL', label: L('全部', 'All') }, ...Object.keys(EVENT_STATUS_LABELS).map((k) => ({ value: k, label: B(EVENT_STATUS_LABELS[k]) }))]}
+            options={[{ value: 'ALL', label: L('全部', 'All') }, ...Object.keys(EVENT_STATUS_LABELS).filter((k) => carriesData({ status: k as CollectionEvent['status'] })).map((k) => ({ value: k, label: B(EVENT_STATUS_LABELS[k]) }))]}
           />
         </Form.Item>
       </Form>

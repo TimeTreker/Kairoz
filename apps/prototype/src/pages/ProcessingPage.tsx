@@ -2,15 +2,19 @@ import { PlusOutlined } from '@ant-design/icons';
 import { Button, Card, Checkbox, Form, Input, InputNumber, Modal, Select, Space, Table, Tabs, Tag } from 'antd';
 import { useState } from 'react';
 import { useCan, useRun } from '../app/hooks.ts';
+import { navigate } from '../app/router.ts';
 import { useEngineState } from '../app/store.ts';
+import { BudgetLine, BudgetModal, HoldTag, PauseButton, UsageMeter } from '../components/budget.tsx';
 import { Hint, Mono, PageHeader, when } from '../components/common.tsx';
+import type { Budget } from '../domain/budget.ts';
 import { FILE_TYPES, PRIVACY_LEVELS, typeAlwaysRequiresReview } from '../domain/file-types.ts';
 import type { FileType } from '../domain/file-types.ts';
+import { budgetOf, modelBudget, setModelBudget, setVehicleBudget } from '../engine/budget.ts';
 import { createPipeline, createTemplate, currentTemplate } from '../engine/processing.ts';
 import { useI18n } from '../i18n/i18n.tsx';
-import { FILE_TYPE_LABELS } from '../i18n/vocab.ts';
+import { BUDGET_SOURCE_LABELS, FILE_TYPE_LABELS } from '../i18n/vocab.ts';
 
-export function ProcessingPage() {
+export function ProcessingPage({ tab = 'templates' }: { tab?: string }) {
   const state = useEngineState();
   const { L, B } = useI18n();
   const can = useCan();
@@ -32,6 +36,8 @@ export function ProcessingPage() {
         subtitle={L('DCL 工程维护：车端 / 云端处理的不可变版本，以及每类文件的默认绑定模板。', 'Maintained by DCL engineering: immutable Edge/Cloud processing versions and the default binding per file type.')}
       />
       <Tabs
+        activeKey={tab}
+        onChange={(k) => navigate(`processing/${k}`)}
         items={[
           {
             key: 'templates',
@@ -76,6 +82,7 @@ export function ProcessingPage() {
               </Card>
             ),
           },
+          { key: 'budget', label: L('资源预算', 'Collection budgets'), children: <BudgetTab /> },
         ]}
       />
       <Modal
@@ -165,5 +172,135 @@ export function ProcessingPage() {
         </Form>
       </Modal>
     </div>
+  );
+}
+
+/** Resource protection (资源保护): DCL engineering's collection budgets and each vehicle's hour. */
+function BudgetTab() {
+  const state = useEngineState();
+  const { L, B } = useI18n();
+  const can = useCan();
+  const run = useRun();
+  const canManage = can('budget.manage', {});
+  const [editing, setEditing] = useState<{ kind: 'model' | 'vehicle'; id: string } | null>(null);
+  const [vehicleChoice, setVehicleChoice] = useState<string | undefined>();
+  const models = Object.values(state.vehicleModels);
+  const overrides = Object.entries(state.collectionBudgets.vehicles);
+  // Vehicles that can fire: those running a confirmed configuration.
+  const vehicles = Object.values(state.resources).filter((r) => r.appliedConfigId && !r.personal && r.status !== 'RETIRED').sort((a, b) => a.id.localeCompare(b.id));
+  const initial: Budget | null = editing ? (editing.kind === 'model' ? modelBudget(state, editing.id).budget : budgetOf(state, editing.id).budget) : null;
+  const save = (b: Budget) =>
+    run((c) => (editing!.kind === 'model' ? setModelBudget(c, editing!.id, b) : setVehicleBudget(c, editing!.id, b)), L('预算已保存，下一次触发起生效', 'Budget saved; it applies from the next trigger')) !== undefined;
+  return (
+    <Space orientation="vertical" size={16} style={{ width: '100%' }}>
+      <Card title={L('车型采集预算', 'Collection budget per vehicle model')}>
+        <Hint>
+          {L(
+            'DCL 工程负责资源保护：每个车型一份预算，车端代理按滚动一小时核算 CPU、存储写入、上传与车端缓存，并限制单策略的触发次数（洪峰抑制）。高优先级（核心、售后）采集超预算仍然采集；其他采集超出 CPU、存储或缓存时不保留，超出上传时排队。合并时 DCL 按此预算检查每条策略。',
+            'DCL engineering owns resource protection: one budget per vehicle model. The vehicle agent counts a rolling hour of CPU, storage writes, upload and its buffer, and limits each policy’s triggers (flood suppression). HIGH-priority (core, after-sales) captures are collected even over budget; others are dropped over CPU, storage or the buffer, and wait over upload. At merge DCL checks every policy against this budget.',
+          )}
+        </Hint>
+        <Table
+          rowKey="id"
+          size="small"
+          pagination={false}
+          dataSource={models}
+          columns={[
+            { title: L('车型', 'Model'), render: (_, m) => <Mono>{m.id}</Mono> },
+            {
+              title: L('预算', 'Budget'),
+              render: (_, m) => {
+                const { budget, source } = modelBudget(state, m.id);
+                return (
+                  <Space size={4} wrap>
+                    <BudgetLine budget={budget} />
+                    <Tag>{B(BUDGET_SOURCE_LABELS[source]!)}</Tag>
+                  </Space>
+                );
+              },
+            },
+            { title: '', render: (_, m) => canManage && <Button size="small" onClick={() => setEditing({ kind: 'model', id: m.id })}>{L('设置预算', 'Set budget')}</Button> },
+          ]}
+        />
+      </Card>
+      <Card
+        title={`${L('车辆单独预算', 'Vehicle overrides')} · ${overrides.length}`}
+        extra={
+          canManage && (
+            <Space>
+              <Select
+                style={{ width: 200 }}
+                placeholder={L('选择车辆', 'Vehicle')}
+                value={vehicleChoice}
+                onChange={setVehicleChoice}
+                options={Object.values(state.resources).filter((r) => !r.personal && !state.collectionBudgets.vehicles[r.id]).map((r) => ({ value: r.id, label: r.id }))}
+              />
+              <Button disabled={!vehicleChoice} onClick={() => setEditing({ kind: 'vehicle', id: vehicleChoice! })}>
+                {L('单独设置', 'Set override')}
+              </Button>
+            </Space>
+          )
+        }
+      >
+        <Hint>{L('台架或测试车可以有自己的预算，代替车型预算。', 'A bench or test car can have its own budget instead of its model’s.')}</Hint>
+        <Table
+          rowKey={([id]) => id}
+          size="small"
+          pagination={false}
+          dataSource={overrides}
+          locale={{ emptyText: L('没有单独预算', 'No overrides') }}
+          columns={[
+            { title: L('车辆', 'Vehicle'), render: (_, [id]) => <Mono>{id}</Mono> },
+            { title: L('预算', 'Budget'), render: (_, [, b]) => <BudgetLine budget={b} /> },
+            {
+              title: '',
+              render: (_, [id]) =>
+                canManage && (
+                  <Space size={0}>
+                    <Button type="link" size="small" onClick={() => setEditing({ kind: 'vehicle', id })}>
+                      {L('修改', 'Edit')}
+                    </Button>
+                    <Button type="link" size="small" danger onClick={() => run((c) => setVehicleBudget(c, id, null), L('已改回车型预算', 'Back on the model budget'))}>
+                      {L('清除', 'Clear')}
+                    </Button>
+                  </Space>
+                ),
+            },
+          ]}
+        />
+      </Card>
+      <Card title={L('车辆近一小时的采集', 'Each vehicle’s last hour')}>
+        <Hint>{L('按平台时间（含模拟推进）滚动一小时。排队的采集在预算允许时由车端上传；未保留与洪峰抑制的采集没有数据，不进入数据查询。', 'A rolling hour on the platform clock (simulated time included). Waiting captures upload when the budget allows; dropped and suppressed captures carry no data and never reach the data query.')}</Hint>
+        <Table
+          rowKey="id"
+          size="small"
+          pagination={{ pageSize: 10, hideOnSinglePage: true }}
+          dataSource={vehicles}
+          columns={[
+            {
+              title: L('车辆', 'Vehicle'),
+              render: (_, r) => (
+                <Space size={4}>
+                  <Mono>{r.id}</Mono>
+                  <HoldTag resourceId={r.id} />
+                </Space>
+              ),
+            },
+            { title: L('预算来源', 'Budget'), render: (_, r) => B(BUDGET_SOURCE_LABELS[budgetOf(state, r.id).source]!) },
+            { title: L('本小时', 'This hour'), render: (_, r) => <UsageMeter resourceId={r.id} /> },
+            { title: '', render: (_, r) => <PauseButton resourceId={r.id} /> },
+          ]}
+        />
+      </Card>
+      {editing && initial && (
+        <BudgetModal
+          open
+          title={editing.kind === 'model' ? L(`${editing.id} 车型预算`, `${editing.id} model budget`) : L(`${editing.id} 单独预算`, `${editing.id} override`)}
+          initial={initial}
+          onClose={() => setEditing(null)}
+          onSave={save}
+        />
+      )}
+    </Space>
   );
 }

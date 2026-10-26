@@ -4,6 +4,16 @@ import { migrate } from '../src/engine/migrate.ts';
 import { demoState } from '../src/engine/seed.ts';
 import { STATE_SCHEMA } from '../src/engine/types.ts';
 
+/** A schema 16 save: a copy of a demo (today's by default) without the fields schema 17 added. */
+function schema16(demo: unknown = demoState()): Record<string, any> {
+  const s = JSON.parse(JSON.stringify(demo)) as Record<string, any>;
+  s.schema = 16;
+  delete s.collectionBudgets;
+  delete s.collectionHolds;
+  for (const e of Object.values(s.events) as any[]) for (const k of ['priority', 'cost', 'writtenAt', 'uploadAt', 'budgetNote']) delete e[k];
+  return s;
+}
+
 /** A schema 15 save: a copy of a demo (today's by default) without the fields schema 16 added. */
 function schema15(demo: unknown = demoState()): Record<string, any> {
   const s = JSON.parse(JSON.stringify(demo)) as Record<string, any>;
@@ -167,6 +177,18 @@ describe('saved state migration', () => {
     assert.deepEqual(migrated.applicability, []);
     assert.equal(migrated.directory, null);
     assert.deepEqual(migrated.releases, current.releases);
+  });
+
+  test('a schema 16 save gains empty budgets and pauses; its events cost nothing and keep their policy’s priority', () => {
+    const current = JSON.parse(JSON.stringify(demoState()));
+    const migrated = migrate(schema16(current))!;
+    assert.equal(migrated.schema, STATE_SCHEMA);
+    assert.deepEqual([migrated.collectionBudgets, migrated.collectionHolds], [{ models: {}, vehicles: {} }, {}]);
+    for (const e of Object.values(migrated.events)) {
+      assert.deepEqual([e.cost, e.writtenAt, e.uploadAt, e.budgetNote], [null, e.occurredAt, e.occurredAt, null], e.id);
+      assert.equal(e.priority, migrated.policyVersions[e.policyVersionId]!.content.priority);
+    }
+    assert.deepEqual(migrated.features, current.features);
   });
 
   test('a schema 15 save puts every policy set, preview and candidate on the mainline', () => {

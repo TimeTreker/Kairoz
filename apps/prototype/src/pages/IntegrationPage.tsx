@@ -10,10 +10,12 @@ import { setSession, useEngineState } from '../app/store.ts';
 import { DiffView } from '../components/DiffView.tsx';
 import { ApplicabilityChecks } from '../components/applicability.tsx';
 import { Hint, LabelTag, Mono, PageHeader, ShortId, StageTag, when } from '../components/common.tsx';
+import { ResourceCheck } from '../components/budget.tsx';
 import { PatchedTag, TargetSet, patchTargetLabel } from '../components/patch.tsx';
 import { DeploymentsTable, DispatchModal, RecordTestModal, TargetsTable } from '../components/testing.tsx';
 import { WILDCARD } from '../domain/vocabulary.ts';
 import type { Scope } from '../domain/vocabulary.ts';
+import { resourceBlockers } from '../engine/budget.ts';
 import { displayName } from '../engine/config.ts';
 import { ungroupedVehicles, vehicleGroupsOf } from '../engine/fleet.ts';
 import {
@@ -435,6 +437,7 @@ function PlanCard({ plan, onCandidate }: { plan: MergePlan; onCandidate: (id: st
   const lines = processingSummary(state, plan);
   const step = plan.status === 'FROZEN' ? 3 : confirmed ? 2 : plan.status === 'READY' ? 1 : 0;
   const unreviewed = lines.filter((l) => l.requiresReview && l.review?.status !== 'APPROVED');
+  const overBudget = plan.status === 'READY' && !confirmed ? resourceBlockers(state, plan) : [];
   const sameKind = Object.values(state.candidates).filter((c) => c.workspaceId === plan.workspaceId && c.scope === plan.scope && (c.patch === null) === (plan.patch === null)).length + 1;
   const nextLabel = plan.patch ? `${plan.vehicleModelId}-P${sameKind}` : plan.scope === 'Vehicle' ? `${plan.vehicleModelId}-C${sameKind}` : `${plan.vehicleModelId}-${plan.scope}-C${sameKind}`;
   // A preview is pinned to its source commits; a newer head (or a lost verification) makes it stale.
@@ -458,7 +461,7 @@ function PlanCard({ plan, onCandidate }: { plan: MergePlan; onCandidate: (id: st
       extra={
         <Space>
           {plan.status === 'READY' && staleSources.length === 0 && staleSubsystems.length === 0 && !confirmed && canConfirm && (
-            <Button type="primary" onClick={() => (setNote(''), setConfirming(true))}>
+            <Button type="primary" disabled={overBudget.length > 0} onClick={() => (setNote(''), setConfirming(true))}>
               {L('确认处理集合', 'Confirm processing set')}
             </Button>
           )}
@@ -549,6 +552,21 @@ function PlanCard({ plan, onCandidate }: { plan: MergePlan; onCandidate: (id: st
           }
         />
       )}
+      {overBudget.length > 0 && (
+        <Alert
+          type="error"
+          showIcon
+          style={{ marginBottom: 12 }}
+          title={L('资源保护：有策略单次采集就超出车型预算，永远采集不到；DCL 不能确认。缩短采集窗口或减少文件后重新提交，或由 DCL 调整车型预算。', 'Resource protection: a policy’s single capture exceeds the vehicle model’s budget and could never be collected; DCL cannot confirm. Shorten the window or capture fewer files and resubmit, or have DCL adjust the model budget.')}
+          description={
+            <ul style={{ margin: 0, paddingLeft: 18 }}>
+              {overBudget.map((i) => (
+                <li key={i}>{B(issueLabel(i), i)}</li>
+              ))}
+            </ul>
+          }
+        />
+      )}
       {plan.status === 'READY' && !confirmed && (
         <Alert
           type={unreviewed.length ? 'warning' : 'info'}
@@ -587,6 +605,7 @@ function PlanCard({ plan, onCandidate }: { plan: MergePlan; onCandidate: (id: st
               },
             ]}
           />
+          <ResourceCheck plan={plan} />
           <Typography.Title level={5}>{L('最终处理集合', 'Final processing set')}</Typography.Title>
           <Table
             rowKey={(l) => `${l.groupId}/${l.dataKey}`}

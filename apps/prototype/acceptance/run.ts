@@ -18,6 +18,7 @@ import * as simSoftware from './sim-software.ts';
 import * as softwareChange from './software-change.ts';
 import * as notifications from './notifications.ts';
 import * as borrowing from './borrowing.ts';
+import * as budget from './budget.ts';
 import * as lifecycle from './lifecycle.ts';
 import * as deviceFaults from './device-faults.ts';
 import * as patch from './patch.ts';
@@ -66,6 +67,7 @@ const suites = [
   { id: 'lifecycle', mod: lifecycle },
   { id: 'device-faults', mod: deviceFaults },
   { id: 'patch', mod: patch },
+  { id: 'budget', mod: budget },
 ] as const;
 
 const report: { script: string; name: string; rows: Row[] }[] = [];

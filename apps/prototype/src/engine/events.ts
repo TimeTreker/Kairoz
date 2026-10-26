@@ -4,9 +4,13 @@
 
 import { authorize } from '../domain/authz.ts';
 import type { AuthzTarget } from '../domain/authz.ts';
+import { captureCost, fileBytes } from '../domain/budget.ts';
+import type { FileType } from '../domain/file-types.ts';
 import { notFound, rule } from '../domain/errors.ts';
 import { sha256Hex } from '../domain/canonical.ts';
 import { newId } from '../domain/ids.ts';
+import { admitCapture } from './budget.ts';
+import { isCollectionPaused } from './collection-hold.ts';
 import type { Actor, Ctx } from './engine.ts';
 import type { CollectionEvent, EventFile, Quality, State, TrainingUse } from './types.ts';
 
@@ -31,7 +35,7 @@ function sourceWorkspace(s: State, resourceId: string, configId: string): string
   return deployments[0]?.workspaceId;
 }
 
-/** Deterministic pseudo size, so repeated runs of the demo look the same. */
+/** Deterministic pseudo size of a personal trial capture, so repeated runs of the demo look the same. */
 export function sizeOf(seed: string): number {
   let h = 0;
   for (const ch of seed) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
@@ -40,7 +44,9 @@ export function sizeOf(seed: string): number {
 
 /**
  * The vehicle fires a policy of its applied configuration (system context: the simulator).
- * Files are the policy's captures, pinned to the versions in that configuration.
+ * Files are the policy's captures, pinned to the versions in that configuration, sized by their
+ * type's nominal rate over the capture window. A paused vehicle refuses; otherwise its budget
+ * guard decides whether the capture uploads, waits, is dropped or is suppressed as a flood.
  */
 export function captureEvent(
   ctx: Ctx,
@@ -61,11 +67,13 @@ export function captureEvent(
   if (!config) throw rule('NO_APPLIED_CONFIG', `vehicle ${r.id} runs no confirmed configuration, so nothing can fire`);
   const hit = capturablePolicies(ctx.s, r.id).find((p) => p.policyId === input.policyId);
   if (!hit) throw rule('POLICY_NOT_ON_VEHICLE', `policy ${input.policyId} is not in the configuration vehicle ${r.id} runs`);
+  if (isCollectionPaused(ctx.s, r.id)) throw rule('COLLECTION_PAUSED', `collection on ${r.id} is paused`);
   const commit = ctx.s.commits[hit.commitId]!;
   const policyVersionId = commit.policies[hit.policyId]!;
   const policy = ctx.s.policyVersions[policyVersionId]!.content;
   const entries = ctx.s.manifestVersions[commit.manifestVersionId]!.entries;
   const id = newId('ev');
+  const window = policy.preSeconds + policy.postSeconds;
   const files: EventFile[] = policy.captures.map((dataKey) => {
     const entry = entries.find((e) => e.dataKey === dataKey)!;
     const spec = ctx.s.fileSpecVersions[entry.fileSpecVersionId]!;
@@ -79,7 +87,7 @@ export function captureEvent(
       edgePipelineId: spec.content.edgePipelineId,
       cloudPipelineId: spec.content.cloudPipelineId,
       retentionDays: spec.content.retentionDays,
-      sizeBytes: sizeOf(`${id}/${dataKey}`),
+      sizeBytes: fileBytes(spec.content.fileType, window),
       edgeStatus: 'PENDING',
       cloudStatus: 'PENDING',
       artifactUri: null,
@@ -91,6 +99,19 @@ export function captureEvent(
     f.chunks = Array.from({ length: count }, (_, index) => ({ index, sha256: chunkDigest(id, f.dataKey, index), received: false }));
   }
   const release = config.kind === 'RELEASE' ? ctx.s.releases[config.sourceId] : undefined;
+  const at = input.occurredAt ?? ctx.now;
+  const cost = captureCost(
+    files.map((f) => ({ fileType: f.fileType as FileType, edgeSteps: ctx.s.pipelines[f.edgePipelineId]?.steps.length ?? 1 })),
+    window,
+  );
+  const admission = admitCapture(ctx.s, r.id, hit.policyId, policy.priority, cost, at);
+  for (const evicted of admission.evict) {
+    const e = ctx.s.events[evicted]!;
+    e.status = 'DROPPED';
+    e.budgetNote = 'EVICTED';
+    e.failure = `BudgetExceeded: evicted for a HIGH-priority capture (${policy.name})`;
+  }
+  const stored = admission.status === 'UPLOADING' || admission.status === 'HELD';
   ctx.s.events[id] = {
     id,
     seq: ctx.seq(),
@@ -114,10 +135,15 @@ export function captureEvent(
     trigger: policy.trigger,
     preSeconds: policy.preSeconds,
     postSeconds: policy.postSeconds,
-    occurredAt: input.occurredAt ?? ctx.now,
+    occurredAt: at,
     files,
-    status: 'UPLOADING',
-    failure: null,
+    status: admission.status,
+    failure: admission.status === 'SUPPRESSED' ? `TriggerFlood: ${policy.name} fired more often than its hourly limit` : admission.status === 'DROPPED' ? `BudgetExceeded: ${admission.note?.toLowerCase()}` : null,
+    priority: policy.priority,
+    cost,
+    writtenAt: stored ? at : null,
+    uploadAt: admission.status === 'UPLOADING' ? at : null,
+    budgetNote: admission.note,
     failParse: input.failParse ?? false,
     processingAttempts: 0,
     callbacks: [],
@@ -170,6 +196,7 @@ export function receiveChunk(ctx: Ctx, eventId: string, dataKey: string, index: 
   const f = e.files.find((x) => x.dataKey === dataKey);
   const chunk = f?.chunks.find((c) => c.index === index);
   if (!f || !chunk) throw notFound('upload chunk', `${eventId}/${dataKey}/${index}`);
+  if (e.status === 'HELD' || !carriesData(e)) throw rule('NOT_UPLOADING', `the vehicle is not uploading ${e.id}`);
   if (checksum !== chunk.sha256) throw rule('CHECKSUM_MISMATCH', `chunk ${index} of ${f.name} does not match its checksum; it was not stored`);
   if (chunk.received) return 'REPLAYED';
   chunk.received = true;
@@ -230,10 +257,15 @@ export function reprocessEvent(ctx: Ctx, eventId: string): void {
   e.failParse = false;
 }
 
-/** Events in the workspace the actor may read, newest first. */
+/** Whether the platform has, or will get, the capture's data: not dropped or suppressed on the vehicle. */
+export function carriesData(e: Pick<CollectionEvent, 'status'>): boolean {
+  return e.status !== 'DROPPED' && e.status !== 'SUPPRESSED';
+}
+
+/** Events with data in the workspace the actor may read, newest first. */
 export function visibleEvents(s: State, actor: Actor, workspaceId: string): CollectionEvent[] {
   return Object.values(s.events)
-    .filter((e) => e.workspaceId === workspaceId && authorize(actor.grants, 'event.query', eventTarget(s, e)).ok)
+    .filter((e) => e.workspaceId === workspaceId && carriesData(e) && authorize(actor.grants, 'event.query', eventTarget(s, e)).ok)
     .sort((a, b) => (a.occurredAt < b.occurredAt ? 1 : a.occurredAt > b.occurredAt ? -1 : b.seq - a.seq));
 }
 
@@ -263,7 +295,7 @@ export function aftersalesQuery(s: State, actor: Actor, workspaceId: string, f: 
 /** Why an event cannot be used for training; empty when it can. Unknown never counts as passed. */
 export function trainingBlockers(e: CollectionEvent): string[] {
   const blockers: string[] = [];
-  if (e.status !== 'DONE') blockers.push(e.status === 'FAILED' ? 'processing failed' : 'processing not finished');
+  if (e.status !== 'DONE') blockers.push(e.status === 'FAILED' ? 'processing failed' : e.status === 'HELD' ? 'upload waiting for budget' : 'processing not finished');
   if (e.files.length === 0 || e.files.some((f) => f.cloudStatus !== 'DONE')) blockers.push('captured files incomplete');
   if (e.quality !== 'A' && e.quality !== 'B') blockers.push(e.quality === 'UNKNOWN' ? 'quality unknown' : `quality ${e.quality}`);
   if (e.trainingUse !== 'ALLOWED') blockers.push(e.trainingUse === 'UNCONFIRMED' ? 'training use not confirmed' : 'training use denied');

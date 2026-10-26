@@ -154,7 +154,26 @@ function to16(s: Saved): void {
   s.schema = 16;
 }
 
-const STEPS: Record<number, (s: Saved) => void> = { 6: to7, 7: to8, 8: to9, 9: to10, 10: to11, 11: to12, 12: to13, 13: to14, 14: to15, 15: to16 };
+/**
+ * Schema 17: collection budgets and pauses. Earlier events keep no cost (they count for nothing
+ * in a budget window), were stored and uploaded when they fired, and take their policy's priority.
+ */
+function to17(s: Saved): void {
+  s.collectionBudgets ??= { models: {}, vehicles: {} };
+  s.collectionHolds ??= {};
+  const versions = (s.policyVersions ?? {}) as Rows;
+  for (const e of Object.values((s.events ?? {}) as Rows)) {
+    const policy = versions[e.policyVersionId as string]?.content as Record<string, unknown> | undefined;
+    e.priority ??= policy?.priority ?? 'NORMAL';
+    e.cost ??= null;
+    e.writtenAt ??= e.occurredAt ?? null;
+    e.uploadAt ??= e.occurredAt ?? null;
+    e.budgetNote ??= null;
+  }
+  s.schema = 17;
+}
+
+const STEPS: Record<number, (s: Saved) => void> = { 6: to7, 7: to8, 8: to9, 9: to10, 10: to11, 11: to12, 12: to13, 13: to14, 14: to15, 15: to16, 16: to17 };
 
 /** The state at the current schema, or null when it cannot be read or is too old. Mutates `raw`. */
 export function migrate(raw: unknown): State | null {

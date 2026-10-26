@@ -154,7 +154,14 @@ const PROBLEMS: Pattern[] = [
   [/username taken by another account/, () => '账号名已被其他账号使用'],
   [/not a valid username/, () => '不是有效的账号名'],
   [/the last platform administrator stays active/, () => '最后一个平台管理员保持启用'],
+  // Resource protection
+  [
+    /policy (\S+): one capture exceeds the (\S+) budget \((.+)\)/,
+    ([p, m, dims]) =>
+      `策略 ${p}：单次采集就超出 ${m} 预算（${dims!.replace(/ s > /g, ' 秒 > ').replace(/\bmemory\b/g, '内存').replace(/\bstorage\b/g, '存储').replace(/\bupload\b/g, '上传').replace(/ s per hour/g, ' 秒/小时').replace(/ per hour/g, '/小时').replace(/, /g, '；')}）`,
+  ],
   // Training data
+  [/upload waiting for budget/, () => '等待上传预算'],
   [/processing failed/, () => '处理失败'],
   [/processing not finished/, () => '处理未完成'],
   [/captured files incomplete/, () => '捕获文件不完整'],

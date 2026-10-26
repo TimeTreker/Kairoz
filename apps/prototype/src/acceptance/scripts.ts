@@ -3309,6 +3309,159 @@ export const SCRIPTS: Script[] = [
         "fail": "没有理由不能关闭。"
       }
     ]
+  },
+  {
+    "id": "budget",
+    "name": "资源预算与紧急停采 · 资源保护",
+    "start": "demo",
+    "scenes": [
+      {
+        "id": "BG01",
+        "title": "DCL 设定车型采集预算",
+        "actor": "dcl",
+        "accounts": [
+          "dcl"
+        ],
+        "workspace": null,
+        "page": "处理目录 → 资源预算",
+        "pre": "演示数据。",
+        "steps": [
+          "以 dcl 登录，“处理目录 → 资源预算”：X89 当前为“默认预算”。",
+          "“设置预算”：车端缓存 64 MB、上传 5 MB/小时、单策略触发上限 3 次/小时，其余不变；填负数被拒绝。"
+        ],
+        "done": "X89 的车辆都按车型预算核算。",
+        "fail": "预算值必须为正数，触发上限为整数。"
+      },
+      {
+        "id": "BG02",
+        "title": "合并时的资源保护检查",
+        "actor": "steering；steering_tester；integrator；dcl",
+        "accounts": [
+          "steering",
+          "steering_tester",
+          "integrator",
+          "dcl"
+        ],
+        "workspace": "x89-project",
+        "page": "配置集成 → 合并预览 → 资源保护",
+        "pre": "BG01 完成。",
+        "steps": [
+          "steering 新建 angle_jump_long，把转角突变的录制后时长改为 110 秒，提交；steering_tester 在转向研发车组验证。",
+          "integrator 预览合并：资源保护中转角突变“单次就超出预算 · 上传网络”（23 MB > 5 MB/小时）；DCL 的“确认处理集合”不可用。",
+          "steering 把录制后时长改回 15 秒重新提交并验证；再次预览为“高频时会被限流”，DCL 确认。"
+        ],
+        "done": "一次采集就超出预算的策略不能进入集合。",
+        "fail": "检查按策略逐条进行，只阻止永远采集不到的策略。"
+      },
+      {
+        "id": "BG03",
+        "title": "高优先级的核心采集",
+        "actor": "business；brake_tester；车辆模拟器",
+        "accounts": [
+          "business",
+          "brake_tester"
+        ],
+        "workspace": "team-brake",
+        "page": "研发 Feature；车辆模拟器",
+        "pre": "BG01 完成。",
+        "steps": [
+          "business 新建 brake_core：文件“制动核心日志”，策略“制动核心”优先级 HIGH、前后各 30 秒；brake_tester 在制动研发车组验证。",
+          "模拟器对 VEH-001 触发转角突变：上传（3 MB）。"
+        ],
+        "done": "预算内的采集立即上传。",
+        "fail": "—"
+      },
+      {
+        "id": "BG04",
+        "title": "超出上传预算时排队，高优先级先走",
+        "actor": "车辆模拟器",
+        "accounts": [],
+        "workspace": null,
+        "page": "车辆模拟器 → 采集事件",
+        "pre": "BG03 完成。",
+        "steps": [
+          "再触发一次转角突变：“预算排队”。",
+          "触发“制动核心”（1.2 MB）：在预算内，先于排队的采集上传；再触发一次：超出上传预算仍然采集，标注“高优先级，超预算仍采集”。",
+          "执行一步：排队的仍排队；“推进 1 小时”后执行一步：上传。"
+        ],
+        "done": "超出上传预算的采集不丢，等到预算允许；核心采集不受影响。",
+        "fail": "—"
+      },
+      {
+        "id": "BG05",
+        "title": "触发洪峰被抑制",
+        "actor": "车辆模拟器；dcl",
+        "accounts": [
+          "dcl"
+        ],
+        "workspace": "x89-project",
+        "page": "车辆模拟器 → 模拟洪峰",
+        "pre": "BG01 完成。",
+        "steps": [
+          "对 VEH-201 的转角突变“模拟洪峰（连发 10 次）”：上传 1、排队 2、洪峰抑制 7。",
+          "洪峰抑制的触发不进入数据查询；dcl 的通知中心与工作台提示 VEH-201 超出预算。"
+        ],
+        "done": "单策略的触发次数受限，平台记得被抑制的次数。",
+        "fail": "—"
+      },
+      {
+        "id": "BG06",
+        "title": "紧急暂停与恢复采集",
+        "actor": "release；dcl；车辆模拟器",
+        "accounts": [
+          "release",
+          "dcl"
+        ],
+        "workspace": "x89-project",
+        "page": "车辆与车辆组；车辆模拟器",
+        "pre": "BG05 完成。",
+        "steps": [
+          "release 对 VEH-201“暂停采集”，原因“上传链路拥塞”：立即“停采待车辆确认”，新的触发被拒绝。",
+          "执行一步：车辆确认，“采集已暂停”，车上排队的采集被丢弃（紧急停采）。",
+          "dcl“恢复采集”（链路恢复），执行一步后恢复；历史保留两条。"
+        ],
+        "done": "停采立即生效、由车辆确认，不需要新的策略集。",
+        "fail": "恢复需写原因；未确认的暂停不能恢复。"
+      },
+      {
+        "id": "BG07",
+        "title": "测试车的单独预算",
+        "actor": "dcl；车辆模拟器",
+        "accounts": [
+          "dcl"
+        ],
+        "workspace": null,
+        "page": "处理目录 → 资源预算",
+        "pre": "BG01 完成。",
+        "steps": [
+          "为 VEH-031 单独设置上传 100 MB/小时：连续两次采集都直接上传。",
+          "“清除”后 VEH-031 回到车型预算。"
+        ],
+        "done": "台架与测试车可以有自己的预算。",
+        "fail": "—"
+      },
+      {
+        "id": "N01",
+        "title": "预算与停采的越权",
+        "actor": "business；brake_tester；resource；integrator；workspace_manager",
+        "accounts": [
+          "business",
+          "brake_tester",
+          "resource",
+          "integrator",
+          "workspace_manager"
+        ],
+        "workspace": null,
+        "page": "引擎回放",
+        "pre": "BG01 完成。",
+        "steps": [
+          "业务、测试、车辆资源、集成与发布都不能设置预算；业务、测试、车辆资源、集成与工作区管理员都不能暂停采集。",
+          "没有暂停的车辆不能“恢复”。"
+        ],
+        "done": "资源保护只由 DCL 工程负责；停采只由 DCL 工程与配置发布执行。",
+        "fail": "拒绝不改变任何状态。"
+      }
+    ]
   }
 ];
 

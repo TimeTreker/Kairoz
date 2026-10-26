@@ -293,6 +293,15 @@ Object.assign(ERROR_LABELS, {
   CANDIDATE_NOT_VERIFIED: b('只有通过集成测试的候选才能发布', 'Only a candidate verified by integration testing can be released'),
   INVALID_DCL_VERSION: b('策略集版本格式为 major.minor.patch，例如 1.0.1', 'A policy set version is major.minor.patch, e.g. 1.0.1'),
   DCL_VERSION_TAKEN: b('该策略集版本已存在', 'That policy set version already exists'),
+  RESOURCE_BUDGET: b('有策略单次采集就超出车型资源预算，DCL 不能确认', 'A policy’s single capture exceeds the vehicle model’s budget; DCL cannot confirm'),
+  INVALID_BUDGET: b('预算值必须为正数，触发上限为整数', 'Budget values must be positive; the trigger limit a whole number'),
+  NO_VEHICLE_BUDGET: b('该车辆没有单独的预算', 'The vehicle has no budget of its own'),
+  NOT_UPLOADING: b('车辆没有在上传这次采集（排队、未保留或被抑制）', 'The vehicle is not uploading this capture (waiting, dropped or suppressed)'),
+  COLLECTION_PAUSED: b('该车辆的采集已紧急暂停', 'Collection on this vehicle is paused'),
+  ALREADY_PAUSED: b('该车辆的采集已经暂停', 'Collection on this vehicle is already paused'),
+  NOT_PAUSED: b('该车辆的采集没有暂停', 'Collection on this vehicle is not paused'),
+  PAUSE_UNCONFIRMED: b('车辆尚未确认暂停，确认后才能恢复', 'The vehicle has not confirmed the pause yet'),
+  NOTHING_TO_CONFIRM: b('没有待车辆确认的暂停或恢复', 'No pause or resume waiting for the vehicle'),
   DCL_VERSION_NOT_NEWER: b('主线版本必须高于本车型已有的所有策略集版本', 'A mainline version must be newer than every policy set of the model'),
   PATCH_VERSION_LINE: b('补丁沿目标的 major.minor 编号，并高于该系列已有的版本', 'A patch is numbered in its target’s major.minor line, above every set of that line'),
   PATCH_VERSION_OUTSIDE_TARGET: b('补丁只能适用目标策略集正在服务的整车软件版本', 'A patch applies only to the software versions its target is in effect for'),
@@ -309,12 +318,56 @@ Object.assign(ERROR_LABELS, {
 });
 
 export const EVENT_STATUS_LABELS: Record<string, Bilingual> = {
+  HELD: b('预算排队', 'Waiting for budget'),
   UPLOADING: b('车端上传中', 'Uploading'),
   PROCESSING: b('云端处理中', 'Processing'),
   DONE: b('处理完成', 'Processed'),
   FAILED: b('处理失败', 'Failed'),
+  DROPPED: b('未保留', 'Dropped'),
+  SUPPRESSED: b('洪峰抑制', 'Suppressed (flood)'),
 };
-export const EVENT_STATUS_COLORS: Record<string, string> = { UPLOADING: 'processing', PROCESSING: 'processing', DONE: 'green', FAILED: 'red' };
+export const EVENT_STATUS_COLORS: Record<string, string> = { HELD: 'gold', UPLOADING: 'processing', PROCESSING: 'processing', DONE: 'green', FAILED: 'red', DROPPED: 'volcano', SUPPRESSED: 'default' };
+
+/** Why the vehicle's budget guard acted on a capture. */
+export const BUDGET_NOTE_LABELS: Record<string, Bilingual> = {
+  CPU: b('超出每小时 CPU 预算', 'over the hourly CPU budget'),
+  IO: b('超出每小时存储预算', 'over the hourly storage budget'),
+  MEMORY: b('车端缓存已满', 'vehicle buffer full'),
+  EVICTED: b('为高优先级采集让出缓存', 'evicted for a HIGH-priority capture'),
+  FLOOD: b('超过策略每小时触发上限', 'over the policy’s hourly trigger limit'),
+  EMERGENCY_HOLD: b('紧急停采', 'emergency collection pause'),
+  OVER_BUDGET_HIGH: b('高优先级，超预算仍采集', 'HIGH priority, collected over budget'),
+};
+
+/** The four budget dimensions. */
+export const BUDGET_DIMENSION_LABELS: Record<string, Bilingual> = {
+  cpu: b('CPU', 'CPU'),
+  memory: b('内存（车端缓存）', 'memory (buffer)'),
+  io: b('存储 IO', 'storage IO'),
+  network: b('上传网络', 'upload network'),
+};
+
+export const POLICY_BUDGET_LABELS: Record<string, Bilingual> = {
+  OK: b('在预算内', 'Within budget'),
+  MAY_THROTTLE: b('高频时会被限流', 'May be throttled'),
+  NEVER_FITS: b('单次就超出预算', 'Never fits'),
+};
+export const POLICY_BUDGET_COLORS: Record<string, string> = { OK: 'green', MAY_THROTTLE: 'gold', NEVER_FITS: 'red' };
+
+export const BUDGET_SOURCE_LABELS: Record<string, Bilingual> = {
+  VEHICLE: b('车辆单独预算', 'vehicle override'),
+  MODEL: b('车型预算', 'model budget'),
+  DEFAULT: b('默认预算', 'default budget'),
+};
+
+/** A vehicle's collection pause (紧急停采). */
+export const HOLD_STATE_LABELS: Record<string, Bilingual> = {
+  PAUSING: b('停采待车辆确认', 'Pause awaiting the vehicle'),
+  PAUSED: b('采集已暂停', 'Collection paused'),
+  RESUMING: b('恢复待车辆确认', 'Resume awaiting the vehicle'),
+  ACTIVE: b('采集中', 'Collecting'),
+};
+export const HOLD_STATE_COLORS: Record<string, string> = { PAUSING: 'orange', PAUSED: 'red', RESUMING: 'orange', ACTIVE: 'green' };
 
 export const FILE_PROCESS_LABELS: Record<string, Bilingual> = {
   PENDING: b('等待', 'Pending'),

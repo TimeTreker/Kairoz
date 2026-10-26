@@ -15,6 +15,7 @@ import { fitOf } from '../engine/delivery.ts';
 import { openChangeOf, unrecordedReports } from '../engine/software-change.ts';
 import { catalogImages } from '../engine/sim-software.ts';
 import { EnvTag, Hint, LabelTag, Mono, PageHeader, ShortId, configName, when } from '../components/common.tsx';
+import { HoldTag, PauseButton } from '../components/budget.tsx';
 import { ENVS, SCOPES } from '../domain/vocabulary.ts';
 import {
   activeLoanOf,
@@ -132,6 +133,7 @@ function VehicleTable({ vehicles, extra, workspaceId = '' }: { vehicles: Resourc
                     <Tag color="gold">{L(`预约：${r.reservation.purpose}`, `Reserved: ${r.reservation.purpose}`)}</Tag>
                   </Tooltip>
                 )}
+                <HoldTag resourceId={r.id} />
               </Space>
             );
           },
@@ -226,6 +228,7 @@ function WorkspaceVehicles() {
                 {L('客户端状态', 'Client state')}
               </Button>
             )}
+            <PauseButton resourceId={r.id} />
             {manages(r) && !activeLoanOf(state, r.id) && (
               <Button type="link" size="small" danger onClick={() => run((c) => removeWorkspaceVehicle(c, workspace.id, r.id), L('已移出工作区', 'Removed from the workspace'))}>
                 {L('移出', 'Remove')}

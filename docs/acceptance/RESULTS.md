@@ -1,10 +1,10 @@
 # 验收结果（引擎层逐幕回放）
 
-运行时间：2026-10-26T12:19:18.317Z。由 `npm run acceptance` 生成；每次重新执行，不沿用历史结果。
+运行时间：2026-10-26T12:48:25.423Z。由 `npm run acceptance` 生成；每次重新执行，不沿用历史结果。
 
 状态：PASS 通过；FAIL 失败；GAP 设计要求尚未实现；BLOCKED 前置幕未通过；NOT_APPLICABLE 浏览器原型不适用（如服务端部署）。
 
-合计：PASS 183 · FAIL 0 · GAP 0 · BLOCKED 0 · NOT_APPLICABLE 3 · NOT_WRITTEN 0
+合计：PASS 191 · FAIL 0 · GAP 0 · BLOCKED 0 · NOT_APPLICABLE 3 · NOT_WRITTEN 0
 
 ## 从零启动 · 角色协作
 
@@ -242,6 +242,19 @@
 | PT06 修复合入主线 | integrator；dcl；integration_tester；release | PASS |  |
 | PT07 补丁线的门禁：目标被替换后不能发布 | steering；steering_tester；integrator；dcl；integration_tester；release | PASS |  |
 | N01 补丁的权限与“不合入主线” | integration_tester；steering；integrator | PASS |  |
+
+## 资源预算与紧急停采 · 资源保护
+
+| 幕 | 执行人 | 状态 | 说明 |
+|---|---|---|---|
+| BG01 DCL 设定车型采集预算 | dcl | PASS |  |
+| BG02 合并时的资源保护检查 | steering；steering_tester；integrator；dcl | PASS |  |
+| BG03 高优先级的核心采集 | business；brake_tester；车辆模拟器 | PASS |  |
+| BG04 超出上传预算时排队，高优先级先走 | 车辆模拟器 | PASS |  |
+| BG05 触发洪峰被抑制 | 车辆模拟器；dcl | PASS |  |
+| BG06 紧急暂停与恢复采集 | release；dcl；车辆模拟器 | PASS |  |
+| BG07 测试车的单独预算 | dcl；车辆模拟器 | PASS |  |
+| N01 预算与停采的越权 | business；brake_tester；resource；integrator；workspace_manager | PASS |  |
 
 ## 反向用例 T-N01–T-N24
 

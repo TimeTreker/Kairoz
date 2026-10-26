@@ -8,8 +8,10 @@ import { WorkspaceGroups } from '../components/workspace-groups.tsx';
 import { navigate } from '../app/router.ts';
 import { useEngineState } from '../app/store.ts';
 import { LabelTag, Mono, RoleTag, StageTag } from '../components/common.tsx';
+import { HoldTag } from '../components/budget.tsx';
 import { PatchedTag } from '../components/patch.tsx';
 import { authorize } from '../domain/authz.ts';
+import { usageOf } from '../engine/budget.ts';
 import { mainlineRelease, visibleFeatures } from '../engine/config.ts';
 import { intakeQueue } from '../engine/intake.ts';
 import { isConfirmed, isMergeWorkspace, verifiedSources } from '../engine/integration.ts';
@@ -402,6 +404,11 @@ export function WorkbenchPage() {
   if (actor.grants.some((g) => g.role === 'DCL_ENGINEER')) {
     const q = intakeQueue(state, actor);
     const confirmations = Object.values(state.mergePlans).filter((p) => p.status === 'READY' && !isConfirmed(state, p));
+    // Resource protection: vehicles that dropped or suppressed captures this hour, and paused ones.
+    const overBudget = Object.values(state.resources)
+      .map((r) => ({ id: r.id, u: usageOf(state, r.id) }))
+      .filter((x) => x.u.dropped + x.u.suppressed + x.u.held > 0);
+    const paused = Object.values(state.collectionHolds).filter((h) => h.state !== 'ACTIVE');
     cards.push(
       <Card key="dcl" title={<RoleTag role="DCL_ENGINEER" />} extra={<Button size="small" onClick={() => navigate('intake')}>{L('打开接入队列', 'Open intake')}</Button>}>
         <Row gutter={16}>
@@ -414,6 +421,24 @@ export function WorkbenchPage() {
             {L('去配置集成确认处理集合', 'Confirm processing sets in Integration')}
           </Button>
         )}
+        {overBudget.map(({ id, u }) => (
+          <Row2 key={id} onClick={() => navigate('processing/budget')}>
+            <Space>
+              <Mono>{id}</Mono>
+              <Typography.Text type="warning">{L('近一小时采集超出预算', 'Over its collection budget this hour')}</Typography.Text>
+            </Space>
+            <Typography.Text type="secondary">{L(`排队 ${u.held} · 未保留 ${u.dropped} · 抑制 ${u.suppressed}`, `${u.held} waiting · ${u.dropped} dropped · ${u.suppressed} suppressed`)}</Typography.Text>
+          </Row2>
+        ))}
+        {paused.map((h) => (
+          <Row2 key={h.resourceId} onClick={() => navigate('processing/budget')}>
+            <Space>
+              <Mono>{h.resourceId}</Mono>
+              <HoldTag resourceId={h.resourceId} />
+            </Space>
+            <Typography.Text type="secondary">{h.history.at(-1)!.reason}</Typography.Text>
+          </Row2>
+        ))}
       </Card>,
     );
   }

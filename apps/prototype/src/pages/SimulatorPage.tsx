@@ -8,17 +8,19 @@ import { engine, useEngineState } from '../app/store.ts';
 import { EnvTag, LabelTag, Mono, PageHeader, configName, when } from '../components/common.tsx';
 import { CompanyDirectoryCard } from '../components/company-directory.tsx';
 import type { Ctx } from '../engine/engine.ts';
-import { advanceEvent, assessEvent, capturablePolicies, captureEvent, deliverCallback, receiveChunk, setFailParse } from '../engine/events.ts';
+import { advanceEvent, assessEvent, capturablePolicies, captureEvent, carriesData, deliverCallback, receiveChunk, setFailParse } from '../engine/events.ts';
 import { personalCapturablePolicies, trialCapture } from '../engine/personal-sim.ts';
 import { completeBuild } from '../engine/sim-software.ts';
 import type { DeviceFault, Quality, TrainingUse } from '../engine/types.ts';
-import { advanceClock, applyNow, completeImageChange, completeVehicleSoftware, deviceSummary, flushOutbox, heldReceipt, pendingForVehicles, reportNow, resendReceipts, restartClient, sendFault, sendReceipt, setAgent, simulateSoftwareOta, tick, upgradeClient } from '../engine/simulator.ts';
-import { DAY_MS, todayOf } from '../engine/clock.ts';
+import { advanceClock, advanceClockHours, applyNow, completeImageChange, completeVehicleSoftware, deviceSummary, flushOutbox, heldReceipt, pendingForVehicles, reportNow, resendReceipts, restartClient, sendFault, sendReceipt, setAgent, simulateSoftwareOta, tick, upgradeClient } from '../engine/simulator.ts';
+import { DAY_MS, nowOf } from '../engine/clock.ts';
+import { HoldTag, UsageMeter } from '../components/budget.tsx';
+import { confirmHold, pendingHolds } from '../engine/collection-hold.ts';
 import { pendingSoftwareRequests } from '../engine/vehicle-software.ts';
 import { DeliveryTag } from '../components/testing.tsx';
 import type { ReportFault } from '../engine/simulator.ts';
 import { useI18n } from '../i18n/i18n.tsx';
-import { DEVICE_FAULT_LABELS, ERROR_LABELS, EVENT_STATUS_COLORS, IMAGE_CHANGE_KIND_LABELS, EVENT_STATUS_LABELS, QUALITY_LABELS, REPORT_RESULT_LABELS, RESOURCE_TYPE_LABELS, TRAINING_USE_LABELS } from '../i18n/vocab.ts';
+import { BUDGET_NOTE_LABELS, DEVICE_FAULT_LABELS, ERROR_LABELS, EVENT_STATUS_COLORS, HOLD_STATE_LABELS, IMAGE_CHANGE_KIND_LABELS, EVENT_STATUS_LABELS, QUALITY_LABELS, REPORT_RESULT_LABELS, RESOURCE_TYPE_LABELS, TRAINING_USE_LABELS } from '../i18n/vocab.ts';
 
 let autoTimer: ReturnType<typeof setInterval> | undefined;
 
@@ -73,23 +75,28 @@ function VehicleOtaCard({ system }: { system: <R>(op: (c: Ctx) => R, ok?: string
 function ClockCard({ system }: { system: <R>(op: (c: Ctx) => R, ok?: string) => R | undefined }) {
   const state = useEngineState();
   const { L } = useI18n();
-  const days = Math.round(state.clockOffsetMs / DAY_MS);
+  const hours = Math.round(state.clockOffsetMs / 3_600_000);
+  const days = Math.floor(hours / 24);
+  const ahead = days > 0 ? (hours % 24 ? L(`${days} 天 ${hours % 24} 小时`, `${days} days ${hours % 24} h`) : L(`${days} 天`, `${days} days`)) : L(`${hours} 小时`, `${hours} h`);
   return (
     <Card size="small" title={L('模拟时间', 'Simulated time')}>
       <Space wrap>
         <Typography.Text>
-          {L('平台日期', 'Platform date')}
+          {L('平台时间', 'Platform time')}
           {L('：', ': ')}
-          <Mono>{todayOf(state)}</Mono>
-          {days > 0 && <Tag style={{ marginLeft: 8 }}>{L(`比真实时间快 ${days} 天`, `${days} days ahead of real time`)}</Tag>}
+          <Mono>{when(nowOf(state))}</Mono>
+          {hours > 0 && <Tag style={{ marginLeft: 8 }}>{L(`比真实时间快 ${ahead}`, `${ahead} ahead of real time`)}</Tag>}
         </Typography.Text>
+        <Button size="small" onClick={() => system((c) => advanceClockHours(c, 1), L('时间已推进 1 小时', 'Moved forward 1 hour'))}>
+          {L('推进 1 小时', '+1 hour')}
+        </Button>
         <Button size="small" onClick={() => system((c) => advanceClock(c, 1), L('时间已推进 1 天', 'Moved forward 1 day'))}>
           {L('推进 1 天', '+1 day')}
         </Button>
         <Button size="small" onClick={() => system((c) => advanceClock(c, 7), L('时间已推进 7 天', 'Moved forward 7 days'))}>
           {L('推进 7 天', '+7 days')}
         </Button>
-        <Typography.Text type="secondary">{L('只能向前推进；借用到期等按平台日期判断。', 'Forward only; loans run out by the platform date.')}</Typography.Text>
+        <Typography.Text type="secondary">{L('只能向前推进；借用到期按平台日期、采集预算按平台时间的滚动一小时判断。', 'Forward only; loans run out by the platform date, collection budgets count a rolling hour of platform time.')}</Typography.Text>
       </Space>
     </Card>
   );
@@ -213,6 +220,24 @@ export function SimulatorPage() {
   const events = Object.values(state.events)
     .sort((a, b) => b.seq - a.seq)
     .slice(0, 15);
+  // What the vehicle's budget guard did with each capture.
+  const outcome = (ids: string[]) => {
+    const all = ids.map((id) => engine.getState().events[id]!);
+    const counts = new Map<string, number>();
+    for (const e of all) counts.set(e.status, (counts.get(e.status) ?? 0) + 1);
+    const text = [...counts].map(([status, n]) => `${B(EVENT_STATUS_LABELS[status]!)} ${n}`).join(L('，', ', '));
+    const note = all.length === 1 && all[0]!.budgetNote ? ` · ${B(BUDGET_NOTE_LABELS[all[0]!.budgetNote]!)}` : '';
+    if (all.every((e) => e.status === 'UPLOADING') && !note) message.success(all.length === 1 ? L('事件已触发，开始上传', 'Event fired; uploading') : text);
+    else message.warning(`${text}${note}`);
+  };
+  const fire = () => {
+    const id = system((c) => captureEvent(c, { resourceId: vehicle!, policyId: policy!, failParse }));
+    if (id) outcome([id]);
+  };
+  const burst = () => {
+    const ids = system((c) => Array.from({ length: 10 }, () => captureEvent(c, { resourceId: vehicle!, policyId: policy!, failParse })));
+    if (ids) outcome(ids);
+  };
 
   return (
     <div className="kz-page">
@@ -472,12 +497,39 @@ export function SimulatorPage() {
                 <Checkbox checked={failParse} onChange={(e) => setFailParseNext(e.target.checked)}>
                   {L('云端解析将失败', 'Cloud parsing will fail')}
                 </Checkbox>
-                <Button type="primary" disabled={!vehicle || !policy} onClick={() => system((c) => captureEvent(c, { resourceId: vehicle!, policyId: policy!, failParse }), L('事件已触发，开始上传', 'Event fired; uploading'))}>
+                <Button type="primary" disabled={!vehicle || !policy} onClick={fire}>
                   {L('触发事件', 'Fire event')}
                 </Button>
+                <Tooltip title={L('同一策略连续触发 10 次，演示洪峰抑制与预算排队', 'Fire the policy 10 times in a row: flood suppression and budget queuing')}>
+                  <Button disabled={!vehicle || !policy} onClick={burst}>
+                    {L('模拟洪峰（连发 10 次）', 'Flood (10 in a row)')}
+                  </Button>
+                </Tooltip>
               </>
             )}
           </Space>
+          {vehicle && !personal && (
+            <Space wrap style={{ marginBottom: 12 }}>
+              <Typography.Text type="secondary">{L(`${vehicle} 近一小时：`, `${vehicle}, last hour: `)}</Typography.Text>
+              <UsageMeter resourceId={vehicle} />
+              <HoldTag resourceId={vehicle} />
+            </Space>
+          )}
+          {pendingHolds(state).map((h) => (
+            <Alert
+              key={h.resourceId}
+              type="warning"
+              showIcon
+              style={{ marginBottom: 8 }}
+              title={`${h.resourceId} · ${B(HOLD_STATE_LABELS[h.state]!)} · ${h.history.at(-1)!.reason}`}
+              description={L('车辆在线时“执行一步”会自动确认；也可以在这里扮演车辆确认。', 'A step confirms it while the vehicle is online; or play the vehicle here.')}
+              action={
+                <Button size="small" onClick={() => system((c) => confirmHold(c, h.resourceId), h.state === 'PAUSING' ? L('车辆已确认暂停，车上未上传的采集已丢弃', 'The vehicle confirmed the pause; captures still on it were dropped') : L('车辆已确认恢复', 'The vehicle confirmed the resume'))}>
+                  {L('车辆确认', 'Vehicle confirms')}
+                </Button>
+              }
+            />
+          ))}
           <Table
             rowKey="id"
             size="small"
@@ -492,13 +544,25 @@ export function SimulatorPage() {
               { title: L('时间', 'When'), render: (_, e) => when(e.occurredAt) },
               { title: L('处理', 'Processing'), render: (_, e) => <LabelTag map={EVENT_STATUS_LABELS} value={e.status} color={EVENT_STATUS_COLORS[e.status]} /> },
               {
+                title: L('预算', 'Budget'),
+                render: (_, e) => (
+                  <Space size={4} wrap>
+                    <Tag color={e.priority === 'HIGH' ? 'magenta' : undefined}>{e.priority}</Tag>
+                    {e.cost && <Typography.Text type="secondary">{`${e.cost.networkMb} MB`}</Typography.Text>}
+                    {e.budgetNote && <Typography.Text type={e.budgetNote === 'OVER_BUDGET_HIGH' ? 'warning' : 'danger'}>{B(BUDGET_NOTE_LABELS[e.budgetNote]!)}</Typography.Text>}
+                  </Space>
+                ),
+              },
+              {
                 title: L('解析将失败', 'Parse fails'),
                 render: (_, e) => (e.status === 'UPLOADING' || e.status === 'PROCESSING' ? <Switch size="small" checked={e.failParse} onChange={(v) => system((c) => setFailParse(c, e.id, v))} /> : '—'),
               },
               {
                 title: '',
                 render: (_, e) => {
-                  const f = e.files[0];
+                  // Chunks travel only once the vehicle uploads the capture.
+                  const uploading = e.status !== 'HELD' && carriesData(e);
+                  const f = uploading ? e.files[0] : undefined;
                   const chunk = f?.chunks[0];
                   return (
                     <Space size={0} wrap>
@@ -528,27 +592,33 @@ export function SimulatorPage() {
               },
               {
                 title: L('质量检查（外部）', 'Quality check (external)'),
-                render: (_, e) => (
-                  <Select
-                    size="small"
-                    style={{ width: 96 }}
-                    value={e.quality}
-                    onChange={(v: Quality) => system((c) => assessEvent(c, e.id, { quality: v }))}
-                    options={['A', 'B', 'C', 'UNKNOWN'].map((q) => ({ value: q, label: B(QUALITY_LABELS[q]) }))}
-                  />
-                ),
+                render: (_, e) =>
+                  !carriesData(e) ? (
+                    '—'
+                  ) : (
+                    <Select
+                      size="small"
+                      style={{ width: 96 }}
+                      value={e.quality}
+                      onChange={(v: Quality) => system((c) => assessEvent(c, e.id, { quality: v }))}
+                      options={['A', 'B', 'C', 'UNKNOWN'].map((q) => ({ value: q, label: B(QUALITY_LABELS[q]) }))}
+                    />
+                  ),
               },
               {
                 title: L('用途授权（外部）', 'Use authorization (external)'),
-                render: (_, e) => (
-                  <Select
-                    size="small"
-                    style={{ width: 128 }}
-                    value={e.trainingUse}
-                    onChange={(v: TrainingUse) => system((c) => assessEvent(c, e.id, { trainingUse: v }))}
-                    options={['ALLOWED', 'DENIED', 'UNCONFIRMED'].map((u) => ({ value: u, label: B(TRAINING_USE_LABELS[u]) }))}
-                  />
-                ),
+                render: (_, e) =>
+                  !carriesData(e) ? (
+                    '—'
+                  ) : (
+                    <Select
+                      size="small"
+                      style={{ width: 128 }}
+                      value={e.trainingUse}
+                      onChange={(v: TrainingUse) => system((c) => assessEvent(c, e.id, { trainingUse: v }))}
+                      options={['ALLOWED', 'DENIED', 'UNCONFIRMED'].map((u) => ({ value: u, label: B(TRAINING_USE_LABELS[u]) }))}
+                    />
+                  ),
               },
             ]}
           />

@@ -1,8 +1,8 @@
 {
-  "runAt": "2026-10-26T12:19:18.317Z",
+  "runAt": "2026-10-26T12:48:25.423Z",
   "layer": "engine",
   "counts": {
-    "PASS": 183,
+    "PASS": 191,
     "FAIL": 0,
     "GAP": 0,
     "BLOCKED": 0,
@@ -1551,6 +1551,84 @@
           "id": "N01",
           "title": "补丁的权限与“不合入主线”",
           "actor": "integration_tester；steering；integrator",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        }
+      ]
+    },
+    {
+      "script": "budget",
+      "name": "资源预算与紧急停采 · 资源保护",
+      "rows": [
+        {
+          "id": "BG01",
+          "title": "DCL 设定车型采集预算",
+          "actor": "dcl",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "BG02",
+          "title": "合并时的资源保护检查",
+          "actor": "steering；steering_tester；integrator；dcl",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "BG03",
+          "title": "高优先级的核心采集",
+          "actor": "business；brake_tester；车辆模拟器",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "BG04",
+          "title": "超出上传预算时排队，高优先级先走",
+          "actor": "车辆模拟器",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "BG05",
+          "title": "触发洪峰被抑制",
+          "actor": "车辆模拟器；dcl",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "BG06",
+          "title": "紧急暂停与恢复采集",
+          "actor": "release；dcl；车辆模拟器",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "BG07",
+          "title": "测试车的单独预算",
+          "actor": "dcl；车辆模拟器",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "N01",
+          "title": "预算与停采的越权",
+          "actor": "business；brake_tester；resource；integrator；workspace_manager",
           "adaptation": null,
           "status": "PASS",
           "detail": null,

@@ -52,6 +52,8 @@ export const NOTIFICATION_CATEGORY: Record<NotificationKind, string> = {
   VEHICLE_ENV_CHANGED: 'VEHICLE',
   GRANT_REVIEW: 'ORG',
   ORPHANED_UNIT: 'ORG',
+  BUDGET_DROPS: 'VEHICLE',
+  COLLECTION_PAUSED: 'VEHICLE',
 };
 
 export function useCategoryLabels(): Record<string, string> {
@@ -185,6 +187,20 @@ export function useNotificationText() {
         return { title: L(`${s} 调岗后待复核授权`, `Grants of ${s} to review after a move`), body: d };
       case 'ORPHANED_UNIT':
         return { title: L(`${s} 的组织节点已失效`, `The org unit of ${s} is gone`), body: L('请重新挂靠。', 'Re-attach it.') };
+      case 'BUDGET_DROPS': {
+        const [dropped, suppressed] = d.split('/');
+        return {
+          title: L(`${s} 的采集超出预算`, `${s} ran over its collection budget`),
+          body: L(`近一小时未保留 ${dropped} 次、洪峰抑制 ${suppressed} 次；检查车型预算或策略窗口。`, `In the last hour ${dropped} capture(s) dropped and ${suppressed} suppressed as a flood; check the model budget or the policy windows.`),
+        };
+      }
+      case 'COLLECTION_PAUSED': {
+        const [code, ...reason] = d.split(' · ');
+        return {
+          title: code === 'PAUSING' ? L(`${s} 的采集正在暂停`, `Collection on ${s} is being paused`) : code === 'RESUMING' ? L(`${s} 的采集正在恢复`, `Collection on ${s} is resuming`) : L(`${s} 的采集已紧急暂停`, `Collection on ${s} is paused`),
+          body: reason.join(' · '),
+        };
+      }
     }
   };
 }

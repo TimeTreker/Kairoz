@@ -14,6 +14,7 @@ import { parseTrigger } from '../domain/trigger.ts';
 import { WILDCARD } from '../domain/vocabulary.ts';
 import type { Domain, Scope } from '../domain/vocabulary.ts';
 import { reviewItems } from './approvals.ts';
+import { resourceBlockers } from './budget.ts';
 import type { ReviewItem } from './approvals.ts';
 import { addFeedback, baseConfig, fileSpecVersion, getFeature, headChangesRequested, mainlineRelease, manifestVersion, policyVersion, reviewRequiredBefore } from './config.ts';
 
@@ -382,6 +383,9 @@ export function confirmProcessing(ctx: Ctx, planId: string, input: { note: strin
   if (unreviewed.length) {
     throw rule('UNAPPROVED_SENSITIVE_FILES', 'sensitive files in the set lack an approval', { issues: unreviewed.map((l) => `${ctx.s.groups[l.groupId]?.code}: ${l.name}`) });
   }
+  // Resource protection (资源保护): a capture that exceeds the model's budget on its own could never be collected.
+  const overBudget = resourceBlockers(ctx.s, plan);
+  if (overBudget.length) throw rule('RESOURCE_BUDGET', 'a policy’s single capture exceeds the vehicle model’s collection budget', { issues: overBudget });
   if (isConfirmed(ctx.s, plan)) throw conflict('ALREADY_CONFIRMED', 'this preview is already confirmed');
   ctx.s.processingConfirmations.push({ id: newId('pc'), mergePlanId: plan.id, digest: plan.digest, note: input.note.trim(), confirmedBy: ctx.user().username, createdAt: ctx.now });
 }

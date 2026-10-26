@@ -10,6 +10,8 @@ import { acceptClientReport, checkClientReport, configurationContents } from './
 import { DAY_MS, nowOf } from './clock.ts';
 import type { Ctx } from './engine.ts';
 import type { AgentState, DeviceState, Resource, State, UnsentReceipt } from './types.ts';
+import { releaseHeld } from './budget.ts';
+import { confirmHold, isCollectionPaused } from './collection-hold.ts';
 import { syncIfChanged } from './company-directory.ts';
 import { pushPending } from './delivery.ts';
 import { advanceEvent } from './events.ts';
@@ -160,6 +162,18 @@ export function tick(ctx: Ctx): number {
     if (holdsReceipt(ctx.s, r.id, deployment.id, target.attempt)) continue;
     applyOnVehicle(ctx, deployment.id, r);
     answered += 1;
+  }
+  // A connected agent confirms a pending pause or resume, then uploads what its budget allows.
+  for (const h of Object.values(ctx.s.collectionHolds)) {
+    const r = ctx.s.resources[h.resourceId];
+    if (r && r.agent.online && clientRunning(r) && (h.state === 'PAUSING' || h.state === 'RESUMING')) {
+      confirmHold(ctx, r.id);
+      answered += 1;
+    }
+  }
+  for (const r of Object.values(ctx.s.resources)) {
+    if (!r.agent.online || !clientRunning(r) || isCollectionPaused(ctx.s, r.id)) continue;
+    if (Object.values(ctx.s.events).some((e) => e.resourceId === r.id && e.status === 'HELD')) answered += releaseHeld(ctx, r.id);
   }
   for (const e of Object.values(ctx.s.events)) {
     if (e.status !== 'UPLOADING' && e.status !== 'PROCESSING') continue;
@@ -379,6 +393,13 @@ export function completeVehicleSoftware(ctx: Ctx, requestId: string, result: 'AP
 export function advanceClock(ctx: Ctx, days: number): string {
   if (!Number.isInteger(days) || days < 1 || days > 30) throw rule('INVALID_CLOCK_STEP', 'move the clock forward 1 to 30 days');
   ctx.s.clockOffsetMs += days * DAY_MS;
+  return nowOf(ctx.s);
+}
+
+/** Moves the platform clock forward by hours, e.g. into a vehicle's next budget hour. */
+export function advanceClockHours(ctx: Ctx, hours: number): string {
+  if (!Number.isInteger(hours) || hours < 1 || hours > 24) throw rule('INVALID_CLOCK_STEP', 'move the clock forward 1 to 24 hours');
+  ctx.s.clockOffsetMs += hours * 3_600_000;
   return nowOf(ctx.s);
 }
 

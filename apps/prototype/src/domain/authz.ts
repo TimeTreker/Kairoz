@@ -108,6 +108,11 @@ export const ACTIONS = {
     excludeDispatchOnly: true,
   },
   'event.reprocess': { roles: ['DCL_ENGINEER'], env: 'target' },
+  // Resource protection (资源保护)
+  /** A vehicle model's collection budget, and per-vehicle overrides: DCL engineering, for every environment. */
+  'budget.manage': { roles: ['DCL_ENGINEER'], env: 'all' },
+  /** Pausing and resuming one vehicle's collection at once (紧急停采): DCL engineering or release, in the vehicle's environment. */
+  'collection.pause': { roles: ['DCL_ENGINEER', 'CONFIG_RELEASE'], env: 'target' },
 } as const satisfies Record<string, ActionSpec>;
 
 export type Action = keyof typeof ACTIONS;

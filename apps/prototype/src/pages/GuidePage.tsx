@@ -238,6 +238,19 @@ export const SCENARIOS: Scenario[] = [
     ],
   },
   {
+    key: 'budget',
+    titleZh: '资源预算与紧急停采',
+    titleEn: 'Collection budgets and emergency pauses',
+    steps: [
+      { account: 'dcl', page: 'processing/budget', zh: '在“资源预算”把 X89 的上传设为 5 MB/小时、单策略触发上限设为 3 次/小时', en: 'Under Collection budgets set X89’s upload to 5 MB per hour and the per-policy trigger limit to 3', expectZh: '车端代理按滚动一小时核算；高优先级采集超预算仍采集', expectEn: 'The vehicle agent counts a rolling hour; HIGH-priority captures are collected even over budget' },
+      { account: 'dcl', page: 'simulator', zh: '在车辆模拟器对 VEH-201 触发 chassis.steering.angle_jump 两次', en: 'In the simulator fire chassis.steering.angle_jump on VEH-201 twice', expectZh: '第一次上传（3 MB），第二次“预算排队”', expectEn: 'The first uploads (3 MB), the second waits for budget' },
+      { account: 'dcl', page: 'simulator', zh: '“模拟洪峰（连发 10 次）”', en: 'Flood (10 in a row)', expectZh: '超过每小时 3 次的触发被“洪峰抑制”，不进入数据查询', expectEn: 'Triggers past 3 an hour are suppressed and never reach the data query' },
+      { account: 'dcl', page: 'simulator', zh: '在“模拟时间”推进 1 小时，再执行一步', en: 'Move the clock forward 1 hour, then step', expectZh: '排队的采集在新一小时的预算内上传', expectEn: 'The waiting capture uploads within the new hour’s budget' },
+      { account: 'release', workspace: 'x89-project', page: 'fleet', zh: '对 VEH-201“暂停采集”，原因“上传链路拥塞”', en: 'Pause collection on VEH-201: upload link congested', expectZh: '立即拒绝新的触发；车辆确认后车上未上传的采集被丢弃', expectEn: 'New triggers are refused at once; once the vehicle confirms, captures still on it are dropped' },
+      { account: 'dcl', workspace: 'x89-project', page: 'integration', zh: '把 X89 车端缓存设为 3.5 MB 后查看合并预览的“资源保护”', en: 'Set the X89 buffer to 3.5 MB, then look at a merge preview’s Resource protection', expectZh: '单次 4 MB 的策略“单次就超出预算”，确认处理集合被禁用', expectEn: 'A 4 MB policy never fits and Confirm processing set is disabled' },
+    ],
+  },
+  {
     key: 'directory',
     titleZh: '公司目录与组织授权',
     titleEn: 'Company directory and org grants',

@@ -2,15 +2,16 @@
 // persisted in the browser; there is no server.
 
 import type { Grant } from '../domain/authz.ts';
+import type { Budget, CaptureCost } from '../domain/budget.ts';
 import type { ClientReportPayload, SignedReport } from '../domain/client-report.ts';
 import type { SoftwareManifest } from '../domain/compatibility.ts';
-import type { FileSpecContent, GroupConfig, PolicyContent } from '../domain/config.ts';
+import type { FileSpecContent, GroupConfig, PolicyContent, Priority } from '../domain/config.ts';
 import type { DataSource } from '../domain/data-source.ts';
 import type { FileType, Privacy } from '../domain/file-types.ts';
 import type { ReviewControls } from '../domain/intake.ts';
 import type { Domain, Env, GroupPurpose, Role, Scope, WorkspaceKind } from '../domain/vocabulary.ts';
 
-export const STATE_SCHEMA = 16;
+export const STATE_SCHEMA = 17;
 
 export interface Account {
   username: string;
@@ -844,7 +845,25 @@ export interface Candidate {
 // Collection events (采集事件) and data use
 // ---------------------------------------------------------------------------
 
-export type EventStatus = 'UPLOADING' | 'PROCESSING' | 'DONE' | 'FAILED';
+/**
+ * HELD waits on the vehicle for upload budget; DROPPED was not kept (budget or an emergency hold);
+ * SUPPRESSED was a trigger past the flood limit. The last two never carry data to the platform.
+ */
+export type EventStatus = 'HELD' | 'UPLOADING' | 'PROCESSING' | 'DONE' | 'FAILED' | 'DROPPED' | 'SUPPRESSED';
+
+/**
+ * Why the vehicle's budget guard acted on a capture: over the hourly CPU or storage budget, the
+ * buffer full, evicted for a HIGH capture, a trigger flood, an emergency hold, or a HIGH capture
+ * collected over budget.
+ */
+export type BudgetNote = 'CPU' | 'IO' | 'MEMORY' | 'EVICTED' | 'FLOOD' | 'EMERGENCY_HOLD' | 'OVER_BUDGET_HIGH';
+
+/** A vehicle's collection pause: asked (PAUSING), confirmed by the vehicle (PAUSED), being lifted (RESUMING), or lifted (ACTIVE). */
+export interface CollectionHold {
+  resourceId: string;
+  state: 'PAUSING' | 'PAUSED' | 'RESUMING' | 'ACTIVE';
+  history: { action: 'PAUSE' | 'RESUME'; reason: string; by: string; at: string; confirmedAt: string | null }[];
+}
 export type Quality = 'A' | 'B' | 'C' | 'UNKNOWN';
 export type TrainingUse = 'ALLOWED' | 'DENIED' | 'UNCONFIRMED';
 
@@ -899,6 +918,14 @@ export interface CollectionEvent {
   files: EventFile[];
   status: EventStatus;
   failure: string | null;
+  /** The policy's priority when it fired: HIGH captures are collected even over budget. */
+  priority: Priority;
+  /** What the capture costs the vehicle; null for events recorded before budgets existed. */
+  cost: CaptureCost | null;
+  /** When the vehicle stored the capture, and when its upload started; null if it never did. */
+  writtenAt: string | null;
+  uploadAt: string | null;
+  budgetNote: BudgetNote | null;
   /** Simulator switch: cloud parsing of this event fails (until reprocessed). */
   failParse: boolean;
   processingAttempts: number;
@@ -1254,6 +1281,10 @@ export interface State {
   clockOffsetMs: number;
   environmentChanges: EnvironmentChange[];
   lifecycleEvents: LifecycleEvent[];
+  /** Collection budgets (采集预算): one per vehicle model, set by DCL engineering, and per-vehicle overrides. */
+  collectionBudgets: { models: Record<string, Budget>; vehicles: Record<string, Budget> };
+  /** Collection pauses (紧急停采) by vehicle, with their history. */
+  collectionHolds: Record<string, CollectionHold>;
   audit: AuditEvent[];
 }
 
@@ -1319,6 +1350,8 @@ export function emptyState(): State {
     clockOffsetMs: 0,
     environmentChanges: [],
     lifecycleEvents: [],
+    collectionBudgets: { models: {}, vehicles: {} },
+    collectionHolds: {},
     audit: [],
   };
 }

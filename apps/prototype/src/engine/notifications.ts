@@ -6,10 +6,12 @@
 import { authorize } from '../domain/authz.ts';
 import type { Role } from '../domain/vocabulary.ts';
 import { blockedProductionVehicles } from './applicability.ts';
+import { usageOf } from './budget.ts';
 import { DAY_MS, nowOf } from './clock.ts';
 import { mismatchesFor } from './delivery.ts';
 import type { Actor, Ctx } from './engine.ts';
 import { emergencyStopsOf } from './emergency.ts';
+import { carriesData } from './events.ts';
 import { isOverdue, workspaceVehicles } from './fleet.ts';
 import { workspaceAccess } from './identity.ts';
 import { intakeQueue } from './intake.ts';
@@ -56,7 +58,9 @@ export type NotificationKind =
   | 'LOAN_RECALLED'
   | 'VEHICLE_ENV_CHANGED'
   | 'GRANT_REVIEW'
-  | 'ORPHANED_UNIT';
+  | 'ORPHANED_UNIT'
+  | 'BUDGET_DROPS'
+  | 'COLLECTION_PAUSED';
 
 export interface Notification {
   /** Role, kind, object and state: stable while nothing changes, new when the state does. */
@@ -218,6 +222,25 @@ export function notificationsFor(s: State, actor: Actor, workspaceId: string): N
     }
     for (const x of emergencyStopsOf(s, ws.vehicleModelId).filter((x) => x.requestedBy === actor.username && x.status !== 'REQUESTED' && fresh(x.decidedAt))) {
       add('DCL_ENGINEER', 'EMERGENCY_STOP', [x.id, x.status], { severity: 'INFO', subject: x.policyId, detail: x.status, link: 'release', at: x.decidedAt });
+    }
+  }
+  // Resource protection: captures a vehicle of the workspace dropped or suppressed this hour.
+  if (has('DCL_ENGINEER')) {
+    for (const r of workspaceVehicles(s, workspaceId)) {
+      const u = usageOf(s, r.id);
+      if (u.dropped + u.suppressed === 0) continue;
+      const last = Object.values(s.events).filter((e) => e.resourceId === r.id && !carriesData(e)).sort((a, b) => b.seq - a.seq)[0];
+      add('DCL_ENGINEER', 'BUDGET_DROPS', [r.id, last?.id ?? null], { severity: 'WARNING', subject: r.id, detail: `${u.dropped}/${u.suppressed}`, link: 'processing/budget', at: last?.occurredAt ?? null });
+    }
+  }
+  // A vehicle the workspace works with had its collection paused (紧急停采).
+  const holdRole = (['BUSINESS_DEV', 'BUSINESS_TEST', 'WORKSPACE_ADMIN', 'CONFIG_RELEASE'] as const).find(has);
+  if (holdRole) {
+    for (const r of workspaceVehicles(s, workspaceId)) {
+      const h = s.collectionHolds[r.id];
+      if (!h || h.state === 'ACTIVE') continue;
+      const last = h.history.at(-1)!;
+      add(holdRole, 'COLLECTION_PAUSED', [r.id, h.history.length, h.state], { severity: 'WARNING', subject: r.id, detail: `${h.state} · ${last.reason}`, link: 'fleet/workspace', at: last.at });
     }
   }
   if (has('CONFIG_INTEGRATOR') && isMergeWorkspace(s, workspaceId)) {
