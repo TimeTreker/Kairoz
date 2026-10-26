@@ -1,8 +1,8 @@
 {
-  "runAt": "2026-10-26T01:34:47.585Z",
+  "runAt": "2026-10-26T12:19:18.317Z",
   "layer": "engine",
   "counts": {
-    "PASS": 175,
+    "PASS": 183,
     "FAIL": 0,
     "GAP": 0,
     "BLOCKED": 0,
@@ -1473,6 +1473,84 @@
           "id": "N01",
           "title": "回执不能改写或重复确认",
           "actor": "车辆模拟器",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        }
+      ]
+    },
+    {
+      "script": "patch",
+      "name": "同软件版本配置补丁 · 主线与补丁",
+      "rows": [
+        {
+          "id": "PT01",
+          "title": "主线前进到 1.1.0，软件 1.0 仍用 1.0.0",
+          "actor": "integrator；integration_tester；release；resource",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "PT02",
+          "title": "团队在 1.0.0 上开修复 Feature",
+          "actor": "steering；steering_tester",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "PT03",
+          "title": "补丁模式：合并到 1.0.0 而不是主线",
+          "actor": "integrator；dcl",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "PT04",
+          "title": "补丁在它要服务的软件上集成测试",
+          "actor": "integration_tester",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "PT05",
+          "title": "发布补丁 1.0.1：只服务软件 1.0，主线不变",
+          "actor": "release",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "PT06",
+          "title": "修复合入主线",
+          "actor": "integrator；dcl；integration_tester；release",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "PT07",
+          "title": "补丁线的门禁：目标被替换后不能发布",
+          "actor": "steering；steering_tester；integrator；dcl；integration_tester；release",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "N01",
+          "title": "补丁的权限与“不合入主线”",
+          "actor": "integration_tester；steering；integrator",
           "adaptation": null,
           "status": "PASS",
           "detail": null,

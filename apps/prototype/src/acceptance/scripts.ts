@@ -3141,6 +3141,174 @@ export const SCRIPTS: Script[] = [
         "fail": "拒绝不改变任何状态。"
       }
     ]
+  },
+  {
+    "id": "patch",
+    "name": "同软件版本配置补丁 · 主线与补丁",
+    "start": "demo",
+    "scenes": [
+      {
+        "id": "PT01",
+        "title": "主线前进到 1.1.0，软件 1.0 仍用 1.0.0",
+        "actor": "integrator；integration_tester；release；resource",
+        "accounts": [
+          "integrator",
+          "integration_tester",
+          "release",
+          "resource"
+        ],
+        "workspace": "x89-project",
+        "page": "配置集成；发布与配置 OTA",
+        "pre": "演示数据。集成测试工作区准备运行 1.1 的仿真（镜像 x89-1.1-sim）与实车（车辆资源确认 1.1）。",
+        "steps": [
+          "integrator 把 steering_return_rate 合并到主线（目标策略集 1.0.0 · 主线），DCL 确认后冻结 X89-C2。",
+          "integration_tester 在两辆 1.1 车辆上先仿真后实车登记 PASS，确认验证；release 发布 1.1.0，只适用 1.1。",
+          "车辆资源确认量产车 VEH-202 已刷写 1.1。"
+        ],
+        "done": "主线策略集为 1.1.0；软件 1.0 仍解析到 1.0.0，1.0.0 成为可以打补丁的目标；VEH-202 解析到 1.1.0。",
+        "fail": "1.1.0 不适用 1.0，软件 1.0 的车辆不会收到主线的新策略。"
+      },
+      {
+        "id": "PT02",
+        "title": "团队在 1.0.0 上开修复 Feature",
+        "actor": "steering；steering_tester",
+        "accounts": [
+          "steering",
+          "steering_tester"
+        ],
+        "workspace": "team-steering",
+        "page": "研发 Feature → 创建 Feature",
+        "pre": "PT01 完成。",
+        "steps": [
+          "steering 创建 Feature angle_jump_fix，基线选“策略集 1.0.0 · 软件 1.0 在用”（默认是主线 1.1.0）。",
+          "把转角突变的阈值从 300 改为 350，提交；没有新文件，直接 DCL Ready。",
+          "steering_tester 下发到转向研发车组（软件 1.0，基线 1.0.0），先仿真后实车登记 PASS，确认 Verified。"
+        ],
+        "done": "修复从 1.0.0 开始，草稿里没有主线的回正策略。",
+        "fail": "基线由团队明确选择，平台不会自动改基线。"
+      },
+      {
+        "id": "PT03",
+        "title": "补丁模式：合并到 1.0.0 而不是主线",
+        "actor": "integrator；dcl",
+        "accounts": [
+          "integrator",
+          "dcl"
+        ],
+        "workspace": "x89-project",
+        "page": "配置集成 → 合并与处理确认 → 合并目标",
+        "pre": "PT02 完成；主线上已有 brake_monitor 的合并预览。",
+        "steps": [
+          "合并目标选“同软件版本补丁”→ 策略集 1.0.0（软件 1.0 在用），预览 angle_jump_fix。",
+          "以主线 1.1.0 为补丁目标被拒绝；补丁带子系统发布被拒绝（补丁只收 Verified Feature）。",
+          "预览就绪：转向只改转角突变（阈值 350，录制时长仍是 1.0.0 的 10 秒），1.1.0 的回正策略不进入补丁。",
+          "DCL 确认处理集合，integrator 冻结 X89-P1；主线上 brake_monitor 的预览仍然有效。"
+        ],
+        "done": "补丁的完整集合 = 1.0.0 + 修复。",
+        "fail": "补丁预览不取代主线预览，主线预览也不取代补丁预览。"
+      },
+      {
+        "id": "PT04",
+        "title": "补丁在它要服务的软件上集成测试",
+        "actor": "integration_tester",
+        "accounts": [
+          "integration_tester"
+        ],
+        "workspace": "x89-integration",
+        "page": "配置集成 → 集成候选",
+        "pre": "PT03 完成。",
+        "steps": [
+          "把 X89-P1 下发到 X89 集成测试车组（SIM-101、VEH-031，软件 1.0），回执后先仿真后实车登记 PASS。",
+          "确认集成验证。"
+        ],
+        "done": "补丁候选通过软件 1.0 上的独立集成测试。",
+        "fail": "候选的测试从零开始，不继承 Feature 的结果。"
+      },
+      {
+        "id": "PT05",
+        "title": "发布补丁 1.0.1：只服务软件 1.0，主线不变",
+        "actor": "release",
+        "accounts": [
+          "release"
+        ],
+        "workspace": "x89-project",
+        "page": "发布与配置 OTA → 策略集发布",
+        "pre": "PT04 完成。",
+        "steps": [
+          "发布表单建议版本 1.0.1，适用版本只列出软件 1.0。",
+          "填 1.1.1 被拒绝（补丁沿 1.0.x 编号）；同时选 1.0 和 1.1 被拒绝（1.0.0 只服务 1.0）。",
+          "发布 1.0.1（补丁 · 基于 1.0.0），适用 1.0；与所补的版本比较只有转角突变变化。",
+          "向 X89 量产车组发起 1.0.1 的配置 OTA：只有运行 1.0 的 VEH-201 在内，回执后运行 1.0.1。"
+        ],
+        "done": "软件 1.0 解析到 1.0.1，软件 1.1 仍是 1.1.0；主线仍是 1.1.0。",
+        "fail": "补丁不能替代主线在其他软件版本上的策略集。"
+      },
+      {
+        "id": "PT06",
+        "title": "修复合入主线",
+        "actor": "integrator；dcl；integration_tester；release",
+        "accounts": [
+          "integrator",
+          "dcl",
+          "integration_tester",
+          "release"
+        ],
+        "workspace": "x89-project",
+        "page": "配置集成 → 合并与处理确认",
+        "pre": "PT05 完成。",
+        "steps": [
+          "angle_jump_fix 回到 Verified，标注“已进入补丁 1.0.1 · 待合入主线”；工作台的集成卡片列出它。",
+          "在主线合并中预览它：三方合并到 1.1.0，保留主线的回正策略与 15 秒录制时长，加入阈值 350。",
+          "DCL 确认、冻结、在 1.1 车辆上集成测试，release 发布 1.1.1（适用 1.1）。"
+        ],
+        "done": "修复进入主线后 angle_jump_fix 归档；主线 1.1.1，软件 1.0 仍用 1.0.1。",
+        "fail": "补丁里的修复不会悄悄丢在下一个主线版本之外。"
+      },
+      {
+        "id": "PT07",
+        "title": "补丁线的门禁：目标被替换后不能发布",
+        "actor": "steering；steering_tester；integrator；dcl；integration_tester；release",
+        "accounts": [
+          "steering",
+          "steering_tester",
+          "integrator",
+          "dcl",
+          "integration_tester",
+          "release"
+        ],
+        "workspace": "x89-project",
+        "page": "配置集成；发布与配置 OTA",
+        "pre": "PT06 完成。",
+        "steps": [
+          "steering 在 1.0.1 上开 angle_window_fix（转角突变触发前 5 秒改为 8 秒），业务验证 Verified。",
+          "integrator 以 1.0.1 为补丁目标合并、DCL 确认、冻结 X89-P2，集成测试通过。",
+          "dcl 对 1.0.1 的转角突变申请紧急停用，release 批准：生成 1.0.2（补丁 · 基于 1.0.1），只适用 1.0，主线仍是 1.1.1。",
+          "发布 X89-P2 被拒绝：它的目标 1.0.1 已被替换。"
+        ],
+        "done": "补丁的门禁按自己的线判断：1.0.1 被替换后，基于它的候选须重新集成。",
+        "fail": "主线发布不会使补丁候选过期，补丁发布也不会使主线候选过期。"
+      },
+      {
+        "id": "N01",
+        "title": "补丁的权限与“不合入主线”",
+        "actor": "integration_tester；steering；integrator",
+        "accounts": [
+          "integration_tester",
+          "steering",
+          "integrator"
+        ],
+        "workspace": "x89-project",
+        "page": "配置集成 → 合并与处理确认",
+        "pre": "PT05 完成（支线）。",
+        "steps": [
+          "integration_tester 不能做补丁合并预览；steering 不能关闭补丁里的修复。",
+          "integrator 对 angle_jump_fix 点“不合入主线”，写明“主线已重写转角突变策略”。",
+          "Feature 归档，原因记录在 Feature 的反馈中；再次关闭被拒绝（不是待合入主线的 Verified Feature）。"
+        ],
+        "done": "主线不需要的修复由配置集成写明理由后关闭。",
+        "fail": "没有理由不能关闭。"
+      }
+    ]
   }
 ];
 

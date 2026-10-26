@@ -20,6 +20,7 @@ import * as notifications from './notifications.ts';
 import * as borrowing from './borrowing.ts';
 import * as lifecycle from './lifecycle.ts';
 import * as deviceFaults from './device-faults.ts';
+import * as patch from './patch.ts';
 import * as policySets from './policy-sets.ts';
 import * as startup from './startup.ts';
 import { GapError, NotApplicableError, World } from './world.ts';
@@ -64,6 +65,7 @@ const suites = [
   { id: 'borrowing', mod: borrowing },
   { id: 'lifecycle', mod: lifecycle },
   { id: 'device-faults', mod: deviceFaults },
+  { id: 'patch', mod: patch },
 ] as const;
 
 const report: { script: string; name: string; rows: Row[] }[] = [];

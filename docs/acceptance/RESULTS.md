@@ -1,10 +1,10 @@
 # 验收结果（引擎层逐幕回放）
 
-运行时间：2026-10-26T01:34:47.585Z。由 `npm run acceptance` 生成；每次重新执行，不沿用历史结果。
+运行时间：2026-10-26T12:19:18.317Z。由 `npm run acceptance` 生成；每次重新执行，不沿用历史结果。
 
 状态：PASS 通过；FAIL 失败；GAP 设计要求尚未实现；BLOCKED 前置幕未通过；NOT_APPLICABLE 浏览器原型不适用（如服务端部署）。
 
-合计：PASS 175 · FAIL 0 · GAP 0 · BLOCKED 0 · NOT_APPLICABLE 3 · NOT_WRITTEN 0
+合计：PASS 183 · FAIL 0 · GAP 0 · BLOCKED 0 · NOT_APPLICABLE 3 · NOT_WRITTEN 0
 
 ## 从零启动 · 角色协作
 
@@ -229,6 +229,19 @@
 | DF04 回执丢失与补发 | 车辆模拟器；brake_tester；resource | PASS |  |
 | DF05 取消后迟到的回执 | 车辆模拟器；brake_tester；resource | PASS |  |
 | N01 回执不能改写或重复确认 | 车辆模拟器 | PASS |  |
+
+## 同软件版本配置补丁 · 主线与补丁
+
+| 幕 | 执行人 | 状态 | 说明 |
+|---|---|---|---|
+| PT01 主线前进到 1.1.0，软件 1.0 仍用 1.0.0 | integrator；integration_tester；release；resource | PASS |  |
+| PT02 团队在 1.0.0 上开修复 Feature | steering；steering_tester | PASS |  |
+| PT03 补丁模式：合并到 1.0.0 而不是主线 | integrator；dcl | PASS |  |
+| PT04 补丁在它要服务的软件上集成测试 | integration_tester | PASS |  |
+| PT05 发布补丁 1.0.1：只服务软件 1.0，主线不变 | release | PASS |  |
+| PT06 修复合入主线 | integrator；dcl；integration_tester；release | PASS |  |
+| PT07 补丁线的门禁：目标被替换后不能发布 | steering；steering_tester；integrator；dcl；integration_tester；release | PASS |  |
+| N01 补丁的权限与“不合入主线” | integration_tester；steering；integrator | PASS |  |
 
 ## 反向用例 T-N01–T-N24
 
