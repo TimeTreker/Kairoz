@@ -14,34 +14,85 @@ import {
   TeamOutlined,
   UserOutlined,
 } from '@ant-design/icons';
-import { Avatar, Breadcrumb, Button, Dropdown, Layout, Menu, Result, Segmented, Select, Space, Tag } from 'antd';
-import type { ReactNode } from 'react';
+import { Avatar, Breadcrumb, Button, Dropdown, Layout, Menu, Result, Segmented, Select, Space, Spin, Tag } from 'antd';
+import { Suspense, lazy, useEffect, useState } from 'react';
+import type { ComponentType, ReactNode } from 'react';
 import { canOpenPage } from '../domain/authz.ts';
 import { unitPath } from '../engine/org.ts';
 import { useI18n } from '../i18n/i18n.tsx';
 import { ROLE_LABELS, WORKSPACE_KIND_LABELS } from '../i18n/vocab.ts';
-import { AcceptancePage } from '../pages/AcceptancePage.tsx';
-import { AccountsPage } from '../pages/AccountsPage.tsx';
-import { AuditPage } from '../pages/AuditPage.tsx';
-import { DataCatalogPage } from '../pages/DataCatalogPage.tsx';
-import { FeatureDetailPage } from '../pages/FeatureDetailPage.tsx';
-import { FeaturesPage } from '../pages/FeaturesPage.tsx';
-import { FleetPage } from '../pages/FleetPage.tsx';
-import { GuidePage } from '../pages/GuidePage.tsx';
-import { IntakePage } from '../pages/IntakePage.tsx';
-import { IntegrationPage } from '../pages/IntegrationPage.tsx';
-import { OrgPage } from '../pages/OrgPage.tsx';
-import { ProcessingPage } from '../pages/ProcessingPage.tsx';
-import { QueryPage } from '../pages/QueryPage.tsx';
-import { ReleasePage } from '../pages/ReleasePage.tsx';
-import { SimulatorPage } from '../pages/SimulatorPage.tsx';
-import { WorkbenchPage } from '../pages/WorkbenchPage.tsx';
-import { NotificationsPage } from '../pages/NotificationsPage.tsx';
 import { NotificationBell } from '../components/notifications.tsx';
 import { useActor, useCanOpen, useWorkspace } from './hooks.ts';
 import { PrototypeMenu } from './PrototypeMenu.tsx';
 import { navigate, useRoute } from './router.ts';
 import { setSession, useEngineState } from './store.ts';
+
+/**
+ * A page in its own chunk: it loads the first time it renders, or earlier through `preload`. Once
+ * loaded it renders directly: route changes render synchronously, and even an instant suspension
+ * would show the fallback and hold the page back for React's reveal throttle. Each mount keeps the
+ * component it started with, so a page never remounts (and loses its state) when the code arrives.
+ */
+function lazyPage<P extends object>(load: () => Promise<ComponentType<P>>) {
+  let loaded: ComponentType<P> | null = null;
+  const fetchPage = () => load().then((component) => (loaded = component));
+  const Lazy = lazy(() =>
+    fetchPage().then(
+      (component) => ({ default: component }),
+      () => ({ default: PageLoadFailed }),
+    ),
+  );
+  function Page(props: P) {
+    const [Shown] = useState<ComponentType<P>>(() => loaded ?? Lazy);
+    return <Shown {...props} />;
+  }
+  // A failed preload is retried when the page opens.
+  return Object.assign(Page, { preload: () => void fetchPage().catch(() => {}) });
+}
+
+/** A page whose code could not be fetched: the network dropped, or the app was republished since this tab opened. */
+function PageLoadFailed() {
+  const { L } = useI18n();
+  return (
+    <div className="kz-page">
+      <Result
+        status="warning"
+        title={L('页面未能加载', 'This page could not be loaded')}
+        subTitle={L('网络中断，或应用已更新。重新加载即可，原型数据不受影响。', 'The network dropped, or the app was updated. Reload; your prototype data is kept.')}
+        extra={
+          <Button type="primary" onClick={() => window.location.reload()}>
+            {L('重新加载', 'Reload')}
+          </Button>
+        }
+      />
+    </div>
+  );
+}
+
+// Signing in needs only the shell; each page's code arrives when it opens.
+const WorkbenchPage = lazyPage(() => import('../pages/WorkbenchPage.tsx').then((m) => m.WorkbenchPage));
+const FeaturesPage = lazyPage(() => import('../pages/FeaturesPage.tsx').then((m) => m.FeaturesPage));
+const FeatureDetailPage = lazyPage(() => import('../pages/FeatureDetailPage.tsx').then((m) => m.FeatureDetailPage));
+const DataCatalogPage = lazyPage(() => import('../pages/DataCatalogPage.tsx').then((m) => m.DataCatalogPage));
+const IntakePage = lazyPage(() => import('../pages/IntakePage.tsx').then((m) => m.IntakePage));
+const ProcessingPage = lazyPage(() => import('../pages/ProcessingPage.tsx').then((m) => m.ProcessingPage));
+const FleetPage = lazyPage(() => import('../pages/FleetPage.tsx').then((m) => m.FleetPage));
+const IntegrationPage = lazyPage(() => import('../pages/IntegrationPage.tsx').then((m) => m.IntegrationPage));
+const ReleasePage = lazyPage(() => import('../pages/ReleasePage.tsx').then((m) => m.ReleasePage));
+const QueryPage = lazyPage(() => import('../pages/QueryPage.tsx').then((m) => m.QueryPage));
+const SimulatorPage = lazyPage(() => import('../pages/SimulatorPage.tsx').then((m) => m.SimulatorPage));
+const OrgPage = lazyPage(() => import('../pages/OrgPage.tsx').then((m) => m.OrgPage));
+const AccountsPage = lazyPage(() => import('../pages/AccountsPage.tsx').then((m) => m.AccountsPage));
+const AuditPage = lazyPage(() => import('../pages/AuditPage.tsx').then((m) => m.AuditPage));
+const GuidePage = lazyPage(() => import('../pages/GuidePage.tsx').then((m) => m.GuidePage));
+const NotificationsPage = lazyPage(() => import('../pages/NotificationsPage.tsx').then((m) => m.NotificationsPage));
+const AcceptancePage = lazyPage(() => import('../pages/AcceptancePage.tsx').then((m) => m.AcceptancePage));
+
+/** Fetched once the shell is up, so switching pages during a demo never waits on the network. */
+const PAGES = [
+  WorkbenchPage, FeaturesPage, FeatureDetailPage, DataCatalogPage, IntakePage, ProcessingPage, FleetPage, IntegrationPage,
+  ReleasePage, QueryPage, SimulatorPage, OrgPage, AccountsPage, AuditPage, GuidePage, NotificationsPage, AcceptancePage,
+];
 
 interface NavItem {
   key: string;
@@ -106,6 +157,11 @@ export function Shell() {
   const canOpen = useCanOpen();
   const route = useRoute();
   const page = route[0] ?? 'workbench';
+
+  useEffect(() => {
+    const t = setTimeout(() => PAGES.forEach((p) => p.preload()), 1000);
+    return () => clearTimeout(t);
+  }, []);
 
   const allRoles = new Set(actor.grants.map((g) => g.role));
   const nav = NAV.filter((n) => canOpen(n.key));
@@ -205,7 +261,7 @@ export function Shell() {
               />
             </div>
           )}
-          {content}
+          <Suspense fallback={<Spin delay={300} style={{ display: 'block', padding: 48 }} />}>{content}</Suspense>
         </Layout.Content>
       </Layout>
     </Layout>

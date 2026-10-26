@@ -8,12 +8,13 @@ A runnable **product prototype** of the DCL data acquisition platform. It is not
 - `npm test`: engine and domain tests (`node --test`, no browser).
 - `npm run typecheck`: `tsc --noEmit` (TypeScript 7).
 - `npm run build`: static build in `apps/prototype/dist` (relative base, works from any static host).
+- `npm run preview -w @kairoz/prototype`: serves the built `dist` on 127.0.0.1:4173 (launch config `prototype-build`), to check the chunks as they are hosted.
 
 ## Architecture
 
 - `src/domain`: pure rules (authz single-grant rule, trigger grammar, data source and glob overlap, config diff, review signatures). No IO, no React.
 - `src/engine`: the platform. `Engine.run(username, ctx => op(ctx, …))` runs one operation as an immer transaction; a throw discards everything. Operations call `ctx.allow(action, target)` before changing state, which audits allowed decisions; denials are audited separately. Read helpers take `(state, actor)`.
-- `src/app`: store (persistence, session), hooks (`useRun`, `useCan`, `useActor`, `useWorkspace`), hash router, shell.
+- `src/app`: store (persistence, session), hooks (`useRun`, `useCan`, `useActor`, `useWorkspace`), hash router, shell. Pages are lazy chunks registered in `Shell.tsx` with `lazyPage` (and listed in `PAGES` for preloading); never import a page module statically elsewhere, or it lands back in the startup bundle. `vite.config.ts` gives React and the engine (`src/engine`, `src/domain`) chunks of their own.
 - `src/pages`: role pages. Show controls only when `useCan(action, target)` says the actor holds one complete grant.
 
 ## Conventions

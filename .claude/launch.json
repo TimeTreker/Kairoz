@@ -6,6 +6,12 @@
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev"],
       "port": 5173
+    },
+    {
+      "name": "prototype-build",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "preview", "-w", "@kairoz/prototype"],
+      "port": 4173
     }
   ]
 }
