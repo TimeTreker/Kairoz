@@ -1,5 +1,6 @@
 // Configuration integration (配置集成): three-way merge preview of Verified Features onto the
 // target set, DCL confirmation of the final processing set, and freezing a complete candidate.
+// The target is the mainline head, or (patch mode) an older set still in effect for some software.
 
 import { digestOf } from '../domain/canonical.ts';
 import { capturableKeys, diffConfig, emptyConfig, MAX_CAPTURE_WINDOW_SECONDS, sameConfig } from '../domain/config.ts';
@@ -14,14 +15,15 @@ import { WILDCARD } from '../domain/vocabulary.ts';
 import type { Domain, Scope } from '../domain/vocabulary.ts';
 import { reviewItems } from './approvals.ts';
 import type { ReviewItem } from './approvals.ts';
-import { baseConfig, fileSpecVersion, headChangesRequested, latestRelease, manifestVersion, policyVersion, reviewRequiredBefore } from './config.ts';
+import { addFeedback, baseConfig, fileSpecVersion, getFeature, headChangesRequested, mainlineRelease, manifestVersion, policyVersion, reviewRequiredBefore } from './config.ts';
 
-export { latestRelease };
+export { mainlineRelease };
 import type { Ctx } from './engine.ts';
 import { getWorkspace } from './org.ts';
 import { bindingIssues } from './processing.ts';
+import { patchChain, patchesOf, patchTargets, targetMoved, versionsInEffect } from './release.ts';
 import { commitSnapshot, resolveFiles } from './snapshots.ts';
-import type { Candidate, Feature, MergeConflict, MergePlan, Release, State, SubsystemRef, SubsystemRelease, Workspace } from './types.ts';
+import type { Candidate, Feature, MergeConflict, MergePatch, MergePlan, Release, State, SubsystemRef, SubsystemRelease, Workspace } from './types.ts';
 import { candidateVerifyBlockers, resolveConfig } from './validation.ts';
 
 /**
@@ -41,17 +43,25 @@ export function defaultScope(ws: Pick<Workspace, 'scopes'>): Scope {
 
 /**
  * Verified Features a merge may collect: from the workspace's declared sources, same vehicle
- * model. A subsystem (domain) merge takes only Features of business groups in its domain.
+ * model. A subsystem (domain) merge takes only Features of business groups in its domain. A patch
+ * of an older set leaves out Features already in that set's patch line.
  */
-export function verifiedSources(s: State, workspaceId: string, scope?: Scope): Feature[] {
+export function verifiedSources(s: State, workspaceId: string, scope?: Scope, patchOf?: string | null): Feature[] {
   const ws = s.workspaces[workspaceId];
   if (!ws) return [];
   const within = scope ?? defaultScope(ws);
   const allowed = new Set([ws.id, ...ws.sourceWorkspaceIds]);
+  const line = new Set(patchOf ? patchChain(s, patchOf).map((r) => r.id) : []);
   return Object.values(s.features)
     .filter((f) => allowed.has(f.workspaceId) && f.vehicleModelId === ws.vehicleModelId && isCollectible(s, f))
     .filter((f) => within === 'Vehicle' || s.groups[f.groupId]?.domain === within)
+    .filter((f) => !patchesOf(s, f).some((r) => line.has(r.id)))
     .sort((a, b) => a.groupId.localeCompare(b.groupId) || a.name.localeCompare(b.name));
+}
+
+/** Whether two previews or candidates are on the same line: the mainline, or patches of the same set. */
+export function sameLine(a: { patch: MergePatch | null; targetReleaseId: string | null }, b: { patch: MergePatch | null; targetReleaseId: string | null }): boolean {
+  return a.patch === null ? b.patch === null : b.patch !== null && a.targetReleaseId === b.targetReleaseId;
 }
 
 /** Subsystem releases a whole-vehicle merge may collect: the newest active one per domain from its sources. */
@@ -154,23 +164,46 @@ function recomputeReview(s: State, config: GroupConfig): void {
   }
 }
 
+/** Why a set cannot be the target of a same-software patch, or null if it can. */
+function patchTargetProblem(s: State, vehicleModelId: string, release: Release): string | null {
+  if (release.vehicleModelId !== vehicleModelId) return `policy set ${release.dclVersion} is for ${release.vehicleModelId}`;
+  if (mainlineRelease(s, vehicleModelId)?.id === release.id) return `policy set ${release.dclVersion} is the mainline; merge onto it without patch mode`;
+  if (!patchTargets(s, vehicleModelId).some((r) => r.id === release.id)) return `policy set ${release.dclVersion} is in effect for no software version`;
+  return null;
+}
+
 /**
  * Previews merging Verified Features (and, for the whole vehicle, subsystem releases) onto the
- * current target set. A subsystem merge covers one domain and builds on the domain's current
- * subsystem release by itself. Supersedes older previews of the same workspace and scope.
+ * mainline head. A subsystem merge covers one domain and builds on the domain's current subsystem
+ * release by itself. A patch (`patchOf`) merges Verified Features onto an older set still in
+ * effect for some software. Supersedes older previews of the same workspace, scope and line.
  */
-export function previewMerge(ctx: Ctx, input: { workspaceId: string; featureIds: string[]; subsystemReleaseIds?: string[]; scope?: Scope }): string {
+export function previewMerge(ctx: Ctx, input: { workspaceId: string; featureIds: string[]; subsystemReleaseIds?: string[]; scope?: Scope; patchOf?: string | null }): string {
   const ws = getWorkspace(ctx.s, input.workspaceId);
   const scope = input.scope ?? defaultScope(ws);
   ctx.allow('merge.manage', { type: 'mergePlan', workspaceId: ws.id, scope });
   if (!isMergeWorkspace(ctx.s, ws.id)) throw rule('NOT_A_MERGE_WORKSPACE', 'merges run in a project workspace, or an integration workspace with team sources');
   if (!ws.scopes.includes(scope)) throw rule('SCOPE_OUTSIDE_WORKSPACE', `this workspace integrates ${ws.scopes.join(', ')}, not ${scope}`);
-  const allowed = new Set(verifiedSources(ctx.s, ws.id, scope).map((f) => f.id));
+  let release: Release | undefined;
+  let patch: MergePatch | null = null;
+  if (input.patchOf) {
+    if (scope !== 'Vehicle' || input.subsystemReleaseIds?.length) throw rule('PATCH_FEATURES_ONLY', 'a same-software patch is a whole-vehicle merge of Verified Features');
+    const target = ctx.s.releases[input.patchOf];
+    if (!target) throw notFound('policy set', input.patchOf);
+    const problem = patchTargetProblem(ctx.s, ws.vehicleModelId, target);
+    if (problem) throw rule('NOT_A_PATCH_TARGET', problem);
+    release = target;
+    patch = { versions: versionsInEffect(ctx.s, target) };
+  } else {
+    release = mainlineRelease(ctx.s, ws.vehicleModelId);
+  }
+  const allowed = new Set(verifiedSources(ctx.s, ws.id, scope, input.patchOf).map((f) => f.id));
   const features = input.featureIds.map((id) => {
     const f = ctx.s.features[id];
     if (!f) throw notFound('feature', id);
     if (!allowed.has(id)) {
       if (verifiedSources(ctx.s, ws.id, 'Vehicle').some((x) => x.id === id)) {
+        if (patch) throw rule('SOURCE_NOT_ALLOWED', `${f.name} is already in policy set ${release!.dclVersion}’s patch line`);
         throw rule('CROSS_DOMAIN_SOURCE', `${f.name} belongs to the ${ctx.s.groups[f.groupId]?.domain} domain, outside this ${scope} merge`);
       }
       throw rule('SOURCE_NOT_ALLOWED', `${f.name} is not a Verified Feature from this workspace’s sources`);
@@ -192,8 +225,7 @@ export function previewMerge(ctx: Ctx, input: { workspaceId: string; featureIds:
     const chain = currentSubsystem(ctx.s, ws.vehicleModelId, scope);
     subsystems = chain ? [chain] : [];
   }
-  if (features.length === 0 && subsystems.length === 0) throw rule('NO_SOURCES', 'choose Verified Features or subsystem releases to merge');
-  const release = latestRelease(ctx.s, ws.vehicleModelId);
+  if (features.length === 0 && subsystems.length === 0) throw rule('NO_SOURCES', patch ? 'choose Verified Features to merge' : 'choose Verified Features or subsystem releases to merge');
   const refs: SubsystemRef[] = subsystems.map((r) => ({ subsystemReleaseId: r.id, groups: { ...r.groups } }));
   const byGroup = new Map<string, MergeSource[]>();
   const add = (groupId: string, src: MergeSource) => byGroup.set(groupId, [...(byGroup.get(groupId) ?? []), src]);
@@ -223,8 +255,9 @@ export function previewMerge(ctx: Ctx, input: { workspaceId: string; featureIds:
   const issues = conflicts.length ? [] : setIssues(ctx.s, finalSet);
   const sources = features.map((f) => ({ featureId: f.id, commitId: f.headCommitId! }));
 
+  const targetReleaseId = release?.id ?? null;
   for (const p of Object.values(ctx.s.mergePlans)) {
-    if (p.workspaceId === ws.id && p.scope === scope && ['READY', 'CONFLICT', 'BLOCKED'].includes(p.status)) p.status = 'SUPERSEDED';
+    if (p.workspaceId === ws.id && p.scope === scope && sameLine(p, { patch, targetReleaseId }) && ['READY', 'CONFLICT', 'BLOCKED'].includes(p.status)) p.status = 'SUPERSEDED';
   }
   const id = newId('mp');
   ctx.s.mergePlans[id] = {
@@ -232,14 +265,15 @@ export function previewMerge(ctx: Ctx, input: { workspaceId: string; featureIds:
     workspaceId: ws.id,
     vehicleModelId: ws.vehicleModelId,
     scope,
-    targetReleaseId: release?.id ?? null,
+    targetReleaseId,
+    patch,
     sources,
     subsystems: refs,
     status: conflicts.length ? 'CONFLICT' : issues.length ? 'BLOCKED' : 'READY',
     merged,
     conflicts,
     issues,
-    digest: digestOf({ target: release?.id ?? null, scope, sources, subsystems: refs, merged }),
+    digest: digestOf({ target: targetReleaseId, scope, ...(patch ? { patch } : {}), sources, subsystems: refs, merged }),
     createdBy: ctx.user().username,
     createdAt: ctx.now,
   };
@@ -399,8 +433,8 @@ export function freezeCandidate(ctx: Ctx, planId: string, input: { label: string
   ctx.allow('merge.manage', { type: 'mergePlan', id: plan.id, workspaceId: plan.workspaceId, scope: plan.scope });
   if (plan.status !== 'READY') throw rule('PLAN_NOT_READY', 'only a conflict-free, unblocked preview can be frozen');
   if (!isConfirmed(ctx.s, plan)) throw rule('PROCESSING_NOT_CONFIRMED', 'DCL engineering must confirm the final processing set first');
-  if ((latestRelease(ctx.s, plan.vehicleModelId)?.id ?? null) !== plan.targetReleaseId) {
-    throw rule('TARGET_CHANGED', 'a newer release was published; preview the merge again');
+  if (targetMoved(ctx.s, plan)) {
+    throw rule('TARGET_CHANGED', plan.patch ? 'the set this patch targets was replaced for its software; preview the merge again' : 'a newer release was published; preview the merge again');
   }
   for (const src of plan.sources) {
     const f = ctx.s.features[src.featureId]!;
@@ -411,7 +445,8 @@ export function freezeCandidate(ctx: Ctx, planId: string, input: { label: string
     const usable = plan.scope === 'Vehicle' ? r?.status === 'ACTIVE' : r?.status === 'ACTIVE' || r?.status === 'INTEGRATING';
     if (!usable) throw rule('SOURCE_CHANGED', `${r?.label ?? ref.subsystemReleaseId} changed since the preview; preview the merge again`);
   }
-  const open = Object.values(ctx.s.candidates).find((c) => c.workspaceId === plan.workspaceId && c.scope === plan.scope && ['CANDIDATE', 'TESTING', 'VERIFIED'].includes(c.status));
+  // One open candidate per line: a patch can be tested while a mainline candidate is.
+  const open = Object.values(ctx.s.candidates).find((c) => c.workspaceId === plan.workspaceId && c.scope === plan.scope && sameLine(c, plan) && ['CANDIDATE', 'TESTING', 'VERIFIED'].includes(c.status));
   if (open) throw rule('CANDIDATE_OPEN', `candidate ${open.label} is still open; release or cancel it first`);
   // Candidates are tested in an integration workspace covering their scope: this one, or the one
   // taking the project as source.
@@ -436,6 +471,7 @@ export function freezeCandidate(ctx: Ctx, planId: string, input: { label: string
     vehicleModelId: plan.vehicleModelId,
     mergePlanId: plan.id,
     targetReleaseId: plan.targetReleaseId,
+    patch: plan.patch ? { versions: [...plan.patch.versions] } : null,
     groups,
     scope: plan.scope,
     sources: plan.sources.map((x) => ({ ...x })),
@@ -499,7 +535,7 @@ export function publishSubsystem(ctx: Ctx, candidateId: string, input: { notes?:
   if (blockers.length) throw rule('VERIFY_BLOCKED', 'the candidate’s current tests no longer verify it', { issues: blockers });
   const plan = ctx.s.mergePlans[c.mergePlanId];
   if (!plan || !isConfirmed(ctx.s, plan)) throw rule('PROCESSING_NOT_CONFIRMED', 'DCL engineering has not confirmed this processing set');
-  if ((latestRelease(ctx.s, c.vehicleModelId)?.id ?? null) !== c.targetReleaseId) {
+  if (targetMoved(ctx.s, c)) {
     throw rule('TARGET_CHANGED', 'a newer release was published after this candidate was frozen; integrate again');
   }
   const domain = c.scope as Domain;
@@ -533,4 +569,24 @@ export function publishSubsystem(ctx: Ctx, candidateId: string, input: { notes?:
   for (const r of line) if (r.status === 'ACTIVE') r.status = 'SUPERSEDED';
   ctx.s.candidates[c.id]!.status = 'RELEASED';
   return id;
+}
+
+/**
+ * A Feature released in a same-software patch waits to be merged into the mainline as well. When
+ * the mainline does not need the fix, integration closes it for the mainline, with a reason.
+ */
+export function closeForMainline(ctx: Ctx, featureId: string, input: { reason: string }): void {
+  const f = getFeature(ctx.s, featureId);
+  const patch = patchesOf(ctx.s, f).at(-1);
+  // Integration where the patch was merged decides, or where the Feature's workspace is collected.
+  const candidate = patch?.candidateId ? ctx.s.candidates[patch.candidateId] : undefined;
+  const collector = Object.values(ctx.s.workspaces).find((w) => w.scopes.includes('Vehicle') && w.sourceWorkspaceIds.includes(f.workspaceId) && isMergeWorkspace(ctx.s, w.id));
+  ctx.allow('merge.manage', { type: 'feature', id: f.id, workspaceId: candidate?.workspaceId ?? collector?.id ?? f.workspaceId, scope: 'Vehicle' });
+  if (!patch || !isCollectible(ctx.s, f)) throw rule('NOT_PATCHED', `${f.name} is not a Verified Feature from a patch waiting for the mainline`);
+  const reason = input.reason.trim();
+  if (!reason) throw rule('REASON_REQUIRED', 'give a reason');
+  const draft = ctx.s.features[f.id]!;
+  draft.stage = 'ARCHIVED';
+  draft.updatedAt = ctx.now;
+  addFeedback(ctx, { featureId: f.id, commitId: f.headCommitId, kind: 'MAINLINE_DECLINED', reason });
 }

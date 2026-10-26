@@ -146,7 +146,15 @@ function to15(s: Saved): void {
   s.schema = 15;
 }
 
-const STEPS: Record<number, (s: Saved) => void> = { 6: to7, 7: to8, 8: to9, 9: to10, 10: to11, 11: to12, 12: to13, 13: to14, 14: to15 };
+/** Schema 16: same-software configuration patches; everything saved so far is on the mainline. */
+function to16(s: Saved): void {
+  for (const r of Object.values((s.releases ?? {}) as Rows)) r.patchOf ??= null;
+  for (const p of Object.values((s.mergePlans ?? {}) as Rows)) p.patch ??= null;
+  for (const c of Object.values((s.candidates ?? {}) as Rows)) c.patch ??= null;
+  s.schema = 16;
+}
+
+const STEPS: Record<number, (s: Saved) => void> = { 6: to7, 7: to8, 8: to9, 9: to10, 10: to11, 11: to12, 12: to13, 13: to14, 14: to15, 15: to16 };
 
 /** The state at the current schema, or null when it cannot be read or is too old. Mutates `raw`. */
 export function migrate(raw: unknown): State | null {

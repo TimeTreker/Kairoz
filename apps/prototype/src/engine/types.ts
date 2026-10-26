@@ -10,7 +10,7 @@ import type { FileType, Privacy } from '../domain/file-types.ts';
 import type { ReviewControls } from '../domain/intake.ts';
 import type { Domain, Env, GroupPurpose, Role, Scope, WorkspaceKind } from '../domain/vocabulary.ts';
 
-export const STATE_SCHEMA = 15;
+export const STATE_SCHEMA = 16;
 
 export interface Account {
   username: string;
@@ -230,7 +230,7 @@ export interface SensitiveReview {
   createdAt: string;
 }
 
-export type FeedbackKind = 'RETURNED' | 'REVIEW_REJECTED' | 'BINDING_CHANGED' | 'REFERENCE_REVOKED';
+export type FeedbackKind = 'RETURNED' | 'REVIEW_REJECTED' | 'BINDING_CHANGED' | 'REFERENCE_REVOKED' | 'MAINLINE_DECLINED';
 
 export interface Feedback {
   id: string;
@@ -281,6 +281,11 @@ export interface Release {
   notes: string;
   /** An emergency stop: the source set without one policy. */
   emergency: { stopId: string; sourceReleaseId: string; policyId: string } | null;
+  /**
+   * The older set this one patches for the software versions it serves (a same-software
+   * configuration patch); null on the mainline. Patches never move the mainline.
+   */
+  patchOf: string | null;
   publishedBy: string;
   publishedAt: string;
 }
@@ -780,6 +785,8 @@ export interface MergePlan {
   /** Vehicle for a whole-vehicle merge, or the one domain a subsystem merge covers. */
   scope: Scope;
   targetReleaseId: string | null;
+  /** A patch of an older set: the software versions the target was in effect for at the preview. Null on the mainline. */
+  patch: MergePatch | null;
   sources: { featureId: string; commitId: string }[];
   subsystems: SubsystemRef[];
   status: 'READY' | 'CONFLICT' | 'BLOCKED' | 'FROZEN' | 'SUPERSEDED';
@@ -790,6 +797,10 @@ export interface MergePlan {
   digest: string;
   createdBy: string;
   createdAt: string;
+}
+
+export interface MergePatch {
+  versions: string[];
 }
 
 /** DCL confirms the exact final processing set of a merge preview (bound to its digest). */
@@ -814,6 +825,8 @@ export interface Candidate {
   vehicleModelId: string;
   mergePlanId: string;
   targetReleaseId: string | null;
+  /** Copied from the merge plan: a patch of an older set, or null on the mainline. */
+  patch: MergePatch | null;
   /** group id -> commit id: the complete set. */
   groups: Record<string, string>;
   scope: Scope;

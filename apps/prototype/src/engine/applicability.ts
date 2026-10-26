@@ -9,7 +9,7 @@ import { conflict, notFound, rule } from '../domain/errors.ts';
 import { newId } from '../domain/ids.ts';
 import type { Ctx } from './engine.ts';
 import { directTargetProblems, membersOf, occupancyProblems, pendingDeploymentOf, pendingImageChangeOf, recordGroupBinding, softwareKey } from './fleet.ts';
-import { latestRelease } from './config.ts';
+import { mainlineRelease } from './config.ts';
 import { appliesTo, getRelease, setInEffect } from './release.ts';
 import { commitSnapshot, resolveFiles } from './snapshots.ts';
 import type { ApplicabilityCheck, Release, Resource, State } from './types.ts';
@@ -91,12 +91,12 @@ function createCheck(ctx: Ctx, release: Release, version: string, testWorkspaceI
 }
 
 /**
- * A software version no set applies to: if the model has sets, a check for the newest one is opened
+ * A software version no set applies to: if the model has sets, a check for the mainline head is opened
  * as a to-do for configuration release. Part of recording the version; nothing else changes.
  */
 export function openCheckForNewSoftware(ctx: Ctx, vehicleModelId: string, version: string): string | null {
   if (setInEffect(ctx.s, vehicleModelId, version)) return null;
-  const latest = latestRelease(ctx.s, vehicleModelId);
+  const latest = mainlineRelease(ctx.s, vehicleModelId);
   const testWs = latest ? testWorkspaceFor(ctx.s, latest) : null;
   if (!latest || !testWs) return null;
   return createCheck(ctx, latest, version, testWs, true, ctx.user().username);

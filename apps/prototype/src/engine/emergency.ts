@@ -6,8 +6,9 @@
 import { digestOf } from '../domain/canonical.ts';
 import { conflict, notFound, rule } from '../domain/errors.ts';
 import { newId } from '../domain/ids.ts';
+import { mainlineRelease } from './config.ts';
 import type { Ctx } from './engine.ts';
-import { getRelease, nextDclVersion, releasesOf, versionsInEffect } from './release.ts';
+import { getRelease, nextDclVersion, releasesOf, supersedeMovedPlans, versionsInEffect } from './release.ts';
 import type { EmergencyStop, Release, State } from './types.ts';
 import { resolveConfig } from './validation.ts';
 
@@ -112,7 +113,9 @@ export function decideEmergencyStop(ctx: Ctx, stopId: string, input: { decision:
     createdAt: ctx.now,
   };
 
-  const version = nextDclVersion(ctx.s, source.vehicleModelId);
+  // A stop of the mainline head stays on the mainline; a stop of an older set is a patch of it.
+  const patchOf = mainlineRelease(ctx.s, source.vehicleModelId)?.id === source.id ? null : source.id;
+  const version = nextDclVersion(ctx.s, source.vehicleModelId, patchOf);
   const groups = { ...source.groups, [stop.groupId]: commitId };
   const id = newId('rl');
   const resolvedConfigId = resolveConfig(ctx, { vehicleModelId: source.vehicleModelId, kind: 'RELEASE', sourceId: id, baseReleaseId: source.id, groups, label: `DCL ${version}` });
@@ -127,15 +130,13 @@ export function decideEmergencyStop(ctx: Ctx, stopId: string, input: { decision:
     sequence: (releasesOf(ctx.s, source.vehicleModelId)[0]?.sequence ?? 0) + 1,
     notes: `紧急停用 ${stop.policyId}：${stop.reason}`,
     emergency: { stopId: stop.id, sourceReleaseId: source.id, policyId: stop.policyId },
+    patchOf,
     publishedBy: ctx.user().username,
     publishedAt: ctx.now,
   };
   draft.status = 'APPROVED';
   draft.newReleaseId = id;
-  // Previews built on the old newest set can no longer be frozen.
-  for (const p of Object.values(ctx.s.mergePlans)) {
-    if (p.vehicleModelId === source.vehicleModelId && ['READY', 'CONFLICT', 'BLOCKED'].includes(p.status)) p.status = 'SUPERSEDED';
-  }
+  supersedeMovedPlans(ctx.s, source.vehicleModelId);
   return id;
 }
 

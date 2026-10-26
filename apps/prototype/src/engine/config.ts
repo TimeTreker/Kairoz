@@ -59,6 +59,16 @@ export function latestRelease(s: State, vehicleModelId: string): Release | undef
     .sort((a, b) => b.sequence - a.sequence)[0];
 }
 
+/**
+ * The head of the model's mainline (主线): the newest set that is not a patch of an older one.
+ * Merges, new Features and new software build on it; same-software patches never move it.
+ */
+export function mainlineRelease(s: State, vehicleModelId: string): Release | undefined {
+  return Object.values(s.releases)
+    .filter((r) => r.vehicleModelId === vehicleModelId && r.patchOf === null)
+    .sort((a, b) => b.sequence - a.sequence)[0];
+}
+
 /** The configuration a Feature starts from. Until a release exists it is the empty initial config. */
 export function baseConfig(s: State, feature: Pick<Feature, 'baseReleaseId' | 'groupId'>): GroupConfig {
   if (feature.baseReleaseId === null) return emptyConfig();
@@ -142,8 +152,9 @@ export function createFeature(ctx: Ctx, input: { workspaceId: string; groupId: s
   if (Object.values(ctx.s.features).some((f) => f.groupId === group.id && f.name === input.name)) {
     throw conflict('FEATURE_NAME_TAKEN', `group ${group.id} already has a feature named ${input.name}`);
   }
-  // A Feature starts on the newest set, or on a set the team names (e.g. the base its vehicles' new software takes).
-  let base = latestRelease(ctx.s, workspace.vehicleModelId)?.id ?? null;
+  // A Feature starts on the mainline, or on a set the team names (the base its vehicles' new
+  // software takes, or an older set a same-software patch fixes).
+  let base = mainlineRelease(ctx.s, workspace.vehicleModelId)?.id ?? null;
   if (input.baseReleaseId) {
     const release = ctx.s.releases[input.baseReleaseId];
     if (!release) throw notFound('policy set', input.baseReleaseId);

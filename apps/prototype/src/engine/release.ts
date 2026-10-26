@@ -3,16 +3,20 @@
 // are many-to-many: later applicability records add or withdraw software versions without a new
 // set version. Publishing changes no vehicle: a vehicle resolves to the newest set that applies to
 // its software, and only receipts change what it runs.
+//
+// Sets form a mainline (主线) that merges build on, and same-software patches (补丁): a patch of an
+// older set serves only software versions that set was in effect for, is numbered in its
+// major.minor line, and never moves the mainline.
 
-import { diffConfig, emptyConfig } from '../domain/config.ts';
-import type { ConfigDiff } from '../domain/config.ts';
+import { diffConfig, emptyConfig, sameConfig } from '../domain/config.ts';
+import type { ConfigDiff, GroupConfig } from '../domain/config.ts';
 import { conflict, notFound, rule } from '../domain/errors.ts';
 import { newId } from '../domain/ids.ts';
-import { latestRelease } from './config.ts';
+import { mainlineRelease } from './config.ts';
 import type { Ctx } from './engine.ts';
 import { isConfirmed } from './integration.ts';
 import { commitSnapshot, resolveFiles } from './snapshots.ts';
-import type { Candidate, Release, Resource, State } from './types.ts';
+import type { Candidate, MergePlan, Release, Resource, State } from './types.ts';
 import { candidateTestStatus, candidateVerifyBlockers, getCandidate, resolveConfig } from './validation.ts';
 
 export const DCL_VERSION = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
@@ -73,12 +77,68 @@ export function testedVersions(s: State, c: Candidate): string[] {
   return [...new Set(versions)].sort(compareVersions);
 }
 
-/** Suggested next DCL version: the next patch of the newest release, or 1.0.0. */
-export function nextDclVersion(s: State, vehicleModelId: string): string {
-  const latest = latestRelease(s, vehicleModelId);
-  if (!latest) return '1.0.0';
-  const [major, minor, patch] = latest.dclVersion.split('.').map(Number);
+/** A version's major.minor line, e.g. 1.0 for 1.0.2. */
+export function versionLine(version: string): string {
+  return version.split('.').slice(0, 2).join('.');
+}
+
+/** The model's highest set version, or the highest of one major.minor line. */
+export function highestVersion(s: State, vehicleModelId: string, line?: string): string | null {
+  const versions = releasesOf(s, vehicleModelId)
+    .map((r) => r.dclVersion)
+    .filter((v) => line === undefined || versionLine(v) === line);
+  return versions.sort(compareVersions).at(-1) ?? null;
+}
+
+/**
+ * Suggested next DCL version: on the mainline, the next patch number above every version of the
+ * model (1.0.0 for the first set); for a patch of an older set, the next one in that set's line.
+ */
+export function nextDclVersion(s: State, vehicleModelId: string, patchOf: string | null = null): string {
+  const target = patchOf ? s.releases[patchOf] : undefined;
+  const top = highestVersion(s, vehicleModelId, target ? versionLine(target.dclVersion) : undefined);
+  if (!top) return '1.0.0';
+  const [major, minor, patch] = top.split('.').map(Number);
   return `${major}.${minor}.${(patch ?? 0) + 1}`;
+}
+
+/**
+ * Sets a same-software patch may target: every set but the mainline head that is still in effect
+ * for some software version, newest first.
+ */
+export function patchTargets(s: State, vehicleModelId: string): Release[] {
+  const head = mainlineRelease(s, vehicleModelId);
+  return releasesOf(s, vehicleModelId).filter((r) => r.id !== head?.id && versionsInEffect(s, r).length > 0);
+}
+
+/** A set and the older sets it patches, back to the mainline set the line started from. */
+export function patchChain(s: State, releaseId: string): Release[] {
+  const chain: Release[] = [];
+  for (let r = s.releases[releaseId]; r; r = r.patchOf ? s.releases[r.patchOf] : undefined) chain.push(r);
+  return chain;
+}
+
+/**
+ * Whether a preview's or candidate's target moved since it was made: on the mainline, a newer
+ * mainline set; for a patch, the target no longer in effect for a software version it served.
+ */
+export function targetMoved(s: State, x: Pick<MergePlan, 'vehicleModelId' | 'targetReleaseId' | 'patch'>): boolean {
+  if (!x.patch) return (mainlineRelease(s, x.vehicleModelId)?.id ?? null) !== x.targetReleaseId;
+  return x.patch.versions.some((v) => setInEffect(s, x.vehicleModelId, v)?.id !== x.targetReleaseId);
+}
+
+/** After a set is published, previews whose target moved can no longer be frozen. */
+export function supersedeMovedPlans(s: State, vehicleModelId: string): void {
+  for (const p of Object.values(s.mergePlans)) {
+    if (p.vehicleModelId === vehicleModelId && ['READY', 'CONFLICT', 'BLOCKED'].includes(p.status) && targetMoved(s, p)) p.status = 'SUPERSEDED';
+  }
+}
+
+/** The same-software patches a Feature's current head went into. */
+export function patchesOf(s: State, feature: { id: string; headCommitId: string | null }): Release[] {
+  return Object.values(s.releases)
+    .filter((r) => r.patchOf !== null && r.candidateId && s.candidates[r.candidateId]?.sources.some((x) => x.featureId === feature.id && x.commitId === feature.headCommitId))
+    .sort((a, b) => a.sequence - b.sequence);
 }
 
 /** Promotes a Verified candidate to a formal release. */
@@ -93,20 +153,39 @@ export function promoteCandidate(ctx: Ctx, candidateId: string, input: { dclVers
   if (blockers.length) throw rule('VERIFY_BLOCKED', 'the candidate’s current tests no longer verify it', { issues: blockers });
   const plan = ctx.s.mergePlans[c.mergePlanId];
   if (!plan || !isConfirmed(ctx.s, plan)) throw rule('PROCESSING_NOT_CONFIRMED', 'DCL engineering has not confirmed this processing set');
-  if ((latestRelease(ctx.s, c.vehicleModelId)?.id ?? null) !== c.targetReleaseId) {
-    throw rule('TARGET_CHANGED', 'a newer release was published after this candidate was frozen; integrate again');
+  if (targetMoved(ctx.s, c)) {
+    throw rule('TARGET_CHANGED', c.patch ? 'the set this patch targets was replaced for its software since the candidate was frozen; integrate again' : 'a newer release was published after this candidate was frozen; integrate again');
   }
   const version = input.dclVersion.trim();
   if (!DCL_VERSION.test(version)) throw rule('INVALID_DCL_VERSION', 'a DCL version is major.minor.patch, e.g. 1.0.1');
   const existing = releasesOf(ctx.s, c.vehicleModelId);
   if (existing.some((r) => r.dclVersion === version)) throw conflict('DCL_VERSION_TAKEN', `policy set ${version} already exists`);
   const newest = existing[0];
-  if (newest && compareVersions(version, newest.dclVersion) <= 0) throw rule('DCL_VERSION_NOT_NEWER', `the version must be newer than policy set ${newest.dclVersion}`);
+  const target = c.patch ? ctx.s.releases[c.targetReleaseId!]! : null;
+  if (target) {
+    // A patch is numbered in its target's major.minor line, above every set of that line.
+    const line = versionLine(target.dclVersion);
+    const top = highestVersion(ctx.s, c.vehicleModelId, line)!;
+    if (versionLine(version) !== line || compareVersions(version, top) <= 0) {
+      throw rule('PATCH_VERSION_LINE', `a patch of policy set ${target.dclVersion} is numbered ${line}.x, newer than ${top}`);
+    }
+  } else {
+    const top = highestVersion(ctx.s, c.vehicleModelId);
+    if (top && compareVersions(version, top) <= 0) throw rule('DCL_VERSION_NOT_NEWER', `the version must be newer than policy set ${top}`);
+  }
 
   const versions = [...new Set(input.vehicleIntegrationVersions.map((v) => v.trim()).filter(Boolean))].sort(compareVersions);
   if (versions.length === 0) throw rule('NO_VEHICLE_VERSIONS', 'list the whole-vehicle software versions this release applies to');
   const unknown = versions.filter((v) => !ctx.s.softwareVersions[`${c.vehicleModelId}::${v}`]);
   if (unknown.length) throw rule('UNKNOWN_SOFTWARE_VERSION', 'these software versions are not recorded', { issues: unknown });
+  if (target) {
+    // Same software only: a patch replaces its target where the target is in effect, nowhere else.
+    const serving = new Set(versionsInEffect(ctx.s, target));
+    const outside = versions.filter((v) => !serving.has(v));
+    if (outside.length) {
+      throw rule('PATCH_VERSION_OUTSIDE_TARGET', `policy set ${target.dclVersion} is in effect for ${[...serving].join(', ')} only`, { issues: outside.map((v) => `${c.vehicleModelId} ${v}`) });
+    }
+  }
   // Applicability is evidence too: on a formal baseline each listed version must have passed
   // integration testing. The first integration is tested before any software is released, on
   // vehicles without a formal version, and lists the versions from trusted software records.
@@ -131,6 +210,7 @@ export function promoteCandidate(ctx: Ctx, candidateId: string, input: { dclVers
     sequence: (newest?.sequence ?? 0) + 1,
     notes: input.notes?.trim() ?? '',
     emergency: null,
+    patchOf: target?.id ?? null,
     publishedBy: ctx.user().username,
     publishedAt: ctx.now,
   };
@@ -144,6 +224,7 @@ export function promoteCandidate(ctx: Ctx, candidateId: string, input: { dclVers
   }
   // The participating Features are closed; later changes start new Features on this release.
   // Subsystem releases it included are now part of a formal release, and so are their Features.
+  // A patch's Features stay open for the mainline: the fix is merged there too, or declined.
   const included = c.subsystems.flatMap((ref) => {
     const r = ctx.s.subsystemReleases[ref.subsystemReleaseId]!;
     r.status = 'INTEGRATED';
@@ -152,14 +233,11 @@ export function promoteCandidate(ctx: Ctx, candidateId: string, input: { dclVers
   for (const src of [...c.sources, ...included]) {
     const f = ctx.s.features[src.featureId];
     if (f && f.stage === 'INTEGRATED') {
-      f.stage = 'ARCHIVED';
+      f.stage = !target ? 'ARCHIVED' : sameConfig(f.draft as GroupConfig, commitSnapshot(ctx.s, src.commitId)) ? 'VERIFIED' : 'DRAFT';
       f.updatedAt = ctx.now;
     }
   }
-  // Previews built on the old target can no longer be frozen.
-  for (const p of Object.values(ctx.s.mergePlans)) {
-    if (p.vehicleModelId === c.vehicleModelId && ['READY', 'CONFLICT', 'BLOCKED'].includes(p.status)) p.status = 'SUPERSEDED';
-  }
+  supersedeMovedPlans(ctx.s, c.vehicleModelId);
   return id;
 }
 

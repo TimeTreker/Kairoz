@@ -4,9 +4,19 @@ import { migrate } from '../src/engine/migrate.ts';
 import { demoState } from '../src/engine/seed.ts';
 import { STATE_SCHEMA } from '../src/engine/types.ts';
 
-/** A schema 13 save: a copy of a demo (today's by default) without the fields schema 14 added. */
-function schema13(demo: unknown = demoState()): Record<string, any> {
+/** A schema 15 save: a copy of a demo (today's by default) without the fields schema 16 added. */
+function schema15(demo: unknown = demoState()): Record<string, any> {
   const s = JSON.parse(JSON.stringify(demo)) as Record<string, any>;
+  s.schema = 15;
+  for (const r of Object.values(s.releases) as any[]) delete r.patchOf;
+  for (const p of Object.values(s.mergePlans) as any[]) delete p.patch;
+  for (const c of Object.values(s.candidates) as any[]) delete c.patch;
+  return s;
+}
+
+/** A schema 13 save: a schema 15 save without the fields schema 14 added. */
+function schema13(demo: unknown = demoState()): Record<string, any> {
+  const s = schema15(demo);
   s.schema = 13;
   delete s.environmentChanges;
   delete s.lifecycleEvents;
@@ -157,6 +167,16 @@ describe('saved state migration', () => {
     assert.deepEqual(migrated.applicability, []);
     assert.equal(migrated.directory, null);
     assert.deepEqual(migrated.releases, current.releases);
+  });
+
+  test('a schema 15 save puts every policy set, preview and candidate on the mainline', () => {
+    const current = JSON.parse(JSON.stringify(demoState()));
+    const migrated = migrate(schema15(current))!;
+    assert.equal(migrated.schema, STATE_SCHEMA);
+    for (const r of Object.values(migrated.releases)) assert.equal(r.patchOf, null, r.dclVersion);
+    for (const p of Object.values(migrated.mergePlans)) assert.equal(p.patch, null, p.id);
+    for (const c of Object.values(migrated.candidates)) assert.equal(c.patch, null, c.label);
+    assert.deepEqual(migrated, current);
   });
 
   test('a schema 13 save gains empty environment moves and lifecycle history', () => {

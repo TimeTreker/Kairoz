@@ -25,7 +25,7 @@ import {
   isCollectible,
   isConfirmed,
   isMergeWorkspace,
-  latestRelease,
+  mainlineRelease,
   planGroups,
   previewMerge,
   processingSummary,
@@ -152,7 +152,7 @@ export function IntegrationPage({ candidateId }: { candidateId?: string }) {
   }
 
   const project = state.workspaces[projectId]!;
-  const release = latestRelease(state, project.vehicleModelId);
+  const release = mainlineRelease(state, project.vehicleModelId);
   const domainOnly = !project.scopes.includes('Vehicle');
   const subsystems = subsystemReleasesOf(state, projectId);
   const openChecks = Object.values(state.applicabilityChecks).filter((c) => c.testWorkspaceId === workspace?.id && ['OPEN', 'TESTING'].includes(c.status)).length;

@@ -97,6 +97,7 @@ export const FEEDBACK_LABELS: Record<string, Bilingual> = {
   REVIEW_REJECTED: b('敏感审核拒绝', 'Sensitive review rejected'),
   BINDING_CHANGED: b('DCL 调整处理绑定', 'Binding changed by DCL'),
   REFERENCE_REVOKED: b('引用被撤销', 'Reference revoked'),
+  MAINLINE_DECLINED: b('补丁修复不合入主线', 'Patch fix not merged into the mainline'),
 };
 
 export const DENY_REASON_LABELS: Record<string, Bilingual> = {
@@ -275,9 +276,12 @@ Object.assign(ERROR_LABELS, {
   UNAPPROVED_SENSITIVE_FILES: b('集合中有未获敏感审核批准的文件', 'Sensitive files in the set lack an approval'),
   ALREADY_CONFIRMED: b('该预览已确认', 'This preview is already confirmed'),
   PROCESSING_NOT_CONFIRMED: b('须先由 DCL 确认最终处理集合', 'DCL must confirm the final processing set first'),
-  TARGET_CHANGED: b('目标版本已变化，请重新预览', 'The target release changed; preview again'),
+  TARGET_CHANGED: b('目标策略集已变化，请重新预览', 'The target policy set changed; preview again'),
   SOURCE_CHANGED: b('来源 Feature 在预览后有变化，请重新预览', 'A source Feature changed since the preview; preview again'),
-  CANDIDATE_OPEN: b('本工作区还有未结束的集成候选', 'An open candidate exists in this workspace'),
+  CANDIDATE_OPEN: b('本工作区在这条线上还有未结束的集成候选', 'An open candidate exists in this workspace on this line'),
+  NOT_A_PATCH_TARGET: b('补丁只能以仍有整车软件版本在用的旧策略集为目标，不能是主线', 'A patch targets an older policy set still in effect for some software, not the mainline'),
+  PATCH_FEATURES_ONLY: b('同软件版本补丁是整车合并，只收 Verified Feature', 'A same-software patch is a whole-vehicle merge of Verified Features'),
+  NOT_PATCHED: b('该 Feature 不是进入补丁后待合入主线的 Verified Feature', 'Not a Verified Feature from a patch waiting for the mainline'),
   NO_INTEGRATION_WORKSPACE: b('没有以本项目为来源的集成测试工作区', 'No integration workspace takes this project as its source'),
   LABEL_REQUIRED: b('请为候选命名', 'Name the candidate'),
   CANDIDATE_CLOSED: b('候选已结束', 'The candidate is closed'),
@@ -289,7 +293,9 @@ Object.assign(ERROR_LABELS, {
   CANDIDATE_NOT_VERIFIED: b('只有通过集成测试的候选才能发布', 'Only a candidate verified by integration testing can be released'),
   INVALID_DCL_VERSION: b('策略集版本格式为 major.minor.patch，例如 1.0.1', 'A policy set version is major.minor.patch, e.g. 1.0.1'),
   DCL_VERSION_TAKEN: b('该策略集版本已存在', 'That policy set version already exists'),
-  DCL_VERSION_NOT_NEWER: b('新版本必须高于已发布的最新策略集版本', 'The version must be newer than the latest policy set'),
+  DCL_VERSION_NOT_NEWER: b('主线版本必须高于本车型已有的所有策略集版本', 'A mainline version must be newer than every policy set of the model'),
+  PATCH_VERSION_LINE: b('补丁沿目标的 major.minor 编号，并高于该系列已有的版本', 'A patch is numbered in its target’s major.minor line, above every set of that line'),
+  PATCH_VERSION_OUTSIDE_TARGET: b('补丁只能适用目标策略集正在服务的整车软件版本', 'A patch applies only to the software versions its target is in effect for'),
   NO_VEHICLE_VERSIONS: b('请选择适用的整车软件版本', 'Choose the whole-vehicle software versions it applies to'),
   VERSION_NOT_TESTED: b('部分适用版本没有通过的集成测试', 'Some listed software versions have no passing integration test'),
   OTA_BLOCKED: b('OTA 被拒绝：并非所有车辆都满足条件', 'OTA blocked: not every vehicle qualifies'),

@@ -95,9 +95,9 @@ describe('subsystem integration', () => {
 
   test('publishing never touches releases: no DCL version, no production target, no new baseline', () => {
     const w = new World(demoState());
-    const before = { latest: integ.latestRelease(w.s, 'X89')!.id, next: rel.nextDclVersion(w.s, 'X89'), releases: Object.keys(w.s.releases).length };
+    const before = { latest: integ.mainlineRelease(w.s, 'X89')!.id, next: rel.nextDclVersion(w.s, 'X89'), releases: Object.keys(w.s.releases).length };
     const ss = publishDomain(w, 'ADC', [verified(w, 'adc-parking', 'parking_one', 'p1')]);
-    assert.deepEqual({ latest: integ.latestRelease(w.s, 'X89')!.id, next: rel.nextDclVersion(w.s, 'X89'), releases: Object.keys(w.s.releases).length }, before);
+    assert.deepEqual({ latest: integ.mainlineRelease(w.s, 'X89')!.id, next: rel.nextDclVersion(w.s, 'X89'), releases: Object.keys(w.s.releases).length }, before);
     assert.equal(rel.releaseFor(w.s, w.s.resources['VEH-201']!).release?.id, before.latest, 'production still resolves to the formal release');
     // Neither the release account nor the domain account can promote a subsystem candidate.
     const cand = w.s.subsystemReleases[ss]!.candidateId;
@@ -175,6 +175,6 @@ describe('subsystem integration', () => {
     w.as('release', (c) => rel.promoteCandidate(c, cand, { dclVersion: '1.1.0', vehicleIntegrationVersions: ['1.0'] }));
     assert.equal(w.s.subsystemReleases[adc]!.status, 'INTEGRATED');
     assert.equal(w.s.features[parking]!.stage, 'ARCHIVED');
-    assert.equal(integ.latestRelease(w.s, 'X89')!.dclVersion, '1.1.0');
+    assert.equal(integ.mainlineRelease(w.s, 'X89')!.dclVersion, '1.1.0');
   });
 });
