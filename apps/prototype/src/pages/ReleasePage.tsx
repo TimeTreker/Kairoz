@@ -19,7 +19,7 @@ import { membersOf, ungroupedVehicles, vehicleGroupsOf } from '../engine/fleet.t
 import { answerConfigRequest, cancelOta, createOta, expandOta, otaProblems, otaRollouts, outsideRollout, pauseOta, resumeOta, rollbackOta, rollbackProblems } from '../engine/ota.ts';
 import { isOpenCheck } from '../engine/applicability.ts';
 import { releaseWorkspace } from '../engine/emergency.ts';
-import { applicableVersions, compareVersions, nextDclVersion, previousRelease, promoteCandidate, releaseConfiguration, releaseFor, releasesOf, setInEffect, testedVersions, versionLine, versionsInEffect } from '../engine/release.ts';
+import { applicableVersions, compareVersions, nextDclVersion, previousRelease, promoteCandidate, releaseConfiguration, releaseFor, releasesOf, setInEffect, targetMoved, testedVersions, versionLine, versionsInEffect } from '../engine/release.ts';
 import type { Candidate, Deployment, Release, State, VehicleGroup } from '../engine/types.ts';
 import { useI18n } from '../i18n/i18n.tsx';
 import { issueLabel } from '../i18n/issues.ts';
@@ -131,7 +131,15 @@ function ReleasesTab({ modelId, workspaceId }: { modelId: string; workspaceId: s
           columns={[
             { title: L('候选', 'Candidate'), render: (_, c) => <a onClick={() => navigate(`integration/${c.id}`)}><Mono>{c.label}</Mono></a> },
             { title: L('来源', 'Sources'), render: (_, c) => [...c.subsystems.map((x) => state.subsystemReleases[x.subsystemReleaseId]?.label), ...c.sources.map((x) => state.features[x.featureId]?.name)].join(', ') },
-            { title: L('目标策略集', 'Target set'), render: (_, c) => <TargetSet targetReleaseId={c.targetReleaseId} patch={c.patch} /> },
+            {
+              title: L('目标策略集', 'Target set'),
+              render: (_, c) => (
+                <Space size={4} wrap>
+                  <TargetSet targetReleaseId={c.targetReleaseId} patch={c.patch} />
+                  {targetMoved(state, c) && <Tag color="red">{L('目标已变化，需重新集成', 'target changed: integrate again')}</Tag>}
+                </Space>
+              ),
+            },
             { title: L('已测试的整车版本', 'Tested software'), render: (_, c) => testedVersions(state, c).map((v) => <Tag key={v}>{v}</Tag>) },
             { title: L('集成验证', 'Verified'), render: (_, c) => `${state.accounts[c.verifiedBy ?? '']?.displayName ?? '—'} · ${c.verifiedAt ? when(c.verifiedAt) : ''}` },
             {
@@ -262,11 +270,13 @@ function PromoteModal({ candidate, onClose }: { candidate: Candidate; onClose: (
     .map((v) => v.version)
     .sort(compareVersions);
   const [form] = Form.useForm<{ dclVersion: string; versions: string[]; notes: string }>();
+  const moved = targetMoved(state, candidate);
   return (
     <Modal
       open
       title={`${L('发布候选', 'Promote candidate')} · ${candidate.label}`}
       okText={L('发布', 'Promote')}
+      okButtonProps={{ disabled: moved }}
       onCancel={onClose}
       onOk={() =>
         form.validateFields().then((v) => {
@@ -275,7 +285,15 @@ function PromoteModal({ candidate, onClose }: { candidate: Candidate; onClose: (
         })
       }
     >
-      {target && (
+      {moved && (
+        <Alert
+          type="warning"
+          showIcon
+          style={{ marginBottom: 12 }}
+          title={candidate.patch ? L('它所补的策略集已被更新的策略集替换，这个候选不能再发布；请在新的策略集上重新集成。', 'The set it patches was replaced by a newer one for its software, so this candidate can no longer be released; integrate again on the new set.') : L('主线在冻结后又发布了新的策略集，这个候选不能再发布；请重新集成。', 'A newer mainline set was published after it was frozen, so this candidate can no longer be released; integrate again.')}
+        />
+      )}
+      {target && !moved && (
         <Alert
           type="info"
           showIcon

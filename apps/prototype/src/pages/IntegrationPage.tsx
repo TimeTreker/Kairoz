@@ -34,7 +34,7 @@ import {
   publishSubsystem,
   verifiedSources,
 } from '../engine/integration.ts';
-import { patchesOf, patchTargets } from '../engine/release.ts';
+import { patchesOf, patchTargets, targetMoved } from '../engine/release.ts';
 import type { Candidate, Feature, MergeConflict, MergePlan, State, SubsystemRef, SubsystemRelease } from '../engine/types.ts';
 import { cancelDeployment, candidateTestStatus, candidateVehicleProblems, candidateVerifyBlockers, deploymentsOf, dispatchCandidate, recordCandidateTest, verifyCandidate } from '../engine/validation.ts';
 import { useI18n } from '../i18n/i18n.tsx';
@@ -258,7 +258,8 @@ function MergeTab({ projectId, onCandidate }: { projectId: string; onCandidate: 
           <Typography.Text type="secondary">{L('合并目标', 'Merge onto')}</Typography.Text>
           <Segmented
             value={patchOf ? 'PATCH' : 'MAINLINE'}
-            onChange={(v) => setLine(v as 'MAINLINE' | 'PATCH')}
+            // A choice made for one line never carries over into another.
+            onChange={(v) => (setLine(v as 'MAINLINE' | 'PATCH'), setSelected([]), setSelectedSubs([]))}
             options={[
               { value: 'MAINLINE', label: L('主线', 'Mainline') },
               {
@@ -272,7 +273,7 @@ function MergeTab({ projectId, onCandidate }: { projectId: string; onCandidate: 
               },
             ]}
           />
-          {patchOf && <Select style={{ minWidth: 300 }} value={patchOf} onChange={setTarget} options={targets.map((r) => ({ value: r.id, label: patchTargetLabel(state, r, L) }))} />}
+          {patchOf && <Select style={{ minWidth: 300 }} value={patchOf} onChange={(v) => (setTarget(v), setSelected([]))} options={targets.map((r) => ({ value: r.id, label: patchTargetLabel(state, r, L) }))} />}
         </Space>
       )}
       {patchOf && (
@@ -863,7 +864,15 @@ function CandidateDetail({ candidate: c }: { candidate: Candidate }) {
           )}
         </Hint>
         {c.status === 'TESTING' && blockers.length > 0 && <Alert type="warning" showIcon style={{ marginBottom: 12 }} title={L('尚不能确认', 'Not verifiable yet')} description={blockers.map((x) => B(issueLabel(x), x)).join(L('；', '; '))} />}
-        {c.status === 'VERIFIED' && !subsystem && <Alert type="success" showIcon style={{ marginBottom: 12 }} title={L('候选已通过集成验证，可由配置发布推广为正式版本。', 'The candidate is verified and can be promoted to a release by configuration release.')} />}
+        {open && targetMoved(state, c) && (
+          <Alert
+            type="warning"
+            showIcon
+            style={{ marginBottom: 12 }}
+            title={L('目标策略集已变化，这个候选不能再发布：取消它，在新的目标上重新集成。', 'Its target set changed, so this candidate can no longer be released: cancel it and integrate again on the new target.')}
+          />
+        )}
+        {c.status === 'VERIFIED' && !subsystem && !targetMoved(state, c) && <Alert type="success" showIcon style={{ marginBottom: 12 }} title={L('候选已通过集成验证，可由配置发布推广为正式版本。', 'The candidate is verified and can be promoted to a release by configuration release.')} />}
         {c.status === 'VERIFIED' && subsystem && (
           <Alert
             type="success"

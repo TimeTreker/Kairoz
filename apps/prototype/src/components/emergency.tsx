@@ -24,8 +24,8 @@ export function EmergencyStopsCard({ modelId }: { modelId: string }) {
     <Card title={L('紧急停用', 'Emergency stops')}>
       <Hint>
         {L(
-          '紧急停用由 DCL 工程或配置发布申请、另一名配置发布批准。批准后生成新的策略集版本（源策略集去掉该策略），只适用于源策略集当前生效的软件版本；车辆仍需配置 OTA 才会实际停用。进行中的集成候选需基于新策略集重新集成。',
-          'An emergency stop is asked by DCL engineering or configuration release and decided by another release person. Approval publishes a new policy set version (the source set without the policy) for exactly the software versions the source is in effect for; vehicles stop the policy only after a configuration OTA. Open integration candidates must integrate again on the new set.',
+          '紧急停用由 DCL 工程或配置发布申请、另一名配置发布批准。批准后生成新的策略集版本（源策略集去掉该策略），只适用于源策略集当前生效的软件版本；车辆仍需配置 OTA 才会实际停用。停用主线策略集时新版本仍在主线上，停用旧策略集时它是该策略集的补丁；以被停用策略集为目标的进行中候选需重新集成。',
+          'An emergency stop is asked by DCL engineering or configuration release and decided by another release person. Approval publishes a new policy set version (the source set without the policy) for exactly the software versions the source is in effect for; vehicles stop the policy only after a configuration OTA. Stopping the mainline set keeps the new version on the mainline; stopping an older set makes it a patch of that set. Open candidates that target the stopped set must integrate again.',
         )}
       </Hint>
       <Table
