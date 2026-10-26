@@ -251,6 +251,18 @@ export const SCENARIOS: Scenario[] = [
     ],
   },
   {
+    key: 'technical',
+    titleZh: 'DCL 技术变更',
+    titleEn: 'DCL technical changes',
+    steps: [
+      { account: 'dcl', page: 'processing/pipelines', zh: '发布处理版本 default-edge-bin-log：车端、binary，步骤 Receive、Compress、Encrypt', en: 'Publish pipeline default-edge-bin-log: edge, binary, steps Receive, Compress, Encrypt', expectZh: '得到 default-edge-bin-log@2；已绑定 @1 的文件不变', expectEn: 'default-edge-bin-log@2; files bound to @1 keep it' },
+      { account: 'dcl', page: 'processing/technical', zh: '新建技术变更：转向团队工作区 · 转向组，名称 bin_log_edge_v2', en: 'New technical change: steering workspace · steering group, named bin_log_edge_v2', expectZh: '技术分支基于主线策略集，只能调整处理绑定', expectEn: 'A technical branch on the mainline set that may only change processing bindings' },
+      { account: 'dcl', page: 'processing/technical', zh: '在文件列表“调整绑定”，车端处理选 @2，然后由 DCL 自己提交', en: 'Adjust binding in Files to the @2 edge pipeline, then submit it as DCL', expectZh: '生成 r001，DCL Ready；每次采集的车端 CPU 下降', expectEn: 'Commit r001, DCL Ready; each capture’s edge CPU drops' },
+      { account: 'steering_tester', workspace: 'team-steering', page: 'features', zh: '下发到转向研发车组，先仿真后实车登记 PASS，确认 Verified', en: 'Dispatch to 转向研发车组, record PASS (simulation first) and confirm Verified', expectZh: '本组测试验证技术变更；技术变更不能退回给业务', expectEn: 'The group’s testers verify it; a technical change cannot be returned to business' },
+      { account: 'integrator', workspace: 'x89-project', page: 'integration', zh: '在主线合并中预览 bin_log_edge_v2，DCL 确认后冻结，集成测试与发布照常', en: 'Preview bin_log_edge_v2 in a mainline merge; after DCL confirms, freeze, then integration testing and release as usual', expectZh: '新策略集与上一版相比没有策略变化，只有处理绑定不同', expectEn: 'The new set differs from the previous one only in processing bindings, with no policy changes' },
+    ],
+  },
+  {
     key: 'aftersales',
     titleZh: '售后回捞与 Grader',
     titleEn: 'After-sales captures and the grader',

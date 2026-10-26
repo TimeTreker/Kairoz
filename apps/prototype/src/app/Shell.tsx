@@ -216,38 +216,39 @@ export function Shell() {
         />
       </Layout.Sider>
       <Layout>
-        <Layout.Header style={{ background: '#fff', padding: '0 20px', display: 'flex', alignItems: 'center', gap: 12, borderBottom: '1px solid #eef0f4' }}>
+        <Layout.Header className="kz-header">
           <Select
-            style={{ minWidth: 240 }}
+            className="kz-header-workspace"
             value={workspace?.id}
             placeholder={L('没有可用工作区', 'No workspace available')}
             options={options}
             onChange={(v) => setSession({ workspaceId: v })}
           />
-          {workspace && <Tag>{B(WORKSPACE_KIND_LABELS[workspace.kind])}</Tag>}
-          <div style={{ flex: 1 }} />
-          <Segmented size="small" value={lang} onChange={(v) => setLang(v as 'zh' | 'en')} options={[{ label: '中', value: 'zh' }, { label: 'EN', value: 'en' }]} />
-          <PrototypeMenu compact />
-          {workspace && <NotificationBell />}
-          <Dropdown
-            menu={{
-              items: [
-                {
-                  key: 'roles',
-                  type: 'group',
-                  label: L('当前工作区的角色', 'Roles in this workspace'),
-                  children: (roles.length ? roles : [...allRoles]).map((r) => ({ key: r, label: B(ROLE_LABELS[r]), disabled: true })),
-                },
-                { type: 'divider' },
-                { key: 'switch', label: L('切换账号', 'Switch account'), onClick: () => setSession({ username: null, workspaceId: null }) },
-              ],
-            }}
-          >
-            <Space style={{ cursor: 'pointer' }}>
-              <Avatar size="small" icon={<UserOutlined />} />
-              <span>{actor.displayName}</span>
-            </Space>
-          </Dropdown>
+          {workspace && <Tag className="kz-header-kind">{B(WORKSPACE_KIND_LABELS[workspace.kind])}</Tag>}
+          <div className="kz-header-tools">
+            <Segmented size="small" value={lang} onChange={(v) => setLang(v as 'zh' | 'en')} options={[{ label: '中', value: 'zh' }, { label: 'EN', value: 'en' }]} />
+            <PrototypeMenu compact />
+            {workspace && <NotificationBell />}
+            <Dropdown
+              menu={{
+                items: [
+                  {
+                    key: 'roles',
+                    type: 'group',
+                    label: L('当前工作区的角色', 'Roles in this workspace'),
+                    children: (roles.length ? roles : [...allRoles]).map((r) => ({ key: r, label: B(ROLE_LABELS[r]), disabled: true })),
+                  },
+                  { type: 'divider' },
+                  { key: 'switch', label: L('切换账号', 'Switch account'), onClick: () => setSession({ username: null, workspaceId: null }) },
+                ],
+              }}
+            >
+              <Space style={{ cursor: 'pointer' }}>
+                <Avatar size="small" icon={<UserOutlined />} />
+                <span className="kz-header-name">{actor.displayName}</span>
+              </Space>
+            </Dropdown>
+          </div>
         </Layout.Header>
         <Layout.Content>
           {workspace && !['org', 'accounts', 'audit', 'guide', 'simulator', 'acceptance'].includes(page) && (

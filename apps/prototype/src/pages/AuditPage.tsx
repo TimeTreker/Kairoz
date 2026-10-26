@@ -20,7 +20,7 @@ export function AuditPage() {
         title={L('审计日志', 'Audit log')}
         subtitle={L('每次授权决定都会记录：允许时记录生效的那一条授权；拒绝时记录原因。', 'Every authorization decision is recorded: the grant that allowed it, or why it was denied.')}
         extra={
-          <Space>
+          <Space wrap>
             <Select allowClear placeholder={L('结果', 'Outcome')} style={{ width: 140 }} value={outcome} onChange={setOutcome} options={[{ value: 'ALLOWED', label: L('允许', 'Allowed') }, { value: 'DENIED', label: L('拒绝', 'Denied') }]} />
             <Input.Search allowClear placeholder={L('账号 / 操作 / 对象', 'Account / action / target')} onSearch={setText} style={{ width: 260 }} />
           </Space>

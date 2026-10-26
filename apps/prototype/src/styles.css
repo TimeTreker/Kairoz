@@ -33,10 +33,63 @@ body {
   place-items: center;
   font-weight: 700;
 }
+.kz-header.ant-layout-header {
+  background: #fff;
+  border-bottom: 1px solid #eef0f4;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  height: auto;
+  min-height: 64px;
+  line-height: normal;
+  padding: 12px 20px;
+}
+.kz-header-workspace {
+  min-width: 240px;
+}
+.kz-header-tools {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+/* Phone width: the workspace picker shrinks and the header keeps only the controls. */
+@media (max-width: 640px) {
+  .kz-header.ant-layout-header {
+    padding: 10px 16px;
+  }
+  .kz-header-workspace {
+    min-width: 0;
+    flex: 1 1 160px;
+  }
+  .kz-header-kind,
+  .kz-header-name {
+    display: none;
+  }
+}
 .kz-page {
   padding: 20px 24px 40px;
   max-width: 1440px;
 }
 .kz-sim-banner {
   background: repeating-linear-gradient(135deg, #fff7e6, #fff7e6 12px, #ffe7ba 12px, #ffe7ba 24px);
+}
+/* Narrow screens: wide tables and long segmented pickers scroll inside themselves, never the page. */
+.ant-table-content {
+  overflow-x: auto;
+}
+.kz-page .ant-segmented {
+  max-width: 100%;
+  overflow-x: auto;
+}
+.ant-descriptions-view {
+  overflow-x: auto;
+}
+.ant-descriptions-item-content,
+.ant-descriptions-item-content .ant-tag {
+  overflow-wrap: anywhere;
+}
+.ant-descriptions-item-content .ant-tag {
+  white-space: normal;
 }
