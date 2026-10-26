@@ -19,7 +19,7 @@ import { membersOf, ungroupedVehicles, vehicleGroupsOf } from '../engine/fleet.t
 import { answerConfigRequest, cancelOta, createOta, expandOta, otaProblems, otaRollouts, outsideRollout, pauseOta, resumeOta, rollbackOta, rollbackProblems } from '../engine/ota.ts';
 import { isOpenCheck } from '../engine/applicability.ts';
 import { releaseWorkspace } from '../engine/emergency.ts';
-import { applicableVersions, compareVersions, nextDclVersion, previousRelease, promoteCandidate, releaseConfiguration, releaseFor, releasesOf, setInEffect, targetMoved, testedVersions, versionLine, versionsInEffect } from '../engine/release.ts';
+import { applicableVersions, compareVersions, nextDclVersion, previousRelease, promoteCandidate, promoteVersionProblem, releaseConfiguration, releaseFor, releasesOf, setInEffect, targetMoved, testedVersions, versionLine, versionsInEffect } from '../engine/release.ts';
 import type { Candidate, Deployment, Release, State, VehicleGroup } from '../engine/types.ts';
 import { useI18n } from '../i18n/i18n.tsx';
 import { issueLabel } from '../i18n/issues.ts';
@@ -259,7 +259,7 @@ function ReleasesTab({ modelId, workspaceId }: { modelId: string; workspaceId: s
 
 function PromoteModal({ candidate, onClose }: { candidate: Candidate; onClose: () => void }) {
   const state = useEngineState();
-  const { L } = useI18n();
+  const { L, B } = useI18n();
   const run = useRun();
   const tested = new Set(testedVersions(state, candidate));
   // A patch replaces its target only where the target is in effect.
@@ -271,6 +271,8 @@ function PromoteModal({ candidate, onClose }: { candidate: Candidate; onClose: (
     .sort(compareVersions);
   const [form] = Form.useForm<{ dclVersion: string; versions: string[]; notes: string }>();
   const moved = targetMoved(state, candidate);
+  // Software a patch serves: listing it here would drop the patch's fixes unless this set carries them.
+  const blocked = (v: string) => promoteVersionProblem(state, candidate, v)?.code === 'PATCH_FIX_MISSING';
   return (
     <Modal
       open
@@ -301,7 +303,7 @@ function PromoteModal({ candidate, onClose }: { candidate: Candidate; onClose: (
           title={L(`同软件版本补丁：基于策略集 ${target.dclVersion}，版本号沿 ${versionLine(target.dclVersion)}.x 递增，只能适用它正在服务的软件版本。主线不变。`, `Same-software patch of policy set ${target.dclVersion}: numbered ${versionLine(target.dclVersion)}.x, for the software versions that set serves only. The mainline stays as it is.`)}
         />
       )}
-      <Form form={form} name="promote" layout="vertical" initialValues={{ dclVersion: nextDclVersion(state, candidate.vehicleModelId, target?.id ?? null), versions: versions.filter((v) => tested.has(v)), notes: '' }}>
+      <Form form={form} name="promote" layout="vertical" initialValues={{ dclVersion: nextDclVersion(state, candidate.vehicleModelId, target?.id ?? null), versions: versions.filter((v) => tested.has(v) && !blocked(v)), notes: '' }}>
         <Form.Item name="dclVersion" label={L('DCL 策略集版本', 'DCL policy set version')} rules={[{ required: true }]} extra={L('独立于整车软件版本，major.minor.patch', 'Independent of vehicle software, major.minor.patch')}>
           <Input />
         </Form.Item>
@@ -311,6 +313,11 @@ function PromoteModal({ candidate, onClose }: { candidate: Candidate; onClose: (
               {versions.map((v) => (
                 <Checkbox key={v} value={v}>
                   {`${candidate.vehicleModelId} ${v}`}{' '}
+                  {blocked(v) && (
+                    <Tooltip title={B(issueLabel(promoteVersionProblem(state, candidate, v)!.message), promoteVersionProblem(state, candidate, v)!.message)}>
+                      <Tag color="red">{L(`运行补丁 ${setInEffect(state, candidate.vehicleModelId, v)?.dclVersion}，其修复未合入`, `runs patch ${setInEffect(state, candidate.vehicleModelId, v)?.dclVersion}; its fixes are missing`)}</Tag>
+                    </Tooltip>
+                  )}
                   {tested.has(v) ? (
                     <Tag color="green">{L('已通过集成测试', 'integration tested')}</Tag>
                   ) : candidate.targetReleaseId === null ? (

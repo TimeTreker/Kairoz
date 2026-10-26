@@ -181,7 +181,7 @@ function BudgetTab() {
   const { L, B } = useI18n();
   const can = useCan();
   const run = useRun();
-  const canManage = can('budget.manage', {});
+  const canManage = can('budget.manage', { workspaceId: '*' });
   const [editing, setEditing] = useState<{ kind: 'model' | 'vehicle'; id: string } | null>(null);
   const [vehicleChoice, setVehicleChoice] = useState<string | undefined>();
   const models = Object.values(state.vehicleModels);

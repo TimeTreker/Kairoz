@@ -81,15 +81,20 @@ describe('collection budget', () => {
     assert.deepEqual([fire(w, 'VEH-202'), fire(w, 'VEH-202')].map((id) => [ev(w, id).status, ev(w, id).budgetNote]), [['UPLOADING', null], ['DROPPED', 'IO']]);
     w.as('dcl', (c) => setVehicleBudget(c, 'VEH-031', budget({ cpuSecondsPerHour: 1 })));
     assert.deepEqual([fire(w, 'VEH-031'), fire(w, 'VEH-031')].map((id) => ev(w, id).budgetNote), [null, 'CPU']);
-    w.as('dcl', (c) => setVehicleBudget(c, 'SIM-101', budget({ memoryMb: 5, networkMbPerHour: 1 })));
-    assert.deepEqual([fire(w, 'SIM-101'), fire(w, 'SIM-101')].map((id) => [ev(w, id).status, ev(w, id).budgetNote]), [['HELD', null], ['DROPPED', 'MEMORY']]);
+    w.as('dcl', (c) => setVehicleBudget(c, 'SIM-101', budget({ memoryMb: 7, networkMbPerHour: 4 })));
+    assert.deepEqual([fire(w, 'SIM-101'), fire(w, 'SIM-101'), fire(w, 'SIM-101')].map((id) => [ev(w, id).status, ev(w, id).budgetNote]), [['UPLOADING', null], ['HELD', null], ['DROPPED', 'MEMORY']]);
+    // A capture bigger than an hour's upload would wait forever: it is dropped at once.
+    w.as('dcl', (c) => setVehicleBudget(c, 'VEH-202', budget({ networkMbPerHour: 2, ioMbPerHour: 100 })));
+    const big = ev(w, fire(w, 'VEH-202'));
+    assert.deepEqual([big.status, big.budgetNote], ['DROPPED', 'NETWORK']);
   });
 
   test('HIGH-priority captures are collected over budget and evict waiting captures, lowest first', () => {
     const w = new World(demoState());
     const high = highPolicy(w);
-    w.as('dcl', (c) => setVehicleBudget(c, 'VEH-001', budget({ networkMbPerHour: 1, memoryMb: 7 })));
-    // Two NORMAL steering captures wait (3 MB each), then the HIGH one (60 s of text log, 1.2 MB) needs room.
+    w.as('dcl', (c) => setVehicleBudget(c, 'VEH-001', budget({ networkMbPerHour: 3, memoryMb: 10 })));
+    // One NORMAL steering capture uploads, two wait (3 MB each), then the HIGH one (60 s of text log, 1.2 MB) needs room.
+    fire(w, 'VEH-001');
     const waiting = [fire(w, 'VEH-001'), fire(w, 'VEH-001')];
     assert.deepEqual(waiting.map((id) => ev(w, id).status), ['HELD', 'HELD']);
     const core = ev(w, fire(w, 'VEH-001', high));
@@ -118,7 +123,8 @@ describe('resource protection at merge', () => {
 describe('emergency collection pause', () => {
   test('DCL or release pauses one vehicle at once; the vehicle confirms and drops what it holds; resuming is confirmed too', () => {
     const w = new World(demoState());
-    w.as('dcl', (c) => setModelBudget(c, 'X89', budget({ networkMbPerHour: 1 })));
+    w.as('dcl', (c) => setModelBudget(c, 'X89', budget({ networkMbPerHour: 3 })));
+    fire(w, 'VEH-201');
     const held = fire(w, 'VEH-201');
     assert.equal(ev(w, held).status, 'HELD');
     w.denied('business', (c) => pauseCollection(c, 'VEH-201', { reason: 'x' }));

@@ -22,7 +22,7 @@ import {
   withdrawApplicability,
 } from '../engine/applicability.ts';
 import { ungroupedVehicles, vehicleGroupsOf } from '../engine/fleet.ts';
-import { applicableVersions, compareVersions, releaseDiff, releasesOf, setInEffect } from '../engine/release.ts';
+import { appliesTo, applicableVersions, compareVersions, releaseDiff, releasesOf, setInEffect, takeOverProblem } from '../engine/release.ts';
 import type { ApplicabilityCheck, Release } from '../engine/types.ts';
 import { cancelDeployment } from '../engine/validation.ts';
 import { useI18n } from '../i18n/i18n.tsx';
@@ -43,6 +43,10 @@ export function SoftwareVersionsCard({ modelId }: { modelId: string }) {
   const [withdrawing, setWithdrawing] = useState<{ release: Release; version: string } | null>(null);
   const [reason, setReason] = useState('');
   const releases = releasesOf(state, modelId);
+  // Sets that may take a software version over: patches only within their line, the mainline head
+  // from a patch only once its fixes reached the mainline. The mainline comes first.
+  const eligible = (version: string) =>
+    releases.filter((r) => !appliesTo(state, r, version) && !takeOverProblem(state, r, version)).sort((a, b) => (a.patchOf === null ? 0 : 1) - (b.patchOf === null ? 0 : 1) || b.sequence - a.sequence);
   const testWs = Object.values(state.workspaces).find((w) => w.kind === 'INTEGRATION' && w.vehicleModelId === modelId && w.scopes.includes('Vehicle'));
   const canConfirm = can('applicability.confirm', { workspaceId: testWs?.id ?? '*', scope: 'Vehicle' });
   const versions = Object.values(state.softwareVersions)
@@ -130,9 +134,17 @@ export function SoftwareVersionsCard({ modelId }: { modelId: string }) {
               return (
                 canConfirm && (
                   <Space size={0}>
-                    <Button type="link" size="small" disabled={releases.length === 0} onClick={() => (setReleaseId(releases[0]?.id), setOpening(v.version))}>
-                      {L('开启适用性确认', 'Open a check')}
-                    </Button>
+                    <Tooltip
+                      title={
+                        eligible(v.version).length === 0
+                          ? L('没有可以接管这个软件版本的策略集：补丁只服务本线的软件；主线只有在补丁的修复合入（或写明不合入）后才能接管补丁服务的软件。', 'No policy set may take this software over: a patch only serves its own line’s software, and the mainline takes over from a patch only once the patch’s fixes reached it (or were closed for it).')
+                          : undefined
+                      }
+                    >
+                      <Button type="link" size="small" disabled={eligible(v.version).length === 0} onClick={() => (setReleaseId(eligible(v.version)[0]?.id), setOpening(v.version))}>
+                        {L('开启适用性确认', 'Open a check')}
+                      </Button>
+                    </Tooltip>
                     {set && (
                       <Button type="link" size="small" danger onClick={() => (setReason(''), setWithdrawing({ release: set, version: v.version }))}>
                         {L('撤销适用', 'Withdraw')}
@@ -155,7 +167,12 @@ export function SoftwareVersionsCard({ modelId }: { modelId: string }) {
         }}
       >
         <Hint>{L('选择要在该软件版本上验证的策略集。确认前会逐条检查策略，并在运行该软件的测试车上做集成测试。', 'Choose the set to verify on this software. Before confirmation every policy is checked and the set is tested on testing vehicles running that software.')}</Hint>
-        <Select style={{ width: '100%' }} value={releaseId} onChange={setReleaseId} options={releases.map((r) => ({ value: r.id, label: B(setName(r.dclVersion)) }))} />
+        <Select
+          style={{ width: '100%' }}
+          value={releaseId}
+          onChange={setReleaseId}
+          options={(opening ? eligible(opening) : []).map((r) => ({ value: r.id, label: `${B(setName(r.dclVersion))} · ${r.patchOf ? L('补丁', 'patch') : L('主线', 'mainline')}` }))}
+        />
       </Modal>
       <Modal
         open={withdrawing !== null}

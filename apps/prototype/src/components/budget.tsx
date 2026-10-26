@@ -3,13 +3,12 @@
 
 import { Button, Form, Input, InputNumber, Modal, Space, Table, Tag, Tooltip, Typography } from 'antd';
 import { useState } from 'react';
-import { useCan, useRun } from '../app/hooks.ts';
+import { useActor, useRun } from '../app/hooks.ts';
 import { useEngineState } from '../app/store.ts';
 import { BUDGET_FIELDS } from '../domain/budget.ts';
 import type { Budget } from '../domain/budget.ts';
 import { budgetOf, resourceCheck, usageOf } from '../engine/budget.ts';
-import { holdOf, pauseCollection, resumeCollection } from '../engine/collection-hold.ts';
-import { simulationWorkspace } from '../engine/fleet.ts';
+import { holdOf, holdWorkspaceFor, pauseCollection, resumeCollection } from '../engine/collection-hold.ts';
 import type { MergePlan } from '../engine/types.ts';
 import { useI18n } from '../i18n/i18n.tsx';
 import { BUDGET_DIMENSION_LABELS, BUDGET_SOURCE_LABELS, HOLD_STATE_COLORS, HOLD_STATE_LABELS, POLICY_BUDGET_COLORS, POLICY_BUDGET_LABELS } from '../i18n/vocab.ts';
@@ -152,12 +151,13 @@ export function HoldTag({ resourceId }: { resourceId: string }) {
 export function PauseButton({ resourceId }: { resourceId: string }) {
   const state = useEngineState();
   const { L } = useI18n();
-  const can = useCan();
+  const actor = useActor();
   const run = useRun();
   const [open, setOpen] = useState(false);
   const [reason, setReason] = useState('');
   const r = state.resources[resourceId];
-  if (!r || !can('collection.pause', { workspaceId: simulationWorkspace(state, r) ?? undefined, env: r.env })) return null;
+  // One complete grant in a workspace the vehicle works for, as the engine checks it.
+  if (!r || !actor || !holdWorkspaceFor(state, actor, r)) return null;
   const h = holdOf(state, resourceId);
   const paused = !!h && h.state !== 'ACTIVE';
   if (h?.state === 'PAUSING' || h?.state === 'RESUMING') return null;

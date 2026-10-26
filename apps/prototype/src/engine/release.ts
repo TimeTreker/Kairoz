@@ -134,6 +134,59 @@ export function supersedeMovedPlans(s: State, vehicleModelId: string): void {
   }
 }
 
+/** Features released in a patch of this set's line that have neither reached the mainline nor been closed for it. */
+export function pendingPatchFeatures(s: State, release: Release): string[] {
+  const ids = new Set<string>();
+  for (const r of patchChain(s, release.id)) {
+    if (r.patchOf === null || !r.candidateId) continue;
+    for (const src of s.candidates[r.candidateId]?.sources ?? []) if (s.features[src.featureId]?.stage !== 'ARCHIVED') ids.add(src.featureId);
+  }
+  return [...ids].sort();
+}
+
+/**
+ * Why a set may not become the one in effect for a software version, or null when it may. A patch
+ * only takes over versions its own line serves. A mainline set never takes over from a newer
+ * mainline set; it takes over from a patch only as the mainline head, once the patch's fixes
+ * reached the mainline or were closed for it (`including`: Features the set brings itself).
+ */
+export function takeOverProblem(
+  s: State,
+  release: Pick<Release, 'id' | 'vehicleModelId' | 'patchOf' | 'sequence' | 'dclVersion'>,
+  version: string,
+  including: ReadonlySet<string> = new Set(),
+): { code: string; message: string } | null {
+  const current = setInEffect(s, release.vehicleModelId, version);
+  if (current?.id === release.id) return null;
+  if (release.patchOf) {
+    if (current && patchChain(s, release.id).some((r) => r.id === current.id)) return null;
+    return { code: 'PATCH_VERSION_OUTSIDE_TARGET', message: `policy set ${release.dclVersion} is a same-software patch; it only serves software its own line serves, not ${version}` };
+  }
+  if (!current) return null;
+  if (current.patchOf === null) {
+    return current.sequence > release.sequence ? { code: 'APPLICABILITY_SHADOWED', message: `the newer policy set ${current.dclVersion} already applies to ${version}` } : null;
+  }
+  const head = mainlineRelease(s, release.vehicleModelId);
+  if (head && head.id !== release.id && head.sequence > release.sequence) {
+    return { code: 'APPLICABILITY_SHADOWED', message: `software ${version} runs patch ${current.dclVersion}; only the mainline head ${head.dclVersion} may take it over` };
+  }
+  const missing = pendingPatchFeatures(s, current).filter((id) => !including.has(id));
+  if (missing.length) {
+    return {
+      code: 'PATCH_FIX_MISSING',
+      message: `software ${version} runs patch ${current.dclVersion}; merge ${missing.map((id) => s.features[id]?.name ?? id).join(', ')} into the mainline, or close them for it, first`,
+    };
+  }
+  return null;
+}
+
+/** Why a candidate's release may not list a software version, or null when it may. */
+export function promoteVersionProblem(s: State, c: Candidate, version: string): { code: string; message: string } | null {
+  const sequence = (releasesOf(s, c.vehicleModelId)[0]?.sequence ?? 0) + 1;
+  const patchOf = c.patch ? c.targetReleaseId : null;
+  return takeOverProblem(s, { id: '', vehicleModelId: c.vehicleModelId, patchOf, sequence, dclVersion: 'new' }, version, new Set(c.sources.map((x) => x.featureId)));
+}
+
 /** The same-software patches a Feature's current head went into. */
 export function patchesOf(s: State, feature: { id: string; headCommitId: string | null }): Release[] {
   return Object.values(s.releases)
@@ -185,6 +238,10 @@ export function promoteCandidate(ctx: Ctx, candidateId: string, input: { dclVers
     if (outside.length) {
       throw rule('PATCH_VERSION_OUTSIDE_TARGET', `policy set ${target.dclVersion} is in effect for ${[...serving].join(', ')} only`, { issues: outside.map((v) => `${c.vehicleModelId} ${v}`) });
     }
+  } else {
+    // A mainline set takes software over from a patch only with the patch's fixes in it.
+    const missing = versions.map((v) => promoteVersionProblem(ctx.s, c, v)).filter((p): p is NonNullable<typeof p> => !!p);
+    if (missing.length) throw rule('PATCH_FIX_MISSING', 'some listed software versions run a patch whose fixes this set lacks', { issues: missing.map((p) => p.message) });
   }
   // Applicability is evidence too: on a formal baseline each listed version must have passed
   // integration testing. The first integration is tested before any software is released, on

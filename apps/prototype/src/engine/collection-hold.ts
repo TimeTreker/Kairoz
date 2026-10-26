@@ -4,10 +4,12 @@
 // moment of the request; when its agent confirms, captures it still holds are dropped. Resuming
 // takes a reason and is confirmed the same way. The history stays.
 
+import { authorize } from '../domain/authz.ts';
 import { notFound, rule } from '../domain/errors.ts';
-import type { Ctx } from './engine.ts';
+import { WILDCARD } from '../domain/vocabulary.ts';
+import type { Actor, Ctx } from './engine.ts';
 import { simulationWorkspace } from './fleet.ts';
-import type { CollectionHold, State } from './types.ts';
+import type { CollectionHold, Resource, State } from './types.ts';
 
 /** Whether the vehicle refuses new triggers: a pause asked, confirmed, or not lifted yet. */
 export function isCollectionPaused(s: State, resourceId: string): boolean {
@@ -19,10 +21,29 @@ export function holdOf(s: State, resourceId: string): CollectionHold | null {
   return s.collectionHolds[resourceId] ?? null;
 }
 
+/**
+ * The workspaces a vehicle works for: the one running it (a simulation's home or borrower) and
+ * every active workspace that uses it. A vehicle no workspace uses needs a grant over all of them.
+ */
+export function holdWorkspaces(s: State, r: Resource): string[] {
+  const ids = new Set<string>();
+  const runner = simulationWorkspace(s, r);
+  if (runner) ids.add(runner);
+  for (const [ws, vehicles] of Object.entries(s.workspaceResources)) if (vehicles.includes(r.id) && s.workspaces[ws]?.status === 'ACTIVE') ids.add(ws);
+  return ids.size ? [...ids].sort() : [WILDCARD];
+}
+
+/** The workspace through which `actor` may pause or resume the vehicle, if any: one complete grant there. */
+export function holdWorkspaceFor(s: State, actor: Actor, r: Resource): string | null {
+  return holdWorkspaces(s, r).find((workspaceId) => authorize(actor.grants, 'collection.pause', { workspaceId, env: r.env }).ok) ?? null;
+}
+
 function authorizeHold(ctx: Ctx, resourceId: string) {
   const r = ctx.s.resources[resourceId];
   if (!r) throw notFound('vehicle', resourceId);
-  ctx.allow('collection.pause', { type: 'collectionHold', id: r.id, workspaceId: simulationWorkspace(ctx.s, r) ?? undefined, env: r.env });
+  // One complete grant in a workspace the vehicle works for; denied against the first of them otherwise.
+  const workspaceId = holdWorkspaceFor(ctx.s, ctx.user(), r) ?? holdWorkspaces(ctx.s, r)[0]!;
+  ctx.allow('collection.pause', { type: 'collectionHold', id: r.id, workspaceId, env: r.env });
   return r;
 }
 

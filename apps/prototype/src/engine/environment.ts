@@ -29,7 +29,9 @@ export function environmentMoveProblems(s: State, r: Resource, to: Env): string[
   if (pendingImageChangeOf(s, r.id)) problems.push('waiting for an image change');
   if (pendingSoftwareUpdateOf(s, r.id)) problems.push('waiting for a software update');
   for (const e of Object.values(s.events)) {
-    if (e.resourceId === r.id && (e.status === 'UPLOADING' || e.status === 'PROCESSING')) problems.push(`event ${e.id} is still being processed`);
+    if (e.resourceId !== r.id) continue;
+    if (e.status === 'UPLOADING' || e.status === 'PROCESSING') problems.push(`event ${e.id} is still being processed`);
+    else if (e.status === 'HELD') problems.push(`event ${e.id} still waits on the vehicle for upload budget`);
   }
   if (to === 'production') {
     for (const ws of Object.values(s.workspaces)) {

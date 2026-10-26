@@ -9,6 +9,7 @@ import { budgetIssues, captureCost, DEFAULT_BUDGET, mayThrottle, neverFits, ZERO
 import type { Budget, BudgetDimension, CaptureCost } from '../domain/budget.ts';
 import type { GroupConfig, Priority } from '../domain/config.ts';
 import { notFound, rule } from '../domain/errors.ts';
+import { WILDCARD } from '../domain/vocabulary.ts';
 import type { FileType } from '../domain/file-types.ts';
 import { nowOf } from './clock.ts';
 import type { Ctx } from './engine.ts';
@@ -47,14 +48,14 @@ function checked(input: Budget): Budget {
 
 /** DCL engineering sets a vehicle model's collection budget. */
 export function setModelBudget(ctx: Ctx, vehicleModelId: string, input: Budget): void {
-  ctx.allow('budget.manage', { type: 'collectionBudget', id: vehicleModelId });
+  ctx.allow('budget.manage', { type: 'collectionBudget', id: vehicleModelId, workspaceId: WILDCARD });
   if (!ctx.s.vehicleModels[vehicleModelId]) throw notFound('vehicle model', vehicleModelId);
   ctx.s.collectionBudgets.models[vehicleModelId] = checked(input);
 }
 
 /** DCL engineering gives one vehicle (a bench, a test car) its own budget, or clears it with null. */
 export function setVehicleBudget(ctx: Ctx, resourceId: string, input: Budget | null): void {
-  ctx.allow('budget.manage', { type: 'collectionBudget', id: resourceId });
+  ctx.allow('budget.manage', { type: 'collectionBudget', id: resourceId, workspaceId: WILDCARD });
   if (!ctx.s.resources[resourceId]) throw notFound('vehicle', resourceId);
   if (input === null) {
     if (!ctx.s.collectionBudgets.vehicles[resourceId]) throw rule('NO_VEHICLE_BUDGET', `${resourceId} has no budget of its own`);
@@ -149,6 +150,8 @@ export function admitCapture(s: State, resourceId: string, policyId: string, pri
     if (overCpu) return { status: 'DROPPED', note: 'CPU', evict: [] };
     if (overIo) return { status: 'DROPPED', note: 'IO', evict: [] };
     if (overBuffer) return { status: 'DROPPED', note: 'MEMORY', evict: [] };
+    // Waiting only helps a capture that fits an hour's upload; a bigger one would wait forever.
+    if (c.networkMb > b.networkMbPerHour) return { status: 'DROPPED', note: 'NETWORK', evict: [] };
     return { status: overNetwork ? 'HELD' : 'UPLOADING', note: null, evict: [] };
   }
   const evict: string[] = [];
@@ -169,7 +172,9 @@ export function admitCapture(s: State, resourceId: string, policyId: string, pri
 
 /**
  * The agent uploads waiting captures as the upload budget allows: HIGH first, then NORMAL, then
- * LOW, oldest first within each, and never past one that does not fit yet (system context).
+ * LOW, oldest first within each, and never past one that does not fit yet (system context). A
+ * capture that no longer fits an hour's upload at all (the budget was lowered) is dropped, so it
+ * never blocks the ones behind it.
  */
 export function releaseHeld(ctx: Ctx, resourceId: string): number {
   const at = nowOf(ctx.s);
@@ -180,6 +185,12 @@ export function releaseHeld(ctx: Ctx, resourceId: string): number {
     .sort((x, y) => RANK[x.priority] - RANK[y.priority] || x.occurredAt.localeCompare(y.occurredAt) || x.seq - y.seq);
   let released = 0;
   for (const e of waiting) {
+    if (cost(e).networkMb > b.networkMbPerHour) {
+      e.status = 'DROPPED';
+      e.budgetNote = 'NETWORK';
+      e.failure = 'BudgetExceeded: network';
+      continue;
+    }
     if (network + cost(e).networkMb > b.networkMbPerHour) break;
     e.status = 'UPLOADING';
     e.uploadAt = at;

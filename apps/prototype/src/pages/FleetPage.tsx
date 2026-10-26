@@ -216,7 +216,7 @@ function WorkspaceVehicles() {
                   {L('停止', 'Stop')}
                 </Button>
               ) : (
-                <Button type="link" size="small" onClick={() => run((c) => startSimulation(c, r.id), L('已启动实例', 'Instance started'))}>
+                <Button type="link" size="small" disabled={quota !== undefined && simRunning >= quota} onClick={() => run((c) => startSimulation(c, r.id), L('已启动实例', 'Instance started'))}>
                   {L('启动', 'Start')}
                 </Button>
               ))}

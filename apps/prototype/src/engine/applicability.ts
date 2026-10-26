@@ -10,7 +10,7 @@ import { newId } from '../domain/ids.ts';
 import type { Ctx } from './engine.ts';
 import { directTargetProblems, membersOf, occupancyProblems, pendingDeploymentOf, pendingImageChangeOf, recordGroupBinding, softwareKey } from './fleet.ts';
 import { mainlineRelease } from './config.ts';
-import { appliesTo, getRelease, setInEffect } from './release.ts';
+import { appliesTo, getRelease, setInEffect, supersedeMovedPlans, takeOverProblem } from './release.ts';
 import { commitSnapshot, resolveFiles } from './snapshots.ts';
 import type { ApplicabilityCheck, Release, Resource, State } from './types.ts';
 import { assertSimulationFirst, blockersFor, testStatusFor } from './validation.ts';
@@ -113,10 +113,8 @@ export function openApplicabilityCheck(ctx: Ctx, input: { releaseId: string; ver
     throw rule('UNKNOWN_SOFTWARE_VERSION', `${release.vehicleModelId} ${version} is not a recorded software version`);
   }
   if (appliesTo(ctx.s, release, version)) throw rule('ALREADY_APPLIES', `policy set ${release.dclVersion} already applies to ${version}`);
-  const current = setInEffect(ctx.s, release.vehicleModelId, version);
-  if (current && current.sequence > release.sequence) {
-    throw rule('APPLICABILITY_SHADOWED', `the newer policy set ${current.dclVersion} already applies to ${version}`);
-  }
+  const problem = takeOverProblem(ctx.s, release, version);
+  if (problem) throw rule(problem.code, problem.message);
   const open = Object.values(ctx.s.applicabilityChecks).find((c) => c.releaseId === release.id && c.version === version && isOpenCheck(c));
   if (open) throw conflict('CHECK_OPEN', 'a check for this set and version is already open');
   return createCheck(ctx, release, version, testWs, false, ctx.user().username);
@@ -279,10 +277,8 @@ export function confirmApplicability(ctx: Ctx, checkId: string, input: { note: s
   const blockers = blockersFor(ctx.s, checkTestStatus(ctx.s, check));
   if (blockers.length) throw rule('VERIFY_BLOCKED', 'the check’s current tests no longer verify it', { issues: blockers });
   const release = getRelease(ctx.s, check.releaseId);
-  const current = setInEffect(ctx.s, release.vehicleModelId, check.version);
-  if (current && current.sequence > release.sequence) {
-    throw rule('APPLICABILITY_SHADOWED', `the newer policy set ${current.dclVersion} already applies to ${check.version}`);
-  }
+  const problem = takeOverProblem(ctx.s, release, check.version);
+  if (problem) throw rule(problem.code, problem.message);
   if (!input.note.trim()) throw rule('REASON_REQUIRED', 'give a reason');
   ctx.s.applicability.push({
     id: newId('ap'),
@@ -298,6 +294,7 @@ export function confirmApplicability(ctx: Ctx, checkId: string, input: { note: s
   });
   const draft = ctx.s.applicabilityChecks[check.id]!;
   draft.status = 'CONFIRMED';
+  supersedeMovedPlans(ctx.s, release.vehicleModelId);
   draft.decidedBy = ctx.user().username;
   draft.decidedAt = ctx.now;
   draft.note = input.note.trim();
@@ -356,6 +353,7 @@ export function withdrawApplicability(ctx: Ctx, input: { releaseId: string; vers
     by: ctx.user().username,
     at: ctx.now,
   });
+  supersedeMovedPlans(ctx.s, release.vehicleModelId);
 }
 
 /** Applicability records of a set, oldest first. */

@@ -407,11 +407,15 @@ export function setResourceStatus(ctx: Ctx, resourceId: string, input: { status:
   ctx.allow('resource.manage', { type: 'resource', id: r.id, scope: r.pool, env: r.env });
   assertShared(r);
   if (!input.reason.trim()) throw rule('REASON_REQUIRED', 'give a reason');
+  // Retiring is final: a retired vehicle never comes back into use.
+  if (r.status === 'RETIRED' && input.status !== 'RETIRED') throw rule('VEHICLE_RETIRED', `${r.id} is retired; a retired vehicle stays retired`);
   if (input.status !== 'AVAILABLE') {
     assertNotLentAway(ctx.s, r.id, null);
     assertIdle(ctx.s, r.id);
   }
   r.status = input.status;
+  // A retired simulation stops running, and no longer counts against any quota.
+  if (input.status === 'RETIRED' && r.instance === 'RUNNING') r.instance = 'STOPPED';
   r.updatedAt = ctx.now;
 }
 

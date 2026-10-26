@@ -856,7 +856,7 @@ export type EventStatus = 'HELD' | 'UPLOADING' | 'PROCESSING' | 'DONE' | 'FAILED
  * buffer full, evicted for a HIGH capture, a trigger flood, an emergency hold, or a HIGH capture
  * collected over budget.
  */
-export type BudgetNote = 'CPU' | 'IO' | 'MEMORY' | 'EVICTED' | 'FLOOD' | 'EMERGENCY_HOLD' | 'OVER_BUDGET_HIGH';
+export type BudgetNote = 'CPU' | 'IO' | 'MEMORY' | 'NETWORK' | 'EVICTED' | 'FLOOD' | 'EMERGENCY_HOLD' | 'OVER_BUDGET_HIGH';
 
 /** A vehicle's collection pause: asked (PAUSING), confirmed by the vehicle (PAUSED), being lifted (RESUMING), or lifted (ACTIVE). */
 export interface CollectionHold {

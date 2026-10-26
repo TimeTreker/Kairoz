@@ -192,6 +192,8 @@ function PersonalSimDrawer({ id, onClose }: { id: string | null; onClose: () => 
     .sort((a, b) => b.seq - a.seq);
   const retired = r.status === 'RETIRED';
   const runsDraft = applied?.kind === 'PERSONAL';
+  const quota = r.homeWorkspaceId ? state.simulationQuotas[r.homeWorkspaceId] : undefined;
+  const quotaFull = quota !== undefined && runningSimulations(state, r.homeWorkspaceId!).length >= quota;
 
   return (
     <Drawer open size={760} title={`${L('个人仿真', 'Personal simulation')} · ${r.id}${r.displayName ? ` · ${r.displayName}` : ''}`} onClose={onClose}
@@ -201,7 +203,7 @@ function PersonalSimDrawer({ id, onClose }: { id: string | null; onClose: () => 
             {r.instance === 'RUNNING' ? (
               <Button disabled={!!pending} onClick={() => run((c) => stopSimulation(c, r.id), L('已停止', 'Stopped'))}>{L('停止', 'Stop')}</Button>
             ) : (
-              <Button onClick={() => run((c) => startSimulation(c, r.id), L('已启动', 'Started'))}>{L('启动', 'Start')}</Button>
+              <Button disabled={quotaFull} onClick={() => run((c) => startSimulation(c, r.id), L('已启动', 'Started'))}>{L('启动', 'Start')}</Button>
             )}
             <Popconfirm title={L('释放后不能再使用；配置、试触发和自测历史保留。', 'Released instances cannot be used again; configurations, trial captures and self-tests stay.')} onConfirm={() => run((c) => releasePersonalSim(c, r.id), L('已释放', 'Released'))}>
               <Button danger disabled={!!pending}>{L('释放', 'Release')}</Button>
