@@ -1,8 +1,8 @@
 {
-  "runAt": "2026-10-24T10:22:23.712Z",
+  "runAt": "2026-10-26T01:34:47.585Z",
   "layer": "engine",
   "counts": {
-    "PASS": 161,
+    "PASS": 175,
     "FAIL": 0,
     "GAP": 0,
     "BLOCKED": 0,
@@ -1335,6 +1335,144 @@
           "id": "N01",
           "title": "借出期间的拒绝",
           "actor": "steering；adc_integrator；resource；dispatch_operator",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        }
+      ]
+    },
+    {
+      "script": "lifecycle",
+      "name": "车辆环境迁移与组织归档",
+      "rows": [
+        {
+          "id": "LV01",
+          "title": "车辆移出车辆组后转入测试环境",
+          "actor": "resource；workspace_manager",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "LV02",
+          "title": "量产只接收运行正式策略集的车辆",
+          "actor": "resource",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "LV03",
+          "title": "量产车去台架复测再回来",
+          "actor": "release；resource",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "LV04",
+          "title": "有事务的工作区不能归档",
+          "actor": "workspace_manager",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "LV05",
+          "title": "归档后关闭，平台运维恢复",
+          "actor": "admin；resource",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "LV06",
+          "title": "归档业务分组",
+          "actor": "workspace_manager；admin",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "LV07",
+          "title": "归档组织节点",
+          "actor": "admin",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "N01",
+          "title": "越权的归档与环境变更",
+          "actor": "workspace_manager；integration_admin",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        }
+      ]
+    },
+    {
+      "script": "device-faults",
+      "name": "车端故障与恢复 · 校验、签名、应用中断与回执丢失",
+      "rows": [
+        {
+          "id": "DF01",
+          "title": "配置包校验失败与签名无效",
+          "actor": "车辆模拟器；brake_tester",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "DF02",
+          "title": "排除故障后重新下发",
+          "actor": "车辆模拟器；brake_tester",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "DF03",
+          "title": "应用中断，恢复原配置",
+          "actor": "车辆模拟器；brake_tester",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "DF04",
+          "title": "回执丢失与补发",
+          "actor": "车辆模拟器；brake_tester；resource",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "DF05",
+          "title": "取消后迟到的回执",
+          "actor": "车辆模拟器；brake_tester；resource",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "N01",
+          "title": "回执不能改写或重复确认",
+          "actor": "车辆模拟器",
           "adaptation": null,
           "status": "PASS",
           "detail": null,

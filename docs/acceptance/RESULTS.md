@@ -1,10 +1,10 @@
 # 验收结果（引擎层逐幕回放）
 
-运行时间：2026-10-24T10:22:23.712Z。由 `npm run acceptance` 生成；每次重新执行，不沿用历史结果。
+运行时间：2026-10-26T01:34:47.585Z。由 `npm run acceptance` 生成；每次重新执行，不沿用历史结果。
 
 状态：PASS 通过；FAIL 失败；GAP 设计要求尚未实现；BLOCKED 前置幕未通过；NOT_APPLICABLE 浏览器原型不适用（如服务端部署）。
 
-合计：PASS 161 · FAIL 0 · GAP 0 · BLOCKED 0 · NOT_APPLICABLE 3 · NOT_WRITTEN 0
+合计：PASS 175 · FAIL 0 · GAP 0 · BLOCKED 0 · NOT_APPLICABLE 3 · NOT_WRITTEN 0
 
 ## 从零启动 · 角色协作
 
@@ -205,6 +205,30 @@
 | BR09 归还：软件保留，借出方收到提醒 | workspace_manager；adc_integrator | PASS |  |
 | BR10 整车软件自己变了：更新回去 | 车辆模拟器；business | PASS |  |
 | N01 借出期间的拒绝 | steering；adc_integrator；resource；dispatch_operator | PASS |  |
+
+## 车辆环境迁移与组织归档
+
+| 幕 | 执行人 | 状态 | 说明 |
+|---|---|---|---|
+| LV01 车辆移出车辆组后转入测试环境 | resource；workspace_manager | PASS |  |
+| LV02 量产只接收运行正式策略集的车辆 | resource | PASS |  |
+| LV03 量产车去台架复测再回来 | release；resource | PASS |  |
+| LV04 有事务的工作区不能归档 | workspace_manager | PASS |  |
+| LV05 归档后关闭，平台运维恢复 | admin；resource | PASS |  |
+| LV06 归档业务分组 | workspace_manager；admin | PASS |  |
+| LV07 归档组织节点 | admin | PASS |  |
+| N01 越权的归档与环境变更 | workspace_manager；integration_admin | PASS |  |
+
+## 车端故障与恢复 · 校验、签名、应用中断与回执丢失
+
+| 幕 | 执行人 | 状态 | 说明 |
+|---|---|---|---|
+| DF01 配置包校验失败与签名无效 | 车辆模拟器；brake_tester | PASS |  |
+| DF02 排除故障后重新下发 | 车辆模拟器；brake_tester | PASS |  |
+| DF03 应用中断，恢复原配置 | 车辆模拟器；brake_tester | PASS |  |
+| DF04 回执丢失与补发 | 车辆模拟器；brake_tester；resource | PASS |  |
+| DF05 取消后迟到的回执 | 车辆模拟器；brake_tester；resource | PASS |  |
+| N01 回执不能改写或重复确认 | 车辆模拟器 | PASS |  |
 
 ## 反向用例 T-N01–T-N24
 
