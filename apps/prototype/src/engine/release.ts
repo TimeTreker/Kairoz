@@ -343,7 +343,8 @@ export function releaseDiff(s: State, fromId: string | null, toId: string): { gr
   return { groups, policies };
 }
 
-/** The set published just before this one for the same vehicle model. */
+/** The set this one follows: the set a patch fixes, or the mainline set published before it. */
 export function previousRelease(s: State, release: Release): Release | null {
-  return releasesOf(s, release.vehicleModelId).find((r) => r.sequence < release.sequence) ?? null;
+  if (release.patchOf) return s.releases[release.patchOf] ?? null;
+  return releasesOf(s, release.vehicleModelId).find((r) => r.sequence < release.sequence && r.patchOf === null) ?? null;
 }

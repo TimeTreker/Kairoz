@@ -5,7 +5,9 @@ import { useActor, useCan, useRun, useWorkspace } from '../app/hooks.ts';
 import { navigate } from '../app/router.ts';
 import { useEngineState } from '../app/store.ts';
 import { Hint, Mono, PageHeader, StageTag, when } from '../components/common.tsx';
-import { createFeature, displayName, latestRelease, visibleFeatures } from '../engine/config.ts';
+import { PatchedTag, patchTargetLabel } from '../components/patch.tsx';
+import { createFeature, displayName, mainlineRelease, visibleFeatures } from '../engine/config.ts';
+import { patchTargets } from '../engine/release.ts';
 import { useI18n } from '../i18n/i18n.tsx';
 
 export function FeaturesPage() {
@@ -20,7 +22,9 @@ export function FeaturesPage() {
 
   if (!workspace) return <div className="kz-page">{L('没有可用工作区', 'No workspace available')}</div>;
   const features = visibleFeatures(state, actor, workspace.id);
-  const base = latestRelease(state, workspace.vehicleModelId);
+  const base = mainlineRelease(state, workspace.vehicleModelId);
+  // Besides the mainline, a Feature may start on an older set some software still runs (a fix for a patch).
+  const olderBases = patchTargets(state, workspace.vehicleModelId);
   const creatable = workspace.groupIds
     .map((g) => state.groups[g]!)
     .filter((g) => g.purpose === 'DEV' && can('feature.create', { workspaceId: workspace.id, groupId: g.id, scope: g.domain }));
@@ -48,7 +52,15 @@ export function FeaturesPage() {
           columns={[
             { title: L('名称', 'Name'), render: (_, f) => <Mono>{f.name}</Mono> },
             { title: L('业务分组', 'Group'), render: (_, f) => state.groups[f.groupId]?.name },
-            { title: L('阶段', 'Stage'), render: (_, f) => <StageTag stage={f.stage} /> },
+            {
+              title: L('阶段', 'Stage'),
+              render: (_, f) => (
+                <>
+                  <StageTag stage={f.stage} />
+                  <PatchedTag feature={f} />
+                </>
+              ),
+            },
             {
               title: L('最新提交', 'Head commit'),
               render: (_, f) => (f.headCommitId ? <Mono>{displayName(state, f.headCommitId)}</Mono> : <Typography.Text type="secondary">{L('未提交', 'Not submitted')}</Typography.Text>),
@@ -67,7 +79,7 @@ export function FeaturesPage() {
         onCancel={() => setOpen(false)}
         onOk={() =>
           form.validateFields().then((v) => {
-            const id = run((c) => createFeature(c, { workspaceId: workspace.id, groupId: v.groupId, name: v.name, description: v.description }), L('已创建', 'Created'));
+            const id = run((c) => createFeature(c, { workspaceId: workspace.id, groupId: v.groupId, name: v.name, description: v.description, baseReleaseId: v.baseReleaseId || null }), L('已创建', 'Created'));
             if (id) {
               setOpen(false);
               form.resetFields();
@@ -78,13 +90,23 @@ export function FeaturesPage() {
       >
         <Hint>
           {base
-            ? L(`新 Feature 基于 ${workspace.vehicleModelId} 最新策略集 ${base.dclVersion}，继承其中本分组的文件与策略。`, `A new Feature builds on ${workspace.vehicleModelId}’s latest policy set, ${base.dclVersion}, and inherits the group’s files and policies from it.`)
+            ? L(`新 Feature 默认基于 ${workspace.vehicleModelId} 的主线策略集 ${base.dclVersion}，继承其中本分组的文件与策略。修复某个软件版本仍在用的旧策略集时，选它作为基线，之后由配置集成做同软件版本补丁。`, `A new Feature builds on ${workspace.vehicleModelId}’s mainline policy set, ${base.dclVersion}, by default and inherits the group’s files and policies from it. To fix an older set some software still runs, start on that set; integration then makes a same-software patch.`)
             : L('新 Feature 从本车型的初始研发配置开始（尚无策略集，为空）。', 'A new Feature starts from the vehicle model’s initial development configuration (no policy set yet, so it is empty).')}
         </Hint>
-        <Form form={form} name="feature" layout="vertical" initialValues={{ groupId: creatable[0]?.id }}>
+        <Form form={form} name="feature" layout="vertical" initialValues={{ groupId: creatable[0]?.id, baseReleaseId: '' }}>
           <Form.Item name="groupId" label={L('业务分组', 'Business group')} rules={[{ required: true }]}>
             <Select options={creatable.map((g) => ({ value: g.id, label: `${g.name} (${g.code})` }))} />
           </Form.Item>
+          {base && olderBases.length > 0 && (
+            <Form.Item name="baseReleaseId" label={L('基线', 'Base')}>
+              <Select
+                options={[
+                  { value: '', label: L(`主线：策略集 ${base.dclVersion}`, `Mainline: policy set ${base.dclVersion}`) },
+                  ...olderBases.map((r) => ({ value: r.id, label: patchTargetLabel(state, r, L) })),
+                ]}
+              />
+            </Form.Item>
+          )}
           <Form.Item name="name" label={L('名称（小写字母、数字、_、-）', 'Name (lower-case letters, digits, _ or -)')} rules={[{ required: true, pattern: /^[a-z][a-z0-9_-]{2,45}$/ }]}>
             <Input placeholder="guided_brake_v2" />
           </Form.Item>

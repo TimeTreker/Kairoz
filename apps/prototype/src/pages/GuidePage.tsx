@@ -223,6 +223,21 @@ export const SCENARIOS: Scenario[] = [
     ],
   },
   {
+    key: 'patch',
+    titleZh: '同软件版本配置补丁',
+    titleEn: 'Same-software configuration patch',
+    steps: [
+      { account: 'integration_admin', workspace: 'x89-integration', page: 'fleet', zh: '准备运行 1.1 的测试仿真（镜像 x89-1.1-sim）与实车（由车辆资源确认 1.1），加入 X89 集成测试工作区', en: 'Prepare a testing simulation (image x89-1.1-sim) and a vehicle (confirmed on 1.1 by vehicle resources) in the X89 integration workspace', expectZh: '集成测试可以在软件 1.1 上进行', expectEn: 'Integration tests can run on software 1.1' },
+      { account: 'integrator', workspace: 'x89-project', page: 'integration', zh: '把 steering_return_rate 合并到主线并冻结；集成测试在 1.1 车辆上通过后，配置发布发布 1.1.0，只适用 1.1', en: 'Merge steering_return_rate onto the mainline and freeze; once it passes on the 1.1 vehicles, release publishes 1.1.0 for 1.1 only', expectZh: '主线前进到 1.1.0；软件 1.0 的车辆仍用 1.0.0', expectEn: 'The mainline moves to 1.1.0; vehicles on 1.0 keep 1.0.0' },
+      { account: 'steering', workspace: 'team-steering', page: 'features', zh: '创建 Feature angle_jump_fix，基线选“策略集 1.0.0 · 软件 1.0 在用”，把转角突变阈值改为 350 并提交', en: 'Create Feature angle_jump_fix on base “Policy set 1.0.0 · in effect for 1.0”, raise the angle-jump threshold to 350 and submit', expectZh: '修复从 1.0.0 开始，不带主线的回正策略', expectEn: 'The fix starts from 1.0.0, without the mainline’s return-rate policy' },
+      { account: 'steering_tester', workspace: 'team-steering', page: 'features', zh: '下发到转向研发车组，先仿真后实车登记 PASS，确认 Verified', en: 'Dispatch to 转向研发车组, record PASS (simulation first) and confirm Verified', expectZh: '研发车运行 1.0，基线就是 1.0.0', expectEn: 'The development vehicles run 1.0, so their base is 1.0.0' },
+      { account: 'integrator', workspace: 'x89-project', page: 'integration', zh: '合并目标选“同软件版本补丁”→ 1.0.0，预览 angle_jump_fix；DCL 确认后冻结 X89-P1', en: 'Choose Same-software patch → 1.0.0, preview angle_jump_fix; after DCL confirms, freeze X89-P1', expectZh: '只改转角突变；1.1.0 的回正策略不进入补丁；主线上的预览和候选不受影响', expectEn: 'Only the angle-jump policy changes; 1.1.0’s return-rate policy stays out; mainline previews and candidates are untouched' },
+      { account: 'integration_tester', workspace: 'x89-integration', page: 'integration', zh: '把 X89-P1 下发到 X89 集成测试车组（软件 1.0），先仿真后实车登记 PASS，确认验证', en: 'Dispatch X89-P1 to the X89 integration test group (software 1.0), record PASS (simulation first) and verify', expectZh: '补丁在它要服务的软件上测试', expectEn: 'The patch is tested on the software it will serve' },
+      { account: 'release', workspace: 'x89-project', page: 'release', zh: '发布 X89-P1', en: 'Promote X89-P1', expectZh: '建议版本 1.0.1，只能选软件 1.0；发布后 1.0 车辆解析到 1.0.1，1.1 仍是 1.1.0，主线仍是 1.1.0', expectEn: 'Suggested version 1.0.1, software 1.0 only; afterwards 1.0 vehicles resolve to 1.0.1, 1.1 stays on 1.1.0, and the mainline is still 1.1.0' },
+      { account: 'integrator', workspace: 'x89-project', page: 'integration', zh: '在主线合并中预览 angle_jump_fix（标注“已进入补丁 1.0.1 · 待合入主线”）', en: 'In a mainline merge preview angle_jump_fix (tagged In patch 1.0.1 · mainline pending)', expectZh: '三方合并到 1.1.0：保留主线的回正策略并加入修复；主线不需要时可写明理由“不合入主线”', expectEn: 'A three-way merge onto 1.1.0 keeps the return-rate policy and adds the fix; if the mainline does not need it, close it for the mainline with a reason' },
+    ],
+  },
+  {
     key: 'directory',
     titleZh: '公司目录与组织授权',
     titleEn: 'Company directory and org grants',

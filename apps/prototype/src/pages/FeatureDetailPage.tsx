@@ -5,6 +5,7 @@ import { useActor, useCan, useRun } from '../app/hooks.ts';
 import { navigate } from '../app/router.ts';
 import { engine, useEngineState } from '../app/store.ts';
 import { Mono, StageTag, when } from '../components/common.tsx';
+import { PatchedTag } from '../components/patch.tsx';
 import { draftSelfTest } from '../components/personal-sim.tsx';
 import { canReadFeature, displayName, draftReviewRequired, EDITABLE_STAGES, featureChanges, submitFeature } from '../engine/config.ts';
 import { returnFeature } from '../engine/intake.ts';
@@ -59,6 +60,7 @@ export function FeatureDetailPage({ featureId }: { featureId: string }) {
                 <Mono>{feature.name}</Mono>
               </Typography.Title>
               <StageTag stage={feature.stage} />
+              <PatchedTag feature={feature} />
             </Space>
             <Space>
               {canReturn && <Button onClick={() => (setText(''), setReturning(true))}>{L('退回业务方', 'Return to authors')}</Button>}

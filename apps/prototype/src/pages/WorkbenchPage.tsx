@@ -8,8 +8,9 @@ import { WorkspaceGroups } from '../components/workspace-groups.tsx';
 import { navigate } from '../app/router.ts';
 import { useEngineState } from '../app/store.ts';
 import { LabelTag, Mono, RoleTag, StageTag } from '../components/common.tsx';
+import { PatchedTag } from '../components/patch.tsx';
 import { authorize } from '../domain/authz.ts';
-import { visibleFeatures } from '../engine/config.ts';
+import { mainlineRelease, visibleFeatures } from '../engine/config.ts';
 import { intakeQueue } from '../engine/intake.ts';
 import { isConfirmed, isMergeWorkspace, verifiedSources } from '../engine/integration.ts';
 import { blockedProductionVehicles } from '../engine/applicability.ts';
@@ -24,7 +25,7 @@ import { GroupFitDrawer } from '../components/vehicle-software.tsx';
 import { mismatchesFor } from '../engine/delivery.ts';
 import { borrowedBy, loansToAgree, managedLoans } from '../engine/loans.ts';
 import { otaRollouts } from '../engine/ota.ts';
-import { releaseFor, releasesOf } from '../engine/release.ts';
+import { patchesOf, releaseFor } from '../engine/release.ts';
 import { isOverdue, managedResources, pendingDeploymentOf, vehicleGroupsOf, workspaceVehicles } from '../engine/fleet.ts';
 import { referenceRequestsFor } from '../engine/references.ts';
 import { candidateTestStatus, featureTestStatus, testRequestsOf } from '../engine/validation.ts';
@@ -233,10 +234,12 @@ export function WorkbenchPage() {
     const plans = Object.values(state.mergePlans).filter((p) => p.workspaceId === workspace.id);
     const latest = plans.at(-1);
     const openCandidates = Object.values(state.candidates).filter((c) => c.workspaceId === workspace.id && ['CANDIDATE', 'TESTING', 'VERIFIED'].includes(c.status));
+    // Fixes released in a same-software patch still have to reach the mainline.
+    const patched = verifiedSources(state, workspace.id, 'Vehicle').filter((f) => patchesOf(state, f).length > 0);
     cards.push(
       <Card key="ci" title={<RoleTag role="CONFIG_INTEGRATOR" />} extra={<Button size="small" onClick={() => navigate('integration')}>{L('配置集成', 'Integration')}</Button>}>
         <Row gutter={16} style={{ marginBottom: 12 }}>
-          <Col span={8}><Statistic title={L('可集成的 Verified', 'Verified to integrate')} value={verifiedSources(state, workspace.id).length} /></Col>
+          <Col span={8}><Statistic title={L('可集成的 Verified', 'Verified to integrate')} value={verifiedSources(state, workspace.id).length} suffix={patched.length ? <Typography.Text type="secondary" style={{ fontSize: 12 }}>{L(`含补丁 ${patched.length}`, `${patched.length} from patches`)}</Typography.Text> : undefined} /></Col>
           <Col span={8}><Statistic title={L('待 DCL 确认', 'Awaiting DCL')} value={plans.filter((p) => p.status === 'READY' && !isConfirmed(state, p)).length} /></Col>
           <Col span={8}><Statistic title={L('未结束的候选', 'Open candidates')} value={openCandidates.length} /></Col>
         </Row>
@@ -244,6 +247,12 @@ export function WorkbenchPage() {
           <Row2 key={c.id} onClick={() => navigate(`integration/${c.id}`)}>
             <Mono>{c.label}</Mono>
             <LabelTag map={CANDIDATE_STATUS_LABELS} value={c.status} color={CANDIDATE_STATUS_COLORS[c.status]} />
+          </Row2>
+        ))}
+        {patched.map((f) => (
+          <Row2 key={f.id} onClick={() => navigate('integration')}>
+            <Mono>{f.name}</Mono>
+            <PatchedTag feature={f} />
           </Row2>
         ))}
         {latest && latest.status === 'CONFLICT' && <Typography.Text type="danger">{L('最新合并预览有冲突', 'The latest merge preview has conflicts')}</Typography.Text>}
@@ -308,13 +317,13 @@ export function WorkbenchPage() {
       const target = releaseFor(state, r).release;
       return target && r.appliedConfigId !== target.resolvedConfigId;
     });
-    const latest = releasesOf(state, workspace.vehicleModelId)[0];
+    const latest = mainlineRelease(state, workspace.vehicleModelId);
     const checks = Object.values(state.applicabilityChecks).filter((c) => c.vehicleModelId === workspace.vehicleModelId && ['OPEN', 'TESTING', 'VERIFIED'].includes(c.status));
     const blocked = blockedProductionVehicles(state, workspace.vehicleModelId);
     cards.push(
       <Card key="cr" title={<RoleTag role="CONFIG_RELEASE" />} extra={<Button size="small" onClick={() => navigate('release')}>{L('发布与配置 OTA', 'Release & OTA')}</Button>}>
         <Row gutter={16} style={{ marginBottom: 12 }}>
-          <Col span={6}><Statistic title={L('最新策略集', 'Latest policy set')} value={latest ? latest.dclVersion : '—'} /></Col>
+          <Col span={6}><Statistic title={L('主线策略集', 'Mainline policy set')} value={latest ? latest.dclVersion : '—'} /></Col>
           <Col span={6}><Statistic title={L('待发布候选', 'To release')} value={toRelease.length} /></Col>
           <Col span={6}><Statistic title={L('进行中 / 暂停的 OTA', 'Running / paused')} value={`${rollouts.filter((d) => d.status === 'PENDING').length} / ${rollouts.filter((d) => d.status === 'PAUSED').length}`} /></Col>
           <Col span={6}><Statistic title={L('待更新的量产车', 'Vehicles due')} value={due.length} /></Col>

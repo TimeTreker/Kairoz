@@ -11,14 +11,15 @@ import { ApplicabilityChecks, ReleaseDiffDrawer, SoftwareVersionsCard } from '..
 import { EmergencyStopsCard, RequestStopModal } from '../components/emergency.tsx';
 import { EnvTag, Hint, LabelTag, Mono, PageHeader, ShortId, configName, when } from '../components/common.tsx';
 import { JsonExportModal, downloadJson } from '../components/JsonExport.tsx';
+import { LineTag, TargetSet } from '../components/patch.tsx';
 import { DeliveryTag } from '../components/testing.tsx';
 import type { JsonFile } from '../components/JsonExport.tsx';
-import { displayName } from '../engine/config.ts';
+import { displayName, mainlineRelease } from '../engine/config.ts';
 import { membersOf, ungroupedVehicles, vehicleGroupsOf } from '../engine/fleet.ts';
 import { answerConfigRequest, cancelOta, createOta, expandOta, otaProblems, otaRollouts, outsideRollout, pauseOta, resumeOta, rollbackOta, rollbackProblems } from '../engine/ota.ts';
 import { isOpenCheck } from '../engine/applicability.ts';
 import { releaseWorkspace } from '../engine/emergency.ts';
-import { applicableVersions, compareVersions, nextDclVersion, previousRelease, promoteCandidate, releaseConfiguration, releaseFor, releasesOf, setInEffect, testedVersions, versionsInEffect } from '../engine/release.ts';
+import { applicableVersions, compareVersions, nextDclVersion, previousRelease, promoteCandidate, releaseConfiguration, releaseFor, releasesOf, setInEffect, testedVersions, versionLine, versionsInEffect } from '../engine/release.ts';
 import type { Candidate, Deployment, Release, State, VehicleGroup } from '../engine/types.ts';
 import { useI18n } from '../i18n/i18n.tsx';
 import { issueLabel } from '../i18n/issues.ts';
@@ -41,7 +42,7 @@ export function ReleasePage({ tab = 'releases' }: { tab?: string }) {
   if (!workspace) return <div className="kz-page"><Empty /></div>;
   const modelId = workspace.vehicleModelId;
   const projectId = projectOf(state, workspace.id);
-  const latest = releasesOf(state, modelId)[0];
+  const latest = mainlineRelease(state, modelId);
   const openChecks = Object.values(state.applicabilityChecks).filter((c) => c.vehicleModelId === modelId && isOpenCheck(c)).length;
   if (!workspace.scopes.includes('Vehicle')) {
     // A domain workspace publishes subsystem releases; formal releases and OTA are whole-vehicle.
@@ -60,7 +61,7 @@ export function ReleasePage({ tab = 'releases' }: { tab?: string }) {
   }
   return (
     <div className="kz-page">
-      <PageHeader title={L('发布与配置 OTA', 'Release & OTA')} subtitle={`${modelId} · ${L('最新策略集', 'Latest policy set')}: ${latest ? B(setName(latest.dclVersion)) : L('无', 'none')}`} />
+      <PageHeader title={L('发布与配置 OTA', 'Release & OTA')} subtitle={`${modelId} · ${L('主线策略集', 'Mainline policy set')}: ${latest ? B(setName(latest.dclVersion)) : L('无', 'none')}`} />
       <Tabs
         activeKey={tab}
         onChange={(k) => navigate(`release/${k}`)}
@@ -130,7 +131,7 @@ function ReleasesTab({ modelId, workspaceId }: { modelId: string; workspaceId: s
           columns={[
             { title: L('候选', 'Candidate'), render: (_, c) => <a onClick={() => navigate(`integration/${c.id}`)}><Mono>{c.label}</Mono></a> },
             { title: L('来源', 'Sources'), render: (_, c) => [...c.subsystems.map((x) => state.subsystemReleases[x.subsystemReleaseId]?.label), ...c.sources.map((x) => state.features[x.featureId]?.name)].join(', ') },
-            { title: L('目标策略集', 'Target set'), render: (_, c) => (c.targetReleaseId ? B(setName(state.releases[c.targetReleaseId]!.dclVersion)) : L('无（首次）', 'none (first)')) },
+            { title: L('目标策略集', 'Target set'), render: (_, c) => <TargetSet targetReleaseId={c.targetReleaseId} patch={c.patch} /> },
             { title: L('已测试的整车版本', 'Tested software'), render: (_, c) => testedVersions(state, c).map((v) => <Tag key={v}>{v}</Tag>) },
             { title: L('集成验证', 'Verified'), render: (_, c) => `${state.accounts[c.verifiedBy ?? '']?.displayName ?? '—'} · ${c.verifiedAt ? when(c.verifiedAt) : ''}` },
             {
@@ -192,6 +193,7 @@ function ReleasesTab({ modelId, workspaceId }: { modelId: string; workspaceId: s
               render: (_, r) => (
                 <Space size={4}>
                   <Mono>{r.dclVersion}</Mono>
+                  <LineTag release={r} />
                   {r.emergency && (
                     <Tooltip title={L(`紧急停用 ${r.emergency.policyId}（源自 ${state.releases[r.emergency.sourceReleaseId]?.dclVersion}）`, `Emergency stop of ${r.emergency.policyId} (from ${state.releases[r.emergency.sourceReleaseId]?.dclVersion})`)}>
                       <Tag color="red">{L('紧急', 'emergency')}</Tag>
@@ -225,7 +227,7 @@ function ReleasesTab({ modelId, workspaceId }: { modelId: string; workspaceId: s
               render: (_, r) => (
                 <Space size={0}>
                   <Button type="link" size="small" onClick={() => setComparing(r)}>
-                    {L('与上一版比较', 'Compare with previous')}
+                    {r.patchOf ? L('与所补的版本比较', 'Compare with the set it patches') : L('与上一版比较', 'Compare with previous')}
                   </Button>
                   {canExport(r) && (
                     <Button size="small" onClick={() => exportConfiguration(r.id)}>
@@ -252,8 +254,11 @@ function PromoteModal({ candidate, onClose }: { candidate: Candidate; onClose: (
   const { L } = useI18n();
   const run = useRun();
   const tested = new Set(testedVersions(state, candidate));
+  // A patch replaces its target only where the target is in effect.
+  const target = candidate.patch && candidate.targetReleaseId ? state.releases[candidate.targetReleaseId] : undefined;
+  const serving = target ? new Set(versionsInEffect(state, target)) : null;
   const versions = Object.values(state.softwareVersions)
-    .filter((v) => v.vehicleModelId === candidate.vehicleModelId)
+    .filter((v) => v.vehicleModelId === candidate.vehicleModelId && (!serving || serving.has(v.version)))
     .map((v) => v.version)
     .sort(compareVersions);
   const [form] = Form.useForm<{ dclVersion: string; versions: string[]; notes: string }>();
@@ -270,7 +275,15 @@ function PromoteModal({ candidate, onClose }: { candidate: Candidate; onClose: (
         })
       }
     >
-      <Form form={form} name="promote" layout="vertical" initialValues={{ dclVersion: nextDclVersion(state, candidate.vehicleModelId), versions: [...tested], notes: '' }}>
+      {target && (
+        <Alert
+          type="info"
+          showIcon
+          style={{ marginBottom: 12 }}
+          title={L(`同软件版本补丁：基于策略集 ${target.dclVersion}，版本号沿 ${versionLine(target.dclVersion)}.x 递增，只能适用它正在服务的软件版本。主线不变。`, `Same-software patch of policy set ${target.dclVersion}: numbered ${versionLine(target.dclVersion)}.x, for the software versions that set serves only. The mainline stays as it is.`)}
+        />
+      )}
+      <Form form={form} name="promote" layout="vertical" initialValues={{ dclVersion: nextDclVersion(state, candidate.vehicleModelId, target?.id ?? null), versions: versions.filter((v) => tested.has(v)), notes: '' }}>
         <Form.Item name="dclVersion" label={L('DCL 策略集版本', 'DCL policy set version')} rules={[{ required: true }]} extra={L('独立于整车软件版本，major.minor.patch', 'Independent of vehicle software, major.minor.patch')}>
           <Input />
         </Form.Item>
