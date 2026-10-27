@@ -60,6 +60,7 @@ npm run build
 | 资源保护：车型与单车采集预算、高优先级超预算仍采集、洪峰抑制、合并时的资源检查、紧急停采 | ✅ |
 | DCL 技术变更：只调整处理绑定的技术分支，DCL 提交、本组验证、照常集成 | ✅ |
 | 售后回捞：为客户案例请求车辆立即采集，Grader 周期采集让路 | ✅ |
+| 多车型独立发布：X90 有自己的工作区、软件版本、初始配置、策略集与配置 OTA，不改变 X89 | ✅ |
 | 集成征集：为目标整车集成版本征集各模块（业务组、域集成）的策略版本，收齐送测、逐轮退回，发布时生成整车集成版本与对应关系，策略集随 OTA 包作为配置模块下发；发布记录按版本和策略集回看 | ✅ |
 
 ## 测试
@@ -80,7 +81,7 @@ npm run typecheck
 npm run acceptance
 ```
 
-在引擎层逐幕重放 20 份剧本（设计文档的三份，加按后续设计补写的 17 份）与 24 个反向用例，每次重新执行（最近一次：214 幕通过、0 失败、3 幕不适用于浏览器原型），结果写入 [docs/acceptance/RESULTS.md](docs/acceptance/RESULTS.md)。浏览器中逐幕操作的记录见 [docs/acceptance/BROWSER-RUN.md](docs/acceptance/BROWSER-RUN.md)。
+在引擎层逐幕重放 21 份剧本（设计文档的三份，加按后续设计补写的 18 份）与 24 个反向用例，每次重新执行（最近一次：223 幕通过、0 失败、3 幕不适用于浏览器原型），结果写入 [docs/acceptance/RESULTS.md](docs/acceptance/RESULTS.md)。浏览器中逐幕操作的记录见 [docs/acceptance/BROWSER-RUN.md](docs/acceptance/BROWSER-RUN.md)。
 
 ## 目录
 

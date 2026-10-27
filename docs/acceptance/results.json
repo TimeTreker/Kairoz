@@ -1,8 +1,8 @@
 {
-  "runAt": "2026-10-27T11:13:18.049Z",
+  "runAt": "2026-10-27T11:17:34.320Z",
   "layer": "engine",
   "counts": {
-    "PASS": 214,
+    "PASS": 223,
     "FAIL": 0,
     "GAP": 0,
     "BLOCKED": 0,
@@ -1860,6 +1860,93 @@
           "id": "N01",
           "title": "反向：越权与已结束的征集",
           "actor": "cdc_integrator；steering；integration_tester；release；integration_admin",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        }
+      ]
+    },
+    {
+      "script": "multi-model",
+      "name": "多车型独立发布",
+      "rows": [
+        {
+          "id": "MM01",
+          "title": "为 X90 建项目、工作区与账号",
+          "actor": "admin",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "MM02",
+          "title": "X90 的软件、镜像与首辆实车",
+          "actor": "resource；dcl；x90_admin",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "MM03",
+          "title": "X90 首个 Feature 从空初始配置开始",
+          "actor": "x90_business；x90_tester",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "MM04",
+          "title": "X90 的集成只收 X90 的 Feature",
+          "actor": "x90_integrator；dcl",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "MM05",
+          "title": "X90 候选的集成测试",
+          "actor": "x90_admin；resource；x90_integration_tester",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "MM06",
+          "title": "X90 发布自己的策略集 1.0.0",
+          "actor": "x90_release",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "MM07",
+          "title": "X90 量产车的灰度、失败重试与扩量",
+          "actor": "resource；x90_admin；x90_release",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "MM08",
+          "title": "每个车型的发布记录只讲自己的事",
+          "actor": "x90_release",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "N01",
+          "title": "跨车型操作一律拒绝",
+          "actor": "admin；resource；x90_admin；x90_tester",
           "adaptation": null,
           "status": "PASS",
           "detail": null,

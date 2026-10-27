@@ -1,10 +1,10 @@
 # 验收结果（引擎层逐幕回放）
 
-运行时间：2026-10-27T11:13:18.049Z。由 `npm run acceptance` 生成；每次重新执行，不沿用历史结果。
+运行时间：2026-10-27T11:17:34.320Z。由 `npm run acceptance` 生成；每次重新执行，不沿用历史结果。
 
 状态：PASS 通过；FAIL 失败；GAP 设计要求尚未实现；BLOCKED 前置幕未通过；NOT_APPLICABLE 浏览器原型不适用（如服务端部署）。
 
-合计：PASS 214 · FAIL 0 · GAP 0 · BLOCKED 0 · NOT_APPLICABLE 3 · NOT_WRITTEN 0
+合计：PASS 223 · FAIL 0 · GAP 0 · BLOCKED 0 · NOT_APPLICABLE 3 · NOT_WRITTEN 0
 
 ## 从零启动 · 角色协作
 
@@ -298,6 +298,20 @@
 | IC07 发布：生成整车集成版本、对应关系和 OTA 包内配置模块 | release / 孙立；resource | PASS |  |
 | IC08 发布记录 | integration_admin / 郑书杰 | PASS |  |
 | N01 反向：越权与已结束的征集 | cdc_integrator；steering；integration_tester；release；integration_admin | PASS |  |
+
+## 多车型独立发布
+
+| 幕 | 执行人 | 状态 | 说明 |
+|---|---|---|---|
+| MM01 为 X90 建项目、工作区与账号 | admin | PASS |  |
+| MM02 X90 的软件、镜像与首辆实车 | resource；dcl；x90_admin | PASS |  |
+| MM03 X90 首个 Feature 从空初始配置开始 | x90_business；x90_tester | PASS |  |
+| MM04 X90 的集成只收 X90 的 Feature | x90_integrator；dcl | PASS |  |
+| MM05 X90 候选的集成测试 | x90_admin；resource；x90_integration_tester | PASS |  |
+| MM06 X90 发布自己的策略集 1.0.0 | x90_release | PASS |  |
+| MM07 X90 量产车的灰度、失败重试与扩量 | resource；x90_admin；x90_release | PASS |  |
+| MM08 每个车型的发布记录只讲自己的事 | x90_release | PASS |  |
+| N01 跨车型操作一律拒绝 | admin；resource；x90_admin；x90_tester | PASS |  |
 
 ## 反向用例 T-N01–T-N24
 

@@ -11,6 +11,7 @@ import * as clientReport from './client-report.ts';
 import * as dataUsage from './data-usage.ts';
 import * as domainIntegration from './domain-integration.ts';
 import * as integrationCall from './integration-call.ts';
+import * as multiModel from './multi-model.ts';
 import * as firstOta from './first-ota.ts';
 import * as negative from './negative.ts';
 import * as orgDirectory from './org-directory.ts';
@@ -76,6 +77,7 @@ const suites = [
   { id: 'technical', mod: technical },
   { id: 'aftersales', mod: aftersales },
   { id: 'integration-call', mod: integrationCall },
+  { id: 'multi-model', mod: multiModel },
 ] as const;
 
 const report: { script: string; name: string; rows: Row[] }[] = [];

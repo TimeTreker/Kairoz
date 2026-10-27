@@ -3932,6 +3932,180 @@ export const SCRIPTS: Script[] = [
         "fail": "越权操作不改变任何记录。"
       }
     ]
+  },
+  {
+    "id": "multi-model",
+    "name": "多车型独立发布",
+    "start": "demo",
+    "scenes": [
+      {
+        "id": "MM01",
+        "title": "为 X90 建项目、工作区与账号",
+        "actor": "admin",
+        "accounts": [
+          "admin"
+        ],
+        "workspace": "x90-project",
+        "page": "组织与工作区；账号与授权",
+        "pre": "演示数据：X89 已有策略集 1.0.0，X90 车型已登记、还没有工作区。",
+        "steps": [
+          "admin 建 X90 项目与“X90 集成测试组”，建制动团队 X90 工作区（团队树制动团队节点，车型 X90，业务分组制动组）、X90 项目研发（来源制动团队 X90 工作区）和 X90 集成测试（来源 X90 项目研发）。",
+          "为 X90 的业务研发、业务测试、工作区管理员、配置集成、集成测试、配置发布建账号，授权只覆盖 X90 的工作区。"
+        ],
+        "done": "工作区都显示车型 X90；X90 还没有任何策略集。",
+        "fail": "—"
+      },
+      {
+        "id": "MM02",
+        "title": "X90 的软件、镜像与首辆实车",
+        "actor": "resource；dcl；x90_admin",
+        "accounts": [
+          "resource",
+          "dcl",
+          "x90_admin"
+        ],
+        "workspace": "team-brake-x90",
+        "page": "车辆与车辆组；软件版本与镜像",
+        "pre": "MM01 完成。",
+        "steps": [
+          "resource 登记 X90 1.0；dcl 登记 X90 的研发镜像（无整车版本）和 1.0 镜像。",
+          "x90_admin 在制动团队 X90 工作区用研发镜像建仿真 SIM-901；resource 登记实车 VEH-901（整车版本为空）并交给该工作区；x90_admin 建“X90 制动研发车组”，加入两辆车。",
+          "用 X89 的镜像为 X90 工作区建仿真：被拒绝。"
+        ],
+        "done": "X90 1.0 与 X89 1.0 是两个版本；X90 首车的软件版本为空。",
+        "fail": "镜像、车辆不能跨车型。"
+      },
+      {
+        "id": "MM03",
+        "title": "X90 首个 Feature 从空初始配置开始",
+        "actor": "x90_business；x90_tester",
+        "accounts": [
+          "x90_business",
+          "x90_tester"
+        ],
+        "workspace": "team-brake-x90",
+        "page": "研发 Feature；下发与测试",
+        "pre": "MM02 完成。",
+        "steps": [
+          "x90_business 新建 x90_brake_first，加一个普通日志与“X90 急刹车”策略并提交：DCL Ready，基线是 X90 的初始研发配置。",
+          "x90_tester 下发到 X90 制动研发车组，回执后先为仿真、再为整车版本未知的实车登记 PASS，确认验证通过。"
+        ],
+        "done": "X90 的首版开发不需要整车版本，也不依赖 X89 的策略集。",
+        "fail": "—"
+      },
+      {
+        "id": "MM04",
+        "title": "X90 的集成只收 X90 的 Feature",
+        "actor": "x90_integrator；dcl",
+        "accounts": [
+          "x90_integrator",
+          "dcl"
+        ],
+        "workspace": "x90-project",
+        "page": "配置集成 → 合并与处理确认",
+        "pre": "MM03 完成。",
+        "steps": [
+          "x90_integrator 的可集成列表只有 x90_brake_first；试图合并 X89 的 brake_monitor：被拒绝。",
+          "预览 x90_brake_first：目标为 X90 的初始配置；dcl 确认处理集合；冻结为 X90-C1，在 X90 集成测试测试。"
+        ],
+        "done": "候选只接收同车型的 Feature。",
+        "fail": "跨车型合并被拒绝。"
+      },
+      {
+        "id": "MM05",
+        "title": "X90 候选的集成测试",
+        "actor": "x90_admin；resource；x90_integration_tester",
+        "accounts": [
+          "x90_admin",
+          "resource",
+          "x90_integration_tester"
+        ],
+        "workspace": "x90-integration",
+        "page": "配置集成 → 集成候选",
+        "pre": "MM04 完成。",
+        "steps": [
+          "x90_admin 在 X90 集成测试用 1.0 镜像建仿真 SIM-911；resource 登记测试实车 VEH-911 并确认为 X90 1.0，交给 X90 集成测试。",
+          "x90_integration_tester 把 X90-C1 下发到两辆车，回执后登记 PASS 并确认集成验证通过。"
+        ],
+        "done": "X90 的候选在 X90 1.0 上通过集成测试。",
+        "fail": "—"
+      },
+      {
+        "id": "MM06",
+        "title": "X90 发布自己的策略集 1.0.0",
+        "actor": "x90_release",
+        "accounts": [
+          "x90_release"
+        ],
+        "workspace": "x90-project",
+        "page": "发布与配置 OTA → 策略集发布",
+        "pre": "MM05 完成。",
+        "steps": [
+          "x90_release 发布 X90-C1：建议版本 1.0.0；列入 1.1（X90 没有这个版本）被拒绝；列入 X90 1.0 发布。",
+          "核对 X89：它的策略集、各版本生效的策略集、车辆与 1.0 的发布记录都没有变化。"
+        ],
+        "done": "X90 发布 1.0 不改变 X89 的 1.0；两个车型各自从 1.0.0 编号。",
+        "fail": "—"
+      },
+      {
+        "id": "MM07",
+        "title": "X90 量产车的灰度、失败重试与扩量",
+        "actor": "resource；x90_admin；x90_release",
+        "accounts": [
+          "resource",
+          "x90_admin",
+          "x90_release"
+        ],
+        "workspace": "x90-project",
+        "page": "发布与配置 OTA → 配置 OTA",
+        "pre": "MM06 完成。",
+        "steps": [
+          "resource 登记两辆 X90 量产车 VEH-921、VEH-922（X90 1.0）交给 X90 项目研发；x90_release 建 X90 量产车组。",
+          "用 X89 的策略集对 X90 车组建配置 OTA：被拒绝。",
+          "用 X90 1.0.0 灰度 VEH-921：回执失败自动暂停；恢复后重试成功，再扩大到 VEH-922。"
+        ],
+        "done": "两辆 X90 量产车运行 X90 1.0.0，失败的尝试保留；X89 仍没有任何变化。",
+        "fail": "配置 OTA 不能跨车型。"
+      },
+      {
+        "id": "MM08",
+        "title": "每个车型的发布记录只讲自己的事",
+        "actor": "x90_release",
+        "accounts": [
+          "x90_release"
+        ],
+        "workspace": "x90-project",
+        "page": "集成版本 → 发布记录",
+        "pre": "MM07 完成。",
+        "steps": [
+          "打开 X90 1.0 的发布记录：有 X90 1.0.0 的发布与配置 OTA，没有 X89 的策略集。",
+          "打开 X89 1.0 的发布记录：没有 X90 的策略集。"
+        ],
+        "done": "历史按车型隔离、保持不变。",
+        "fail": "—"
+      },
+      {
+        "id": "N01",
+        "title": "跨车型操作一律拒绝",
+        "actor": "admin；resource；x90_admin；x90_tester",
+        "accounts": [
+          "admin",
+          "resource",
+          "x90_admin",
+          "x90_tester"
+        ],
+        "workspace": "x90-project",
+        "page": "组织与工作区；车辆台账",
+        "pre": "MM02 完成（支线）。",
+        "steps": [
+          "admin 建一个以 X89 团队工作区为来源的 X90 项目工作区：被拒绝。",
+          "resource 把 X90 车确认为 1.1（只有 X89 有）：被拒绝；x90_admin 把 X89 的 VEH-001 加入 X90 工作区：被拒绝。",
+          "x90_tester 为 X89 的 Feature 登记结果：无权。"
+        ],
+        "done": "来源、车辆、软件版本、镜像与测试都按车型隔离。",
+        "fail": "越权与跨车型操作不改变任何记录。"
+      }
+    ]
   }
 ];
 
