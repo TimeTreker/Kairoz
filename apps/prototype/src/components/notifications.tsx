@@ -273,7 +273,14 @@ function NotificationRow({ n, read, onOpen, onRead }: { n: Notification; read: b
   return (
     <div className={`kz-notification${read ? '' : ' unread'}`} style={{ display: 'flex', gap: 8, padding: '8px 4px', borderBottom: '1px solid #f0f2f5', alignItems: 'flex-start' }}>
       <Badge status={n.severity === 'WARNING' ? 'warning' : read ? 'default' : 'processing'} style={{ marginTop: 6 }} />
-      <div style={{ flex: 1, cursor: 'pointer', minWidth: 0 }} onClick={onOpen}>
+      <div
+        style={{ flex: 1, cursor: 'pointer', minWidth: 0 }}
+        role="button"
+        tabIndex={0}
+        className="kz-row-link"
+        onClick={onOpen}
+        onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), onOpen())}
+      >
         <Typography.Text strong={!read}>{text.title}</Typography.Text>
         {text.body && (
           <div>

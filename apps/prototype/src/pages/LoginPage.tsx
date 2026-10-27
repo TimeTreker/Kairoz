@@ -1,5 +1,6 @@
 import { UserOutlined } from '@ant-design/icons';
-import { Avatar, Card, Col, Flex, Row, Segmented, Space, Tag, Typography } from 'antd';
+import { Avatar, Button, Card, Col, Collapse, Flex, Input, Row, Segmented, Space, Tag, Typography } from 'antd';
+import { useMemo, useState } from 'react';
 import { PrototypeMenu } from '../app/PrototypeMenu.tsx';
 import { navigate } from '../app/router.ts';
 import { engine, lastWorkspaceOf, setSession, useEngineState } from '../app/store.ts';
@@ -26,11 +27,72 @@ function signIn(username: string): void {
   if (!workspaceId || !canOpenPage(actor.grants, page, workspaceId)) navigate('workbench');
 }
 
-/** Prototype sign-in: pick a person. Roles come from that account's grants. */
+/** Prototype sign-in: pick a person, grouped by role. Roles come from that account's grants. */
 export function LoginPage() {
   const state = useEngineState();
   const { L, B, lang, setLang } = useI18n();
-  const accounts = Object.values(state.accounts).filter((a) => a.status === 'ACTIVE');
+  const [query, setQuery] = useState('');
+  const people = useMemo(
+    () =>
+      Object.values(state.accounts).map((a) => {
+        const grants = grantsOf(state, a);
+        const actor = { username: a.username, displayName: a.displayName, grants };
+        const roles = [...new Set(grants.map((g) => g.role))];
+        // Where the account would start: its last workspace here, else where it has the most to do.
+        const remembered = lastWorkspaceOf(a.username);
+        const access = a.status === 'ACTIVE' ? workspaceAccess(state, actor) : [];
+        const landing = remembered && access.some((x) => x.workspaceId === remembered) ? remembered : access.length ? landingWorkspace(state, actor) : null;
+        return { account: a, roles, landing };
+      }),
+    [state],
+  );
+  const q = query.trim().toLowerCase();
+  const matches = (p: (typeof people)[number]) =>
+    !q || [p.account.displayName, p.account.username, ...p.roles.map((r) => B(ROLE_LABELS[r]))].some((x) => x.toLowerCase().includes(q));
+  const usable = people.filter((p) => p.account.status === 'ACTIVE' && p.roles.length > 0 && matches(p));
+  const unusable = people.filter((p) => (p.account.status !== 'ACTIVE' || p.roles.length === 0) && matches(p));
+  // Each person once, under their first role; their card shows every role they hold.
+  const byRole = ROLES.map((role) => ({ role, people: usable.filter((p) => p.roles[0] === role) })).filter((x) => x.people.length > 0);
+  const card = (p: (typeof people)[number], disabled = false) => (
+    <Col xs={24} sm={12} xl={8} key={p.account.username}>
+      <Button block disabled={disabled} className="kz-account" onClick={() => signIn(p.account.username)} style={{ height: 'auto', padding: 12, textAlign: 'left', whiteSpace: 'normal' }}>
+        <Flex gap={12} align="flex-start" style={{ width: '100%' }}>
+          <Avatar icon={<UserOutlined />} style={{ background: '#e8efff', color: '#2865e8', flex: 'none' }} />
+          <div style={{ minWidth: 0 }}>
+            <Typography.Text strong>{p.account.displayName}</Typography.Text>
+            <div>
+              <Typography.Text type="secondary" className="kz-mono">
+                {p.account.username}
+              </Typography.Text>
+            </div>
+            <div style={{ marginTop: 6 }}>
+              {p.roles.map((r) => (
+                <Tag key={r} style={{ marginBottom: 4 }}>
+                  {B(ROLE_LABELS[r])}
+                  {p.account.grants.some((g) => g.role === r && g.dispatchOnly) ? L('（仅下发）', ' (dispatch only)') : ''}
+                </Tag>
+              ))}
+            </div>
+            {disabled ? (
+              <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                {p.account.status !== 'ACTIVE'
+                  ? p.account.employeeId
+                    ? L('已停用：离职，或由平台运维停用', 'Disabled: left the company, or disabled by platform operations')
+                    : L('已停用：由平台运维停用', 'Disabled by platform operations')
+                  : L('没有任何有效授权', 'Holds no grant')}
+              </Typography.Text>
+            ) : (
+              p.landing && (
+                <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                  {L(`进入：${state.workspaces[p.landing]?.name}`, `Opens ${state.workspaces[p.landing]?.name}`)}
+                </Typography.Text>
+              )
+            )}
+          </div>
+        </Flex>
+      </Button>
+    </Col>
+  );
   return (
     <div style={{ minHeight: '100%', background: '#f4f6fa' }}>
       <div style={{ maxWidth: 1240, margin: '0 auto', padding: '40px 24px' }}>
@@ -51,53 +113,38 @@ export function LoginPage() {
             <PrototypeMenu />
           </Space>
         </Flex>
-        <Row gutter={[24, 24]} style={{ marginTop: 28 }}>
-          <Col xs={24} lg={16}>
-            <Card title={L('人员账号', 'People')} extra={<Typography.Text type="secondary">{accounts.length}</Typography.Text>}>
-              <Row gutter={[12, 12]}>
-                {accounts.map((a) => (
-                  <Col xs={24} sm={12} xl={8} key={a.username}>
-                    <Card hoverable size="small" onClick={() => signIn(a.username)}>
-                      <Flex gap={12} align="flex-start">
-                        <Avatar icon={<UserOutlined />} style={{ background: '#e8efff', color: '#2865e8', flex: 'none' }} />
-                        <div style={{ minWidth: 0 }}>
-                          <Typography.Text strong>{a.displayName}</Typography.Text>
-                          <div>
-                            <Typography.Text type="secondary" className="kz-mono">
-                              {a.username}
-                            </Typography.Text>
-                          </div>
-                          <div style={{ marginTop: 6 }}>
-                            {[...new Set(grantsOf(state, a).map((g) => g.role))].map((r) => (
-                              <Tag key={r} style={{ marginBottom: 4 }}>
-                                {B(ROLE_LABELS[r])}
-                                {a.grants.some((g) => g.role === r && g.dispatchOnly) ? L('（仅下发）', ' (dispatch only)') : ''}
-                              </Tag>
-                            ))}
-                          </div>
-                        </div>
-                      </Flex>
-                    </Card>
-                  </Col>
-                ))}
-              </Row>
-            </Card>
-          </Col>
-          <Col xs={24} lg={8}>
-            <Card title={L('九类角色', 'Nine roles')}>
-              <Space orientation="vertical" size={12}>
-                {ROLES.map((r) => (
-                  <div key={r}>
-                    <Typography.Text strong>{B(ROLE_LABELS[r])}</Typography.Text>
-                    <div>
-                      <Typography.Text type="secondary">{B(ROLE_GOALS[r])}</Typography.Text>
-                    </div>
-                  </div>
-                ))}
-              </Space>
-            </Card>
-          </Col>
-        </Row>
+        <Card
+          style={{ marginTop: 28 }}
+          title={`${L('人员账号', 'People')} · ${usable.length}`}
+          extra={<Input.Search allowClear style={{ width: 220 }} placeholder={L('姓名、账号或角色', 'Name, account or role')} value={query} onChange={(e) => setQuery(e.target.value)} />}
+        >
+          <Space orientation="vertical" size={20} style={{ width: '100%' }}>
+            {byRole.map(({ role, people: list }) => (
+              <div key={role}>
+                <Typography.Text strong>{B(ROLE_LABELS[role])}</Typography.Text>
+                <Typography.Text type="secondary" style={{ marginLeft: 8 }}>
+                  {B(ROLE_GOALS[role])}
+                </Typography.Text>
+                <Row gutter={[12, 12]} style={{ marginTop: 8 }}>
+                  {list.map((p) => card(p))}
+                </Row>
+              </div>
+            ))}
+            {usable.length === 0 && <Typography.Text type="secondary">{L('没有匹配的账号。', 'No matching account.')}</Typography.Text>}
+            {unusable.length > 0 && (
+              <Collapse
+                size="small"
+                items={[
+                  {
+                    key: 'unusable',
+                    label: L(`不能登录的账号 · ${unusable.length}`, `Accounts that cannot sign in · ${unusable.length}`),
+                    children: <Row gutter={[12, 12]}>{unusable.map((p) => card(p, true))}</Row>,
+                  },
+                ]}
+              />
+            )}
+          </Space>
+        </Card>
       </div>
     </div>
   );

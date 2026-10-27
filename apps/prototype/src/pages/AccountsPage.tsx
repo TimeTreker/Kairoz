@@ -173,7 +173,7 @@ export function AccountsPage() {
                   const role = grants?.[field.name]?.role as keyof typeof ROLE_INFO | undefined;
                   const dim = role ? ROLE_INFO[role].dimension : 'none';
                   return (
-                    <Card key={field.key} size="small" extra={<MinusCircleOutlined onClick={() => remove(field.name)} />}>
+                    <Card key={field.key} size="small" extra={<Button type="text" size="small" icon={<MinusCircleOutlined />} aria-label={L('删除这条授权', 'Remove this grant')} onClick={() => remove(field.name)} />}>
                       <Space wrap align="start">
                         <Form.Item name={[field.name, 'role']} label={L('角色', 'Role')} rules={[{ required: true }]}>
                           <Select style={{ width: 170 }} options={ROLES.map((r) => ({ value: r, label: B(ROLE_LABELS[r]) }))} />

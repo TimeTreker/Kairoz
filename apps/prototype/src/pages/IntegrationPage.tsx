@@ -435,7 +435,7 @@ function CallLink({ callId, planId }: { callId: string; planId: string }) {
   const n = call.rounds.findIndex((r) => r.planId === planId) + 1;
   return (
     <Space size={4} wrap>
-      <a onClick={() => navigate(`versions/calls/${call.id}`)}>{call.title}</a>
+      <a href={`#/versions/calls/${call.id}`}>{call.title}</a>
       <Tag color="purple">{L(`第 ${n} 轮`, `round ${n}`)}</Tag>
     </Space>
   );
@@ -1048,7 +1048,7 @@ function SubsystemsTab({ releases }: { releases: SubsystemRelease[] }) {
           { title: L('包含 Feature', 'Features'), render: (_, r) => r.features.map((f) => state.features[f.featureId]?.name).join(', ') },
           { title: L('基线', 'Base'), render: (_, r) => (r.baseReleaseId ? B(setName(state.releases[r.baseReleaseId]!.dclVersion)) : L('无', 'none')) },
           { title: L('替代', 'Replaces'), render: (_, r) => (r.supersedesId ? state.subsystemReleases[r.supersedesId]?.label : '—') },
-          { title: L('候选', 'Candidate'), render: (_, r) => <a onClick={() => navigate(`integration/${r.candidateId}`)}><Mono>{state.candidates[r.candidateId]?.label}</Mono></a> },
+          { title: L('候选', 'Candidate'), render: (_, r) => <a href={`#/integration/${r.candidateId}`}><Mono>{state.candidates[r.candidateId]?.label}</Mono></a> },
           { title: L('发布', 'Published'), render: (_, r) => `${state.accounts[r.publishedBy]?.displayName} · ${when(r.publishedAt)}${r.notes ? ` · ${r.notes}` : ''}` },
         ]}
       />

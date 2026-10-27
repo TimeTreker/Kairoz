@@ -108,3 +108,10 @@ body {
 .kz-row-selected > td {
   background: #eef4ff !important;
 }
+
+/* Rows that open something are reachable by keyboard; show where the focus is. */
+.kz-row-link:focus-visible {
+  outline: 2px solid #2865e8;
+  outline-offset: 2px;
+  border-radius: 4px;
+}

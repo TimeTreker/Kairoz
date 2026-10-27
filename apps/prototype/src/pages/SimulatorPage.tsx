@@ -21,10 +21,10 @@ import { confirmHold, pendingHolds } from '../engine/collection-hold.ts';
 import { pendingSoftwareRequests } from '../engine/vehicle-software.ts';
 import { DeliveryTag } from '../components/testing.tsx';
 import type { ReportFault } from '../engine/simulator.ts';
+import { setAutoRun, useAutoRun } from '../app/autorun.ts';
 import { useI18n } from '../i18n/i18n.tsx';
 import { BUDGET_NOTE_LABELS, DEVICE_FAULT_LABELS, ERROR_LABELS, EVENT_STATUS_COLORS, HOLD_STATE_LABELS, IMAGE_CHANGE_KIND_LABELS, EVENT_STATUS_LABELS, QUALITY_LABELS, REPORT_RESULT_LABELS, RESOURCE_TYPE_LABELS, TRAINING_USE_LABELS } from '../i18n/vocab.ts';
 
-let autoTimer: ReturnType<typeof setInterval> | undefined;
 
 /** The vehicle OTA system (整车 OTA, outside the platform): carries out requested software updates. */
 function VehicleOtaCard({ system }: { system: <R>(op: (c: Ctx) => R, ok?: string) => R | undefined }) {
@@ -187,7 +187,7 @@ export function SimulatorPage() {
   const { L, B } = useI18n();
   const { message } = App.useApp();
   const errorText = useErrorText();
-  const [auto, setAuto] = useState(autoTimer !== undefined);
+  const auto = useAutoRun();
   const [otaOf, setOtaOf] = useState<string | null>(null);
   const [otaVersion, setOtaVersion] = useState('');
 
@@ -202,13 +202,6 @@ export function SimulatorPage() {
     }
   };
 
-  useEffect(() => {
-    if (auto && !autoTimer) autoTimer = setInterval(() => engine.run(null, (c) => tick(c)), 2000);
-    if (!auto && autoTimer) {
-      clearInterval(autoTimer);
-      autoTimer = undefined;
-    }
-  }, [auto]);
 
   const pending = pendingForVehicles(state);
   const vehicles = Object.values(state.resources).sort((a, b) => a.id.localeCompare(b.id));
@@ -259,7 +252,7 @@ export function SimulatorPage() {
         extra={
           <Space>
             <Typography.Text>{L('自动运行（每 2 秒）', 'Run automatically (every 2 s)')}</Typography.Text>
-            <Switch checked={auto} onChange={setAuto} />
+            <Switch checked={auto} onChange={setAutoRun} />
             <Button onClick={() => system((c) => tick(c), L('已执行一步', 'Stepped'))}>{L('执行一步', 'Step once')}</Button>
           </Space>
         }

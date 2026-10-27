@@ -1,4 +1,5 @@
-import { Flex, Tag, Tooltip, Typography } from 'antd';
+import { Button, Flex, Tag, Tooltip, Typography } from 'antd';
+import { useState, useSyncExternalStore } from 'react';
 import type { ReactNode } from 'react';
 import { useActor, useCanOpen } from '../app/hooks.ts';
 import { navigate } from '../app/router.ts';
@@ -74,7 +75,44 @@ export function RoleTag({ role }: { role: string }) {
   return <LabelTag map={ROLE_LABELS} value={role} />;
 }
 
+// Page explanations can be collapsed for people who know the platform (a choice kept in this browser).
+const HINTS_KEY = 'kairoz.hints';
+let hintsHidden = (() => {
+  try {
+    return localStorage.getItem(HINTS_KEY) === 'hidden';
+  } catch {
+    return false;
+  }
+})();
+const hintListeners = new Set<() => void>();
+export function setHintsHidden(hidden: boolean): void {
+  hintsHidden = hidden;
+  try {
+    localStorage.setItem(HINTS_KEY, hidden ? 'hidden' : 'shown');
+  } catch {
+    // Not kept; it still applies until the page closes.
+  }
+  for (const l of hintListeners) l();
+}
+export function useHintsHidden(): boolean {
+  return useSyncExternalStore(
+    (l) => (hintListeners.add(l), () => void hintListeners.delete(l)),
+    () => hintsHidden,
+  );
+}
+
+/** A page's explanation: shown, or (when collapsed) a small button that opens it here. */
 export function Hint({ children }: { children: ReactNode }) {
+  const hidden = useHintsHidden();
+  const [open, setOpen] = useState(false);
+  const { L } = useI18n();
+  if (hidden && !open) {
+    return (
+      <Button type="link" size="small" style={{ padding: 0, marginBottom: 8 }} onClick={() => setOpen(true)}>
+        ⓘ {L('说明', 'About this')}
+      </Button>
+    );
+  }
   return (
     <Typography.Paragraph type="secondary" style={{ marginBottom: 12 }}>
       {children}

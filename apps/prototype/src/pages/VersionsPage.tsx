@@ -283,7 +283,7 @@ function CallDetail({ callId }: { callId: string }) {
   const steps = [L('征集', 'Call'), L('收齐', 'Complete'), L('送测', 'Testing'), L('测试通过', 'Passed'), L('发布', 'Released')];
   return (
     <Space orientation="vertical" size={16} style={{ width: '100%' }}>
-      <a onClick={() => navigate('versions/calls')}>{L('← 全部集成征集', '← All integration calls')}</a>
+      <a href="#/versions/calls">{L('← 全部集成征集', '← All integration calls')}</a>
       <Card
         title={
           <Space size={8} wrap>
@@ -322,7 +322,7 @@ function CallDetail({ callId }: { callId: string }) {
           {call.baseVersion && <Descriptions.Item label={L('基线软件版本', 'Base software')}>{`${call.vehicleModelId} ${call.baseVersion}`}</Descriptions.Item>}
           {parent && (
             <Descriptions.Item label={L('响应的整车征集', 'Answers')}>
-              <a onClick={() => navigate(`versions/calls/${parent.id}`)}>{parent.title}</a>
+              <a href={`#/versions/calls/${parent.id}`}>{parent.title}</a>
             </Descriptions.Item>
           )}
           {children.length > 0 && (
@@ -496,7 +496,7 @@ function CallDetail({ callId }: { callId: string }) {
               title: L('轮次', 'Round'),
               render: (_, r) => {
                 const c = r.candidateId ? state.candidates[r.candidateId] : undefined;
-                return c ? (canOpen('integration') ? <a onClick={() => navigate(`integration/${c.id}`)}><Mono>{c.label}</Mono></a> : <Mono>{c.label}</Mono>) : <Typography.Text type="secondary">{L('集成预览', 'Merge preview')}</Typography.Text>;
+                return c ? (canOpen('integration') ? <a href={`#/integration/${c.id}`}><Mono>{c.label}</Mono></a> : <Mono>{c.label}</Mono>) : <Typography.Text type="secondary">{L('集成预览', 'Merge preview')}</Typography.Text>;
               },
             },
             { title: L('预览', 'Preview'), render: (_, r) => <LabelTag map={PLAN_STATUS_LABELS} value={state.mergePlans[r.planId]?.status ?? '—'} /> },
@@ -769,7 +769,7 @@ function VersionHistory({ selected }: { selected?: string }) {
               <Space size={4} wrap>
                 <Tag color={current.status === 'PLANNED' ? 'gold' : 'green'}>{B(SOFTWARE_STATUS_LABELS[current.status])}</Tag>
                 {current.callId && state.integrationCalls[current.callId] && (
-                  <a onClick={() => navigate(`versions/calls/${current.callId}`)}>{L(`集成征集 ${state.integrationCalls[current.callId]!.title}`, `Integration call ${state.integrationCalls[current.callId]!.title}`)}</a>
+                  <a href={`#/versions/calls/${current.callId}`}>{L(`集成征集 ${state.integrationCalls[current.callId]!.title}`, `Integration call ${state.integrationCalls[current.callId]!.title}`)}</a>
                 )}
                 {current.status === 'RECORDED' && !current.callId && current.source && <Typography.Text type="secondary">{current.source}</Typography.Text>}
               </Space>
@@ -844,7 +844,7 @@ function SetHistory({ selected }: { selected?: string }) {
             <Descriptions.Item label={L('来源', 'From')}>
               <Space size={4} wrap>
                 {candidate ? <Mono>{candidate.label}</Mono> : current.emergency ? L('紧急停用', 'Emergency stop') : '—'}
-                {call && <a onClick={() => navigate(`versions/calls/${call.id}`)}>{L(`集成征集 ${call.title}`, `Integration call ${call.title}`)}</a>}
+                {call && <a href={`#/versions/calls/${call.id}`}>{L(`集成征集 ${call.title}`, `Integration call ${call.title}`)}</a>}
               </Space>
             </Descriptions.Item>
             <Descriptions.Item label={L('发布时列入', 'Listed when published')}>{current.vehicleIntegrationVersions.map((v) => <Tag key={v}>{`${model} ${v}`}</Tag>)}</Descriptions.Item>

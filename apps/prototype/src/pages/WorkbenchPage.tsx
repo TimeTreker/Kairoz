@@ -36,9 +36,19 @@ import type { Feature } from '../engine/types.ts';
 import { useI18n } from '../i18n/i18n.tsx';
 import { CANDIDATE_STATUS_COLORS, CANDIDATE_STATUS_LABELS, CHECK_STATUS_COLORS, CHECK_STATUS_LABELS, ENV_LABELS, FEEDBACK_LABELS, setName } from '../i18n/vocab.ts';
 
+/** A to-do row that opens its object: clickable, and reachable and opened from the keyboard. */
 function Row2({ onClick, children }: { onClick: () => void; children: ReactNode }) {
   return (
-    <Flex justify="space-between" align="center" onClick={onClick} style={{ cursor: 'pointer', padding: '8px 0', borderBottom: '1px solid #f0f0f0' }}>
+    <Flex
+      justify="space-between"
+      align="center"
+      role="button"
+      tabIndex={0}
+      className="kz-row-link"
+      onClick={onClick}
+      onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), onClick())}
+      style={{ cursor: 'pointer', padding: '8px 0', borderBottom: '1px solid #f0f0f0' }}
+    >
       {children}
     </Flex>
   );

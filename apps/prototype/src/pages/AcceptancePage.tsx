@@ -2,7 +2,7 @@
 // scene's account through the normal entry, ticks the steps, and records the result with evidence.
 // Records are the tester's own statements, kept in this browser; nothing here performs a step.
 
-import { Alert, App, Button, Card, Checkbox, Col, Descriptions, Empty, Flex, Input, Row, Segmented, Space, Table, Tag, Timeline, Typography } from 'antd';
+import { Alert, App, Button, Card, Checkbox, Col, Descriptions, Empty, Flex, Input, Row, Segmented, Select, Space, Table, Tag, Timeline, Typography } from 'antd';
 import { useEffect, useMemo, useState } from 'react';
 import { SCENE_NOTES, SCRIPT_NOTES } from '../acceptance/notes.ts';
 import { NEGATIVE_CASES, SCRIPTS } from '../acceptance/scripts.ts';
@@ -14,6 +14,7 @@ import { visibleFeatures } from '../engine/config.ts';
 import { workspaceVehicles } from '../engine/fleet.ts';
 import { pendingForVehicles } from '../engine/simulator.ts';
 import { useI18n } from '../i18n/i18n.tsx';
+import type { Bilingual } from '../i18n/i18n.tsx';
 
 type Result = 'NOT_RUN' | 'PASS' | 'FAIL' | 'BLOCKED' | 'SKIPPED' | 'NOT_APPLICABLE';
 
@@ -34,6 +35,14 @@ interface Record_ {
 
 const KEY = 'kairoz.acceptance.v1';
 const RESULTS: Result[] = ['NOT_RUN', 'PASS', 'FAIL', 'BLOCKED', 'SKIPPED', 'NOT_APPLICABLE'];
+const RESULT_LABELS: Record<Result, Bilingual> = {
+  NOT_RUN: { zh: '未执行', en: 'Not run' },
+  PASS: { zh: '通过', en: 'Pass' },
+  FAIL: { zh: '失败', en: 'Fail' },
+  BLOCKED: { zh: '阻塞', en: 'Blocked' },
+  SKIPPED: { zh: '跳过', en: 'Skipped' },
+  NOT_APPLICABLE: { zh: '不适用', en: 'Not applicable' },
+};
 const COLORS: Record<Result, string> = { NOT_RUN: 'default', PASS: 'green', FAIL: 'red', BLOCKED: 'orange', SKIPPED: 'default', NOT_APPLICABLE: 'purple' };
 
 const newRecord = (): Record_ => ({ runId: `KZ-ACC-${new Date().toISOString().slice(0, 19).replaceAll(/[-:T]/g, '')}`, startedAt: new Date().toISOString(), scenes: {} });
@@ -77,7 +86,7 @@ function download(name: string, text: string, type: string) {
 }
 
 export function AcceptancePage() {
-  const { L } = useI18n();
+  const { L, B } = useI18n();
   const { modal, message } = App.useApp();
   const [record, setRecord] = useState<Record_>(load);
   const [scriptId, setScriptId] = useState('first-ota');
@@ -147,11 +156,13 @@ export function AcceptancePage() {
           </Space>
         }
       />
-      <Segmented
-        style={{ marginBottom: 12 }}
+      <Select
+        showSearch
+        optionFilterProp="label"
+        style={{ marginBottom: 12, width: '100%', maxWidth: 520 }}
         value={scriptId}
         onChange={(v) => {
-          setScriptId(v as string);
+          setScriptId(v);
           setSceneId(scripts.find((s) => s.id === v)!.scenes[0]!.id);
         }}
         options={scripts.map((s) => ({ value: s.id, label: `${s.name} (${counts(s).PASS ?? 0}/${s.scenes.length})` }))}
@@ -196,7 +207,7 @@ export function AcceptancePage() {
               columns={[
                 { title: L('幕', 'Scene'), width: 64, render: (_, s) => <Typography.Text strong>{s.id}</Typography.Text> },
                 { title: L('内容', 'Content'), render: (_, s) => <Typography.Text ellipsis style={{ maxWidth: 260 }}>{s.title}</Typography.Text> },
-                { title: L('结果', 'Result'), width: 110, render: (_, s) => <Tag color={COLORS[rec(script.id, s.id).result]}>{rec(script.id, s.id).result}</Tag> },
+                { title: L('结果', 'Result'), width: 110, render: (_, s) => <Tag color={COLORS[rec(script.id, s.id).result]}>{B(RESULT_LABELS[rec(script.id, s.id).result])}</Tag> },
               ]}
             />
           </Card>
@@ -213,7 +224,7 @@ function SceneCard({ scriptId, scene, record, onSave }: { scriptId: string; scen
   const state = useEngineState();
   const actor = useActor();
   const { workspace, roles } = useWorkspace();
-  const { L } = useI18n();
+  const { L, B } = useI18n();
   const { message } = App.useApp();
   const [checked, setChecked] = useState<number[]>(record.checked);
   const [result, setResult] = useState<Result>(record.result);
@@ -307,7 +318,7 @@ function SceneCard({ scriptId, scene, record, onSave }: { scriptId: string; scen
       )}
       <Card size="small" title={L('登记结果', 'Record the result')}>
         <Space orientation="vertical" style={{ width: '100%' }}>
-          <Segmented value={result} onChange={(v) => setResult(v as Result)} options={RESULTS.map((r) => ({ value: r, label: r }))} />
+          <Segmented value={result} onChange={(v) => setResult(v as Result)} options={RESULTS.map((r) => ({ value: r, label: B(RESULT_LABELS[r]) }))} />
           <Input value={executor} onChange={(e) => setExecutor(e.target.value)} placeholder={L('实际执行人', 'Who performed it')} />
           <Input.TextArea rows={3} value={evidence} onChange={(e) => setEvidence(e.target.value)} placeholder={L('关联对象与版本、观察结果、证据位置；失败或阻塞写明原因', 'Objects and versions involved, observations, where evidence is; reasons for failures or blocks')} />
           <Button type="primary" onClick={commit}>

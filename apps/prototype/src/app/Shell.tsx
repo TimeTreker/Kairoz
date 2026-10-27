@@ -15,13 +15,15 @@ import {
   TeamOutlined,
   UserOutlined,
 } from '@ant-design/icons';
-import { Avatar, Breadcrumb, Button, Dropdown, Layout, Menu, Result, Segmented, Select, Space, Spin, Tag } from 'antd';
+import { Avatar, Breadcrumb, Button, Dropdown, Layout, Menu, Result, Segmented, Select, Space, Spin, Tag, Tooltip } from 'antd';
 import { Suspense, lazy, useEffect, useState } from 'react';
 import type { ComponentType, ReactNode } from 'react';
 import { authorize, canOpenPage } from '../domain/authz.ts';
 import { unitPath } from '../engine/org.ts';
 import { useI18n } from '../i18n/i18n.tsx';
 import { ROLE_LABELS, WORKSPACE_KIND_LABELS } from '../i18n/vocab.ts';
+import { setHintsHidden, useHintsHidden } from '../components/common.tsx';
+import { setAutoRun, useAutoRun } from './autorun.ts';
 import { NotificationBell } from '../components/notifications.tsx';
 import { useActor, useCanOpen, useWorkspace } from './hooks.ts';
 import { PrototypeMenu } from './PrototypeMenu.tsx';
@@ -90,10 +92,16 @@ const GuidePage = lazyPage(() => import('../pages/GuidePage.tsx').then((m) => m.
 const NotificationsPage = lazyPage(() => import('../pages/NotificationsPage.tsx').then((m) => m.NotificationsPage));
 const AcceptancePage = lazyPage(() => import('../pages/AcceptancePage.tsx').then((m) => m.AcceptancePage));
 
-/** Fetched once the shell is up, so switching pages during a demo never waits on the network. */
-const PAGES = [
-  WorkbenchPage, FeaturesPage, FeatureDetailPage, DataCatalogPage, IntakePage, ProcessingPage, FleetPage, IntegrationPage,
-  ReleasePage, VersionsPage, QueryPage, SimulatorPage, OrgPage, AccountsPage, AuditPage, GuidePage, NotificationsPage, AcceptancePage,
+/**
+ * Fetched once the shell is up, so switching pages during a demo never waits on the network: the
+ * pages the account can open somewhere, and the tools every tour uses. The acceptance replay loads
+ * when it is opened.
+ */
+const PAGES: [string, { preload(): void }][] = [
+  ['workbench', WorkbenchPage], ['features', FeaturesPage], ['features', FeatureDetailPage], ['data', DataCatalogPage], ['intake', IntakePage],
+  ['processing', ProcessingPage], ['fleet', FleetPage], ['integration', IntegrationPage], ['release', ReleasePage], ['versions', VersionsPage],
+  ['query', QueryPage], ['simulator', SimulatorPage], ['org', OrgPage], ['accounts', AccountsPage], ['audit', AuditPage], ['guide', GuidePage],
+  ['notifications', NotificationsPage], ['acceptance', AcceptancePage],
 ];
 
 interface NavItem {
@@ -158,11 +166,15 @@ export function Shell() {
   const { L, B, lang, setLang } = useI18n();
   const { access, workspace, roles } = useWorkspace();
   const canOpen = useCanOpen();
+  const hintsHidden = useHintsHidden();
+  const autoRun = useAutoRun();
   const route = useRoute();
   const page = route[0] ?? 'workbench';
 
   useEffect(() => {
-    const t = setTimeout(() => PAGES.forEach((p) => p.preload()), 1000);
+    const t = setTimeout(() => {
+      for (const [key, p] of PAGES) if (key !== 'acceptance' && access.some((a) => canOpenPage(actor.grants, key, a.workspaceId))) p.preload();
+    }, 1000);
     return () => clearTimeout(t);
   }, []);
 
@@ -235,10 +247,18 @@ export function Shell() {
           />
           {workspace && <Tag className="kz-header-kind">{B(WORKSPACE_KIND_LABELS[workspace.kind])}</Tag>}
           <div className="kz-header-tools">
+            {autoRun && (
+              <Tooltip title={L('车辆与外部服务每 2 秒自动执行一步；点击停止。', 'Vehicles and services take a step every 2 seconds; click to stop.')}>
+                <Tag color="processing" style={{ cursor: 'pointer' }} onClick={() => setAutoRun(false)}>
+                  {L('模拟器自动运行中', 'Simulator running')}
+                </Tag>
+              </Tooltip>
+            )}
             <Segmented size="small" value={lang} onChange={(v) => setLang(v as 'zh' | 'en')} options={[{ label: '中', value: 'zh' }, { label: 'EN', value: 'en' }]} />
             <PrototypeMenu compact />
             {workspace && <NotificationBell />}
             <Dropdown
+              trigger={['click']}
               menu={{
                 items: [
                   {
@@ -248,14 +268,17 @@ export function Shell() {
                     children: (roles.length ? roles : [...allRoles]).map((r) => ({ key: r, label: B(ROLE_LABELS[r]), disabled: true })),
                   },
                   { type: 'divider' },
+                  { key: 'hints', label: hintsHidden ? L('展开页面说明', 'Show page explanations') : L('收起页面说明', 'Collapse page explanations'), onClick: () => setHintsHidden(!hintsHidden) },
                   { key: 'switch', label: L('切换账号', 'Switch account'), onClick: () => setSession({ username: null, workspaceId: null }) },
                 ],
               }}
             >
-              <Space style={{ cursor: 'pointer' }}>
-                <Avatar size="small" icon={<UserOutlined />} />
-                <span className="kz-header-name">{actor.displayName}</span>
-              </Space>
+              <Button type="text" aria-label={L(`账号：${actor.displayName}`, `Account: ${actor.displayName}`)} style={{ paddingInline: 4 }}>
+                <Space>
+                  <Avatar size="small" icon={<UserOutlined />} />
+                  <span className="kz-header-name">{actor.displayName}</span>
+                </Space>
+              </Button>
             </Dropdown>
           </div>
         </Layout.Header>

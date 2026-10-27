@@ -1028,7 +1028,7 @@ function Registry() {
                     <Form.Item name={[f.name, 'status']}>
                       <Select style={{ width: 110 }} options={[{ value: 'PASS', label: 'PASS' }, { value: 'FAIL', label: 'FAIL' }]} />
                     </Form.Item>
-                    <MinusCircleOutlined onClick={() => remove(f.name)} />
+                    <Button type="text" size="small" icon={<MinusCircleOutlined />} aria-label={L('删除这个域控', 'Remove this controller')} onClick={() => remove(f.name)} />
                   </Space>
                 ))}
                 <Button size="small" icon={<PlusOutlined />} onClick={() => add({ name: '', version: '', status: 'PASS' })}>

@@ -153,7 +153,7 @@ function ReleasesTab({ modelId, workspaceId }: { modelId: string; workspaceId: s
           dataSource={waiting}
           locale={{ emptyText: L('暂无已通过集成测试的候选', 'No verified candidates') }}
           columns={[
-            { title: L('候选', 'Candidate'), render: (_, c) => <a onClick={() => navigate(`integration/${c.id}`)}><Mono>{c.label}</Mono></a> },
+            { title: L('候选', 'Candidate'), render: (_, c) => <a href={`#/integration/${c.id}`}><Mono>{c.label}</Mono></a> },
             { title: L('来源', 'Sources'), render: (_, c) => [...c.subsystems.map((x) => state.subsystemReleases[x.subsystemReleaseId]?.label), ...c.sources.map((x) => state.features[x.featureId]?.name)].join(', ') },
             {
               title: L('目标策略集', 'Target set'),
