@@ -6,8 +6,8 @@ import { LifecycleModal } from '../components/lifecycle.tsx';
 import type { LifecycleTarget } from '../components/lifecycle.tsx';
 import { WorkspaceGroups } from '../components/workspace-groups.tsx';
 import { navigate } from '../app/router.ts';
-import { useEngineState } from '../app/store.ts';
-import { LabelTag, Mono, RoleTag, StageTag } from '../components/common.tsx';
+import { setSession, useEngineState } from '../app/store.ts';
+import { LabelTag, Mono, RoleTag, StageTag, when } from '../components/common.tsx';
 import { HoldTag } from '../components/budget.tsx';
 import { PatchedTag } from '../components/patch.tsx';
 import { authorize } from '../domain/authz.ts';
@@ -61,7 +61,7 @@ export function WorkbenchPage() {
   const state = useEngineState();
   const actor = useActor()!;
   const canOpen = useCanOpen();
-  const { workspace, roles } = useWorkspace();
+  const { workspace, roles, access } = useWorkspace();
   const { L, B } = useI18n();
   const cards: ReactNode[] = [];
   const [changeOf, setChangeOf] = useState<string | null>(null);
@@ -101,7 +101,7 @@ export function WorkbenchPage() {
           </>
         )}
         {pendingRefs.length > 0 && (
-          <Button type="link" onClick={() => navigate('data')}>
+          <Button type="link" onClick={() => navigate('data/requests')}>
             <Badge count={pendingRefs.length} size="small" offset={[10, 0]}>
               {L('待本组决定的引用申请', 'Reference requests awaiting your group')}
             </Badge>
@@ -196,7 +196,7 @@ export function WorkbenchPage() {
           <Col span={8}><Statistic title={L('车辆组', 'Vehicle groups')} value={vehicleGroupsOf(state, workspace.id).filter((g) => g.status === 'ACTIVE').length} /></Col>
         </Row>
         {testRequestsOf(state, workspace.id).some((r) => r.status === 'PENDING') && (
-          <Button type="link" style={{ paddingLeft: 0, marginTop: 8 }} onClick={() => navigate('fleet')}>
+          <Button type="link" style={{ paddingLeft: 0, marginTop: 8 }} onClick={() => navigate('fleet/groups')}>
             <Badge count={testRequestsOf(state, workspace.id).filter((r) => r.status === 'PENDING').length} size="small" offset={[10, 0]}>
               {L('待审批的团队测试申请', 'Team test requests to decide')}
             </Badge>
@@ -273,7 +273,7 @@ export function WorkbenchPage() {
         </Row>
         {mine.length === 0 && checks.length === 0 && <Typography.Text type="secondary">{L('暂无待测候选', 'No candidates to test')}</Typography.Text>}
         {checks.map((c) => (
-          <Row2 key={c.id} onClick={() => navigate('integration')}>
+          <Row2 key={c.id} onClick={() => navigate('integration/applicability')}>
             <Space>
               <Mono>{`${c.vehicleModelId} ${c.version}`}</Mono>
               <Typography.Text type="secondary">← {B(setName(state.releases[c.releaseId]!.dclVersion))}</Typography.Text>
@@ -370,7 +370,7 @@ export function WorkbenchPage() {
   if (actor.grants.some((g) => g.role === 'VEHICLE_RESOURCE')) {
     const managed = managedResources(state, actor);
     cards.push(
-      <Card key="vr" title={<RoleTag role="VEHICLE_RESOURCE" />} extra={<Button size="small" onClick={() => navigate('fleet')}>{L('车辆台账', 'Registry')}</Button>}>
+      <Card key="vr" title={<RoleTag role="VEHICLE_RESOURCE" />} extra={<Button size="small" onClick={() => navigate('fleet/registry')}>{L('车辆台账', 'Registry')}</Button>}>
         <Row gutter={16}>
           <Col span={8}><Statistic title={L('管理的车辆', 'Managed vehicles')} value={managed.length} /></Col>
           <Col span={8}><Statistic title={L('软件版本未知', 'Unknown software')} value={managed.filter((r) => r.type === 'PHYSICAL' && !r.integrationVersion).length} /></Col>
@@ -416,11 +416,15 @@ export function WorkbenchPage() {
           <Col span={8}><Statistic title={L('待判定的来源重叠', 'Overlaps to decide')} value={q.overlaps.length} /></Col>
           <Col span={8}><Statistic title={L('待确认的集成处理集合', 'Integration sets to confirm')} value={confirmations.length} /></Col>
         </Row>
-        {confirmations.length > 0 && (
-          <Button type="link" style={{ paddingLeft: 0 }} onClick={() => navigate('integration')}>
-            {L('去配置集成确认处理集合', 'Confirm processing sets in Integration')}
-          </Button>
-        )}
+        {confirmations.map((p) => (
+          <Row2 key={p.id} onClick={() => (access.some((a) => a.workspaceId === p.workspaceId) && setSession({ workspaceId: p.workspaceId }), navigate('integration/merge'))}>
+            <Space>
+              <Typography.Text>{state.workspaces[p.workspaceId]?.name}</Typography.Text>
+              <Typography.Text type="secondary">{L('合并预览等待确认处理集合', 'merge preview awaiting the processing confirmation')}</Typography.Text>
+            </Space>
+            <Typography.Text type="secondary">{when(p.createdAt)}</Typography.Text>
+          </Row2>
+        ))}
         {overBudget.map(({ id, u }) => (
           <Row2 key={id} onClick={() => navigate('processing/budget')}>
             <Space>

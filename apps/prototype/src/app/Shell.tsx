@@ -18,7 +18,7 @@ import {
 import { Avatar, Breadcrumb, Button, Dropdown, Layout, Menu, Result, Segmented, Select, Space, Spin, Tag } from 'antd';
 import { Suspense, lazy, useEffect, useState } from 'react';
 import type { ComponentType, ReactNode } from 'react';
-import { canOpenPage } from '../domain/authz.ts';
+import { authorize, canOpenPage } from '../domain/authz.ts';
 import { unitPath } from '../engine/org.ts';
 import { useI18n } from '../i18n/i18n.tsx';
 import { ROLE_LABELS, WORKSPACE_KIND_LABELS } from '../i18n/vocab.ts';
@@ -167,7 +167,12 @@ export function Shell() {
   }, []);
 
   const allRoles = new Set(actor.grants.map((g) => g.role));
-  const nav = NAV.filter((n) => canOpen(n.key));
+  // The Feature list shows the workspace's Features: without any, it is useful only to those who can create one there.
+  const holdsFeatures =
+    !!workspace &&
+    (Object.values(state.features).some((f) => f.workspaceId === workspace.id) ||
+      workspace.groupIds.some((g) => authorize(actor.grants, 'feature.create', { workspaceId: workspace.id, groupId: g, scope: state.groups[g]?.domain }).ok));
+  const nav = NAV.filter((n) => canOpen(n.key) && (n.key !== 'features' || holdsFeatures));
 
   const path = workspace ? unitPath(state, workspace.orgUnitId) : [];
   const options = (['TEAM', 'PROJECT', 'INTEGRATION'] as const)
@@ -181,13 +186,13 @@ export function Shell() {
 
   let content: ReactNode;
   if (!canOpen(page)) content = <NoAccess page={page} />;
-  else if (page === 'features' && route[1]) content = <FeatureDetailPage featureId={route[1]} />;
-  else if (page === 'integration') content = <IntegrationPage key={workspace?.id} candidateId={route[1]} />;
+  else if (page === 'features' && route[1]) content = <FeatureDetailPage featureId={route[1]} tab={route[2]} />;
+  else if (page === 'integration') content = <IntegrationPage key={workspace?.id} target={route[1]} />;
   else
     content = {
       workbench: <WorkbenchPage />,
       features: <FeaturesPage />,
-      data: <DataCatalogPage />,
+      data: <DataCatalogPage key={workspace?.id} tab={route[1]} />,
       intake: <IntakePage />,
       processing: <ProcessingPage tab={route[1]} />,
       fleet: <FleetPage key={workspace?.id} tab={route[1]} />,

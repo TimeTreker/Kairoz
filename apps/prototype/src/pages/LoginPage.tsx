@@ -1,11 +1,30 @@
 import { UserOutlined } from '@ant-design/icons';
 import { Avatar, Card, Col, Flex, Row, Segmented, Space, Tag, Typography } from 'antd';
 import { PrototypeMenu } from '../app/PrototypeMenu.tsx';
-import { setSession, useEngineState } from '../app/store.ts';
-import { grantsOf } from '../engine/identity.ts';
+import { navigate } from '../app/router.ts';
+import { engine, lastWorkspaceOf, setSession, useEngineState } from '../app/store.ts';
+import { canOpenPage } from '../domain/authz.ts';
+import { grantsOf, workspaceAccess } from '../engine/identity.ts';
+import { landingWorkspace } from '../engine/notifications.ts';
 import { useI18n } from '../i18n/i18n.tsx';
 import { ROLE_GOALS, ROLE_LABELS } from '../i18n/vocab.ts';
 import { ROLES } from '../domain/vocabulary.ts';
+
+/**
+ * Signs in: the account starts in the workspace it last used (in this browser), else where it has
+ * the most to do. A page it cannot open there gives way to the workbench.
+ */
+function signIn(username: string): void {
+  const state = engine.getState();
+  const account = state.accounts[username]!;
+  const actor = { username, displayName: account.displayName, grants: grantsOf(state, account) };
+  const access = workspaceAccess(state, actor);
+  const remembered = lastWorkspaceOf(username);
+  const workspaceId = remembered && access.some((a) => a.workspaceId === remembered) ? remembered : landingWorkspace(state, actor);
+  const page = window.location.hash.replace(/^#\/?/, '').split('/')[0] || 'workbench';
+  setSession({ username, workspaceId });
+  if (!workspaceId || !canOpenPage(actor.grants, page, workspaceId)) navigate('workbench');
+}
 
 /** Prototype sign-in: pick a person. Roles come from that account's grants. */
 export function LoginPage() {
@@ -38,7 +57,7 @@ export function LoginPage() {
               <Row gutter={[12, 12]}>
                 {accounts.map((a) => (
                   <Col xs={24} sm={12} xl={8} key={a.username}>
-                    <Card hoverable size="small" onClick={() => setSession({ username: a.username, workspaceId: null })}>
+                    <Card hoverable size="small" onClick={() => signIn(a.username)}>
                       <Flex gap={12} align="flex-start">
                         <Avatar icon={<UserOutlined />} style={{ background: '#e8efff', color: '#2865e8', flex: 'none' }} />
                         <div style={{ minWidth: 0 }}>

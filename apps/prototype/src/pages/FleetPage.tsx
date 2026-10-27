@@ -14,7 +14,7 @@ import { GroupFitDrawer, SoftwareUpdateTag, UpdateSoftwareModal, useCanUpdateSof
 import { fitOf } from '../engine/delivery.ts';
 import { openChangeOf, unrecordedReports } from '../engine/software-change.ts';
 import { catalogImages } from '../engine/sim-software.ts';
-import { EnvTag, Hint, LabelTag, Mono, PageHeader, ShortId, configName, when } from '../components/common.tsx';
+import { EnvTag, FeatureName, Hint, LabelTag, Mono, PageHeader, ShortId, configName, when } from '../components/common.tsx';
 import { HoldTag, PauseButton } from '../components/budget.tsx';
 import { ENVS, SCOPES } from '../domain/vocabulary.ts';
 import {
@@ -635,7 +635,7 @@ function TestRequests({ workspaceId }: { workspaceId: string }) {
         pagination={{ pageSize: 5, hideOnSinglePage: true }}
         dataSource={requests}
         columns={[
-          { title: 'Feature', render: (_, r) => <a onClick={() => navigate(`features/${r.featureId}`)}><Mono>{state.features[r.featureId]?.name}</Mono></a> },
+          { title: 'Feature', render: (_, r) => <FeatureName featureId={r.featureId} tab="validation" /> },
           {
             title: L('提交', 'Commit'),
             render: (_, r) => (

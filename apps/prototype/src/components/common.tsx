@@ -1,5 +1,9 @@
 import { Flex, Tag, Tooltip, Typography } from 'antd';
 import type { ReactNode } from 'react';
+import { useActor, useCanOpen } from '../app/hooks.ts';
+import { navigate } from '../app/router.ts';
+import { useEngineState } from '../app/store.ts';
+import { canReadFeature } from '../engine/config.ts';
 import { useI18n } from '../i18n/i18n.tsx';
 import type { Bilingual } from '../i18n/i18n.tsx';
 import type { State } from '../engine/types.ts';
@@ -79,4 +83,31 @@ export function configName(s: State, id: string | null | undefined): Bilingual {
   if (release) return setName(release.dclVersion);
   // A personal configuration names the Feature's draft, not a commit.
   return c.kind === 'PERSONAL' ? { zh: c.label.replace(/ \/ draft/, ' / 草稿'), en: c.label } : { zh: c.label, en: c.label };
+}
+
+/**
+ * A Feature's name, linked to it only for accounts that can read it here: integration, release
+ * and testing collect fixed commits and do not read other teams' Features.
+ */
+export function FeatureName({ featureId, tab }: { featureId: string; tab?: string }) {
+  const state = useEngineState();
+  const actor = useActor();
+  const canOpen = useCanOpen();
+  const { L } = useI18n();
+  const f = state.features[featureId];
+  if (!f) return <Mono>{featureId}</Mono>;
+  if (actor && canOpen('features') && canReadFeature(state, actor, f)) {
+    return (
+      <Typography.Link onClick={() => navigate(`features/${f.id}${tab ? `/${tab}` : ''}`)}>
+        <Mono>{f.name}</Mono>
+      </Typography.Link>
+    );
+  }
+  return (
+    <Tooltip title={L('只有本组与 DCL 能打开 Feature；这里看到的是固定的提交。', 'Only the group and DCL open the Feature; this is its fixed commit.')}>
+      <span>
+        <Mono>{f.name}</Mono>
+      </span>
+    </Tooltip>
+  );
 }

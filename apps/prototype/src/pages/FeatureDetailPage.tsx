@@ -1,7 +1,7 @@
 import { ArrowLeftOutlined } from '@ant-design/icons';
 import { Alert, App, Button, Card, Descriptions, Input, Modal, Result, Space, Tabs, Tag, Typography } from 'antd';
 import { useState } from 'react';
-import { useActor, useCan, useRun } from '../app/hooks.ts';
+import { useActor, useCan, useCanOpen, useRun } from '../app/hooks.ts';
 import { navigate } from '../app/router.ts';
 import { engine, useEngineState } from '../app/store.ts';
 import { Mono, StageTag, when } from '../components/common.tsx';
@@ -21,11 +21,12 @@ import { IntakeTab } from './feature/IntakeTab.tsx';
 import { PoliciesTab } from './feature/PoliciesTab.tsx';
 import { ValidationTab } from './feature/ValidationTab.tsx';
 
-export function FeatureDetailPage({ featureId }: { featureId: string }) {
+export function FeatureDetailPage({ featureId, tab = 'files' }: { featureId: string; tab?: string }) {
   const state = useEngineState();
   const actor = useActor()!;
   const { L, B } = useI18n();
   const can = useCan();
+  const canOpen = useCanOpen();
   const run = useRun();
   const { modal } = App.useApp();
   const [submitting, setSubmitting] = useState(false);
@@ -94,7 +95,7 @@ export function FeatureDetailPage({ featureId }: { featureId: string }) {
                   {integratedIn.map((c) => {
                     const release = Object.values(state.releases).find((r) => r.candidateId === c.id);
                     return (
-                      <Tag key={c.id} style={{ cursor: 'pointer' }} onClick={() => navigate(`integration/${c.id}`)}>
+                      <Tag key={c.id} style={canOpen('integration') ? { cursor: 'pointer' } : undefined} onClick={canOpen('integration') ? () => navigate(`integration/${c.id}`) : undefined}>
                         {c.label}
                         {release ? ` → ${B(setName(release.dclVersion))}` : ` · ${B(CANDIDATE_STATUS_LABELS[c.status])}`}
                       </Tag>
@@ -134,6 +135,8 @@ export function FeatureDetailPage({ featureId }: { featureId: string }) {
       </Card>
       <Tabs
         style={{ marginTop: 16 }}
+        activeKey={tab}
+        onChange={(k) => navigate(`features/${feature.id}/${k}`)}
         items={[
           { key: 'files', label: L('文件列表', 'Files'), children: <FilesTab feature={feature} /> },
           { key: 'policies', label: L('采集策略', 'Policies'), children: <PoliciesTab feature={feature} /> },

@@ -6,7 +6,7 @@
 import { Alert, Button, Card, Checkbox, Col, Descriptions, Empty, Flex, Form, Input, Modal, Radio, Row, Segmented, Select, Space, Steps, Table, Tabs, Tag, Timeline, Tooltip, Typography } from 'antd';
 import { useState } from 'react';
 import type { ReactNode } from 'react';
-import { useCan, useRun, useWorkspace } from '../app/hooks.ts';
+import { useCan, useCanOpen, useRun, useWorkspace } from '../app/hooks.ts';
 import { navigate } from '../app/router.ts';
 import { useEngineState } from '../app/store.ts';
 import { Hint, LabelTag, Mono, PageHeader, when } from '../components/common.tsx';
@@ -257,6 +257,7 @@ function CallDetail({ callId }: { callId: string }) {
   const state = useEngineState();
   const { L, B } = useI18n();
   const can = useCan();
+  const canOpen = useCanOpen();
   const run = useRun();
   const [promoting, setPromoting] = useState(false);
   const [submitting, setSubmitting] = useState<CallModule | null>(null);
@@ -359,16 +360,16 @@ function CallDetail({ callId }: { callId: string }) {
             <Button
               type="primary"
               onClick={() => {
-                if (run((c) => previewCall(c, call.id), L('已生成集成预览，等待 DCL 确认处理', 'Merge previewed; DCL confirms the processing set next')) !== undefined) navigate('integration');
+                if (run((c) => previewCall(c, call.id), L('已生成集成预览，等待 DCL 确认处理', 'Merge previewed; DCL confirms the processing set next')) !== undefined) navigate('integration/merge');
               }}
             >
               {L('收齐，生成集成预览', 'Complete: preview the merge')}
             </Button>
           )}
-          {phase === 'MERGING' && (
-            <Button onClick={() => navigate('integration')}>{L('去处理集成预览', 'Open the merge preview')}</Button>
+          {phase === 'MERGING' && canOpen('integration') && (
+            <Button onClick={() => navigate('integration/merge')}>{L('去处理集成预览', 'Open the merge preview')}</Button>
           )}
-          {candidate && (
+          {candidate && canOpen('integration') && (
             <Button onClick={() => navigate(`integration/${candidate.id}`)}>{L(`查看测试集成版本 ${candidate.label}`, `Open test integration version ${candidate.label}`)}</Button>
           )}
           {phase === 'PASSED' && call.scope === 'Vehicle' && candidate && can('release.promote', { workspaceId: candidate.workspaceId, scope: 'Vehicle' }) && (
@@ -495,7 +496,7 @@ function CallDetail({ callId }: { callId: string }) {
               title: L('轮次', 'Round'),
               render: (_, r) => {
                 const c = r.candidateId ? state.candidates[r.candidateId] : undefined;
-                return c ? <a onClick={() => navigate(`integration/${c.id}`)}><Mono>{c.label}</Mono></a> : <Typography.Text type="secondary">{L('集成预览', 'Merge preview')}</Typography.Text>;
+                return c ? (canOpen('integration') ? <a onClick={() => navigate(`integration/${c.id}`)}><Mono>{c.label}</Mono></a> : <Mono>{c.label}</Mono>) : <Typography.Text type="secondary">{L('集成预览', 'Merge preview')}</Typography.Text>;
               },
             },
             { title: L('预览', 'Preview'), render: (_, r) => <LabelTag map={PLAN_STATUS_LABELS} value={state.mergePlans[r.planId]?.status ?? '—'} /> },

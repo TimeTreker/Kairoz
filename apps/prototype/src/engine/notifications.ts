@@ -116,7 +116,7 @@ export function notificationsFor(s: State, actor: Actor, workspaceId: string): N
       if (!authorize(actor.grants, 'feature.edit', { workspaceId, groupId: f.groupId }).ok) continue;
       const feedback = s.feedback.filter((x) => x.featureId === f.id && x.commitId === f.headCommitId).at(-1);
       if (f.stage === 'DRAFT' && feedback) {
-        add('BUSINESS_DEV', 'FEATURE_RETURNED', [f.id, f.headCommitId, feedback.id], { severity: 'WARNING', subject: f.name, detail: feedback.reason, link: `features/${f.id}`, at: feedback.createdAt });
+        add('BUSINESS_DEV', 'FEATURE_RETURNED', [f.id, f.headCommitId, feedback.id], { severity: 'WARNING', subject: f.name, detail: feedback.reason, link: `features/${f.id}/feedback`, at: feedback.createdAt });
       } else if (['SUBMITTED', 'DCL_READY', 'TESTING', 'VERIFIED', 'INTEGRATED'].includes(f.stage)) {
         add('BUSINESS_DEV', 'FEATURE_STAGE', [f.id, f.headCommitId, f.stage], { severity: 'INFO', subject: f.name, detail: f.stage, link: `features/${f.id}`, at: f.updatedAt });
       }
@@ -124,7 +124,7 @@ export function notificationsFor(s: State, actor: Actor, workspaceId: string): N
     for (const groupId of ws.groupIds) {
       if (!authorize(actor.grants, 'reference.decide', { groupId }).ok) continue;
       for (const r of referenceRequestsFor(s, actor, groupId, 'owner').filter((x) => x.status === 'PENDING')) {
-        add('BUSINESS_DEV', 'REFERENCE_REQUEST', [r.id, r.status], { severity: 'INFO', subject: s.groups[r.readerGroupId]?.code ?? r.readerGroupId, detail: r.dataKey, link: 'data', at: r.createdAt });
+        add('BUSINESS_DEV', 'REFERENCE_REQUEST', [r.id, r.status], { severity: 'INFO', subject: s.groups[r.readerGroupId]?.code ?? r.readerGroupId, detail: r.dataKey, link: 'data/requests', at: r.createdAt });
       }
     }
   }
@@ -149,10 +149,10 @@ export function notificationsFor(s: State, actor: Actor, workspaceId: string): N
     for (const f of features) {
       // Team testing happens on development vehicles.
       if (!['DCL_READY', 'TESTING'].includes(f.stage) || !authorize(actor.grants, 'feature.dispatch', { workspaceId, groupId: f.groupId, env: 'development' }).ok) continue;
-      add('BUSINESS_TEST', 'FEATURE_TO_TEST', [f.id, f.headCommitId, f.stage], { severity: 'INFO', subject: f.name, detail: f.stage, link: `features/${f.id}`, at: f.updatedAt });
+      add('BUSINESS_TEST', 'FEATURE_TO_TEST', [f.id, f.headCommitId, f.stage], { severity: 'INFO', subject: f.name, detail: f.stage, link: `features/${f.id}/validation`, at: f.updatedAt });
     }
     for (const r of testRequestsOf(s, workspaceId).filter((x) => x.requestedBy === actor.username && (x.status === 'APPROVED' || x.status === 'REJECTED') && fresh(x.decidedAt))) {
-      add('BUSINESS_TEST', 'TEST_REQUEST_DECIDED', [r.id, r.status], { severity: r.status === 'REJECTED' ? 'WARNING' : 'INFO', subject: s.features[r.featureId]?.name ?? r.featureId, detail: r.status, link: `features/${r.featureId}`, at: r.decidedAt });
+      add('BUSINESS_TEST', 'TEST_REQUEST_DECIDED', [r.id, r.status], { severity: r.status === 'REJECTED' ? 'WARNING' : 'INFO', subject: s.features[r.featureId]?.name ?? r.featureId, detail: r.status, link: `features/${r.featureId}/validation`, at: r.decidedAt });
     }
   }
   for (const role of ['BUSINESS_DEV', 'BUSINESS_TEST'] as const) {
@@ -163,7 +163,7 @@ export function notificationsFor(s: State, actor: Actor, workspaceId: string): N
         if (!failed.length) continue;
         const target = { workspaceId, groupId: f.groupId, env: d.env };
         if (!authorize(actor.grants, role === 'BUSINESS_DEV' ? 'feature.edit' : 'feature.dispatch', role === 'BUSINESS_DEV' ? { workspaceId, groupId: f.groupId } : target).ok) continue;
-        add(role, 'DISPATCH_FAILED', [d.id, failed.map((t) => [t.resourceId, t.attempt])], { severity: 'WARNING', subject: f.name, detail: failed.map((t) => t.resourceId).join(', '), link: `features/${f.id}`, at: d.updatedAt });
+        add(role, 'DISPATCH_FAILED', [d.id, failed.map((t) => [t.resourceId, t.attempt])], { severity: 'WARNING', subject: f.name, detail: failed.map((t) => t.resourceId).join(', '), link: `features/${f.id}/validation`, at: d.updatedAt });
       }
     }
   }
@@ -221,7 +221,7 @@ export function notificationsFor(s: State, actor: Actor, workspaceId: string): N
   if (has('DCL_ENGINEER')) {
     for (const f of features.filter((x) => x.kind === 'TECHNICAL' && x.stage === 'DRAFT')) {
       const feedback = s.feedback.filter((x) => x.featureId === f.id && x.commitId === f.headCommitId).at(-1);
-      if (feedback) add('DCL_ENGINEER', 'FEATURE_RETURNED', [f.id, f.headCommitId, feedback.id], { severity: 'WARNING', subject: f.name, detail: feedback.reason, link: `features/${f.id}`, at: feedback.createdAt });
+      if (feedback) add('DCL_ENGINEER', 'FEATURE_RETURNED', [f.id, f.headCommitId, feedback.id], { severity: 'WARNING', subject: f.name, detail: feedback.reason, link: `features/${f.id}/feedback`, at: feedback.createdAt });
     }
     const q = intakeQueue(s, actor);
     for (const { feature: f } of q.features.filter((x) => x.feature.workspaceId === workspaceId)) {
@@ -231,7 +231,7 @@ export function notificationsFor(s: State, actor: Actor, workspaceId: string): N
       add('DCL_ENGINEER', 'OVERLAP_REVIEW', [item.dataKey, item.status], { severity: 'INFO', subject: item.dataCode, detail: s.groups[item.ownerGroupId]?.code ?? item.ownerGroupId, link: 'intake', at: item.createdAt });
     }
     for (const p of Object.values(s.mergePlans).filter((x) => x.workspaceId === workspaceId && x.status === 'READY' && !isConfirmed(s, x))) {
-      add('DCL_ENGINEER', 'PROCESSING_CONFIRM', [p.id, p.digest], { severity: 'INFO', subject: p.id, detail: null, link: 'integration', at: p.createdAt });
+      add('DCL_ENGINEER', 'PROCESSING_CONFIRM', [p.id, p.digest], { severity: 'INFO', subject: p.id, detail: null, link: 'integration/merge', at: p.createdAt });
     }
     for (const x of emergencyStopsOf(s, ws.vehicleModelId).filter((x) => x.requestedBy === actor.username && x.status !== 'REQUESTED' && fresh(x.decidedAt))) {
       add('DCL_ENGINEER', 'EMERGENCY_STOP', [x.id, x.status], { severity: 'INFO', subject: x.policyId, detail: x.status, link: 'release', at: x.decidedAt });
@@ -298,10 +298,10 @@ export function notificationsFor(s: State, actor: Actor, workspaceId: string): N
   }
   if (has('CONFIG_INTEGRATOR') && isMergeWorkspace(s, workspaceId)) {
     for (const f of verifiedSources(s, workspaceId)) {
-      add('CONFIG_INTEGRATOR', 'FEATURE_COLLECTIBLE', [f.id, f.verifiedCommitId], { severity: 'INFO', subject: f.name, detail: s.groups[f.groupId]?.code ?? f.groupId, link: 'integration', at: f.updatedAt });
+      add('CONFIG_INTEGRATOR', 'FEATURE_COLLECTIBLE', [f.id, f.verifiedCommitId], { severity: 'INFO', subject: f.name, detail: s.groups[f.groupId]?.code ?? f.groupId, link: 'integration/merge', at: f.updatedAt });
     }
     for (const p of Object.values(s.mergePlans).filter((x) => x.workspaceId === workspaceId && (x.status === 'CONFLICT' || x.status === 'BLOCKED'))) {
-      add('CONFIG_INTEGRATOR', 'MERGE_BLOCKED', [p.id, p.status, p.digest], { severity: 'WARNING', subject: p.id, detail: p.status, link: 'integration', at: p.createdAt });
+      add('CONFIG_INTEGRATOR', 'MERGE_BLOCKED', [p.id, p.status, p.digest], { severity: 'WARNING', subject: p.id, detail: p.status, link: 'integration/merge', at: p.createdAt });
     }
   }
   if (has('INTEGRATION_TEST')) {
@@ -309,7 +309,7 @@ export function notificationsFor(s: State, actor: Actor, workspaceId: string): N
       add('INTEGRATION_TEST', 'CANDIDATE_TO_TEST', [c.id, c.status], { severity: 'INFO', subject: c.label, detail: c.status, link: `integration/${c.id}`, at: c.createdAt });
     }
     for (const c of Object.values(s.applicabilityChecks).filter((x) => x.testWorkspaceId === workspaceId && (x.status === 'OPEN' || x.status === 'TESTING'))) {
-      add('INTEGRATION_TEST', 'CHECK_TO_TEST', [c.id, c.status], { severity: 'INFO', subject: `${c.vehicleModelId} ${c.version}`, detail: s.releases[c.releaseId]?.dclVersion ?? null, link: 'integration', at: c.openedAt });
+      add('INTEGRATION_TEST', 'CHECK_TO_TEST', [c.id, c.status], { severity: 'INFO', subject: `${c.vehicleModelId} ${c.version}`, detail: s.releases[c.releaseId]?.dclVersion ?? null, link: 'integration/applicability', at: c.openedAt });
     }
   }
   if (has('CONFIG_RELEASE')) {
@@ -364,6 +364,29 @@ export function notificationsFor(s: State, actor: Actor, workspaceId: string): N
 }
 
 /** What the account marked read in a workspace. */
+/** Unread items per workspace the account can use (warnings counted apart), the current one included. */
+export function unreadByWorkspace(s: State, actor: Actor): { workspaceId: string; unread: number; warnings: number }[] {
+  return workspaceAccess(s, actor).map(({ workspaceId }) => {
+    const read = readIds(s, actor.username, workspaceId);
+    const items = notificationsFor(s, actor, workspaceId).filter((n) => !read.has(n.id));
+    return { workspaceId, unread: items.length, warnings: items.filter((n) => n.severity === 'WARNING').length };
+  });
+}
+
+const KIND_ORDER = { PROJECT: 0, TEAM: 1, INTEGRATION: 2 } as const;
+
+/**
+ * Where an account starts when it signs in: the workspace with the most unread warnings, then the
+ * most unread items; with nothing to do anywhere, a project workspace before a team one before an
+ * integration one (where configuration is collected, written, then tested).
+ */
+export function landingWorkspace(s: State, actor: Actor): string | null {
+  const counts = unreadByWorkspace(s, actor);
+  const kind = (id: string) => KIND_ORDER[s.workspaces[id]!.kind];
+  const best = [...counts].sort((a, b) => b.warnings - a.warnings || b.unread - a.unread || kind(a.workspaceId) - kind(b.workspaceId) || a.workspaceId.localeCompare(b.workspaceId))[0];
+  return best?.workspaceId ?? null;
+}
+
 export function readIds(s: State, username: string, workspaceId: string): Set<string> {
   return new Set(s.notificationReads[username]?.[workspaceId] ?? []);
 }

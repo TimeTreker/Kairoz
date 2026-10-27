@@ -6,7 +6,7 @@ import { Alert, Badge, Button, Card, Checkbox, Descriptions, Empty, Flex, Input,
 import { useState } from 'react';
 import { useCan, useRun, useWorkspace } from '../app/hooks.ts';
 import { navigate } from '../app/router.ts';
-import { useEngineState } from '../app/store.ts';
+import { setSession, useEngineState } from '../app/store.ts';
 import { ApplicabilityChecks, ReleaseDiffDrawer, SoftwareVersionsCard } from '../components/applicability.tsx';
 import { EmergencyStopsCard, RequestStopModal } from '../components/emergency.tsx';
 import { EnvTag, Hint, LabelTag, Mono, PageHeader, ShortId, configName, when } from '../components/common.tsx';
@@ -30,8 +30,15 @@ import { CONFIG_ANSWER_LABELS, DEPLOYMENT_STATUS_LABELS, TARGET_STATUS_LABELS, s
 function projectOf(s: State, workspaceId: string | undefined): string | undefined {
   const ws = workspaceId ? s.workspaces[workspaceId] : undefined;
   if (!ws) return undefined;
+  const hasProduction = (id: string) =>
+    Object.values(s.vehicleGroups).some((g) => g.workspaceId === id && g.purpose === 'PRODUCTION') || (s.workspaceResources[id] ?? []).some((r) => s.resources[r]?.env === 'production');
+  // An integration testing workspace releases for the project it takes as source, unless it holds production vehicles itself.
+  if (ws.kind === 'INTEGRATION' && !hasProduction(ws.id)) {
+    const project = ws.sourceWorkspaceIds.find((id) => s.workspaces[id]?.kind === 'PROJECT');
+    if (project) return project;
+  }
   if (ws.kind !== 'TEAM') return ws.id;
-  return Object.values(s.workspaces).find((w) => w.kind !== 'TEAM' && w.status === 'ACTIVE' && w.vehicleModelId === ws.vehicleModelId && Object.values(s.vehicleGroups).some((g) => g.workspaceId === w.id && g.purpose === 'PRODUCTION'))?.id;
+  return Object.values(s.workspaces).find((w) => w.kind !== 'TEAM' && w.status === 'ACTIVE' && w.vehicleModelId === ws.vehicleModelId && hasProduction(w.id))?.id;
 }
 
 const ANSWER_COLORS: Record<string, string> = { HELD: 'purple', TASK: 'processing', LATEST_RELEASE: 'green', GROUP_TARGET: 'blue', APPLIED: 'default', INITIAL: 'default', BLOCKED: 'red' };
@@ -39,12 +46,27 @@ const ANSWER_COLORS: Record<string, string> = { HELD: 'purple', TASK: 'processin
 export function ReleasePage({ tab = 'releases' }: { tab?: string }) {
   const state = useEngineState();
   const { L, B } = useI18n();
-  const { workspace } = useWorkspace();
+  const { workspace, access } = useWorkspace();
   if (!workspace) return <div className="kz-page"><Empty /></div>;
   const modelId = workspace.vehicleModelId;
   const projectId = projectOf(state, workspace.id);
   const latest = mainlineRelease(state, modelId);
   const openChecks = Object.values(state.applicabilityChecks).filter((c) => c.vehicleModelId === modelId && isOpenCheck(c)).length;
+  if (!workspace.scopes.includes('Vehicle') && workspace.kind === 'TEAM') {
+    // A team workspace writes Features; formal releases are made where the whole vehicle is integrated.
+    const project = projectId ? state.workspaces[projectId] : undefined;
+    return (
+      <div className="kz-page">
+        <PageHeader title={L('发布与配置 OTA', 'Release & OTA')} />
+        <Alert
+          type="info"
+          showIcon
+          title={L('正式发布与配置 OTA 在整车项目工作区进行。', 'Formal releases and configuration OTA happen in the whole-vehicle project workspace.')}
+          action={project && access.some((a) => a.workspaceId === project.id) ? <Button size="small" onClick={() => setSession({ workspaceId: project.id })}>{project.name}</Button> : undefined}
+        />
+      </div>
+    );
+  }
   if (!workspace.scopes.includes('Vehicle')) {
     // A domain workspace publishes subsystem releases; formal releases and OTA are whole-vehicle.
     return (

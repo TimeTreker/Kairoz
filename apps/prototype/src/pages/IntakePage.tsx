@@ -32,7 +32,7 @@ export function IntakePage() {
             pagination={false}
             dataSource={q.features}
             locale={{ emptyText: L('没有待审核的 Feature', 'Nothing to review') }}
-            onRow={(r) => ({ onClick: () => navigate(`features/${r.feature.id}`), style: { cursor: 'pointer' } })}
+            onRow={(r) => ({ onClick: () => navigate(`features/${r.feature.id}/intake`), style: { cursor: 'pointer' } })}
             columns={[
               { title: L('提交', 'Commit'), render: (_, r) => <Mono>{displayName(state, r.feature.headCommitId!)}</Mono> },
               { title: L('工作区', 'Workspace'), render: (_, r) => state.workspaces[r.feature.workspaceId]?.name },

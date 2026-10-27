@@ -1,5 +1,6 @@
 import { Button, Card, Input, Modal, Popconfirm, Select, Space, Table, Tabs, Tag, Typography } from 'antd';
 import { useState } from 'react';
+import { navigate } from '../app/router.ts';
 import { useActor, useCan, useRun, useWorkspace } from '../app/hooks.ts';
 import { useEngineState } from '../app/store.ts';
 import { Hint, LabelTag, Mono, PageHeader, when } from '../components/common.tsx';
@@ -10,7 +11,7 @@ import { latestCommittedVersion } from '../engine/snapshots.ts';
 import { useI18n } from '../i18n/i18n.tsx';
 import { DATA_STATUS_LABELS, REFERENCE_STATUS_LABELS } from '../i18n/vocab.ts';
 
-export function DataCatalogPage() {
+export function DataCatalogPage({ tab = 'own' }: { tab?: string }) {
   const state = useEngineState();
   const actor = useActor()!;
   const { workspace } = useWorkspace();
@@ -53,6 +54,8 @@ export function DataCatalogPage() {
         extra={<Select value={group.id} style={{ minWidth: 220 }} onChange={setGroupId} options={readable.map((g) => ({ value: g.id, label: `${g.name} (${g.code})` }))} />}
       />
       <Tabs
+        activeKey={tab}
+        onChange={(k) => navigate(`data/${k}`)}
         items={[
           {
             key: 'own',

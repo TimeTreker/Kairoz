@@ -7,8 +7,8 @@ import { App, Badge, Button, Empty, Popover, Space, Typography } from 'antd';
 import { useMemo, useState } from 'react';
 import { useActor, useRun, useWorkspace } from '../app/hooks.ts';
 import { navigate } from '../app/router.ts';
-import { engine, useEngineState } from '../app/store.ts';
-import { markNotificationsRead, notificationsFor, readIds } from '../engine/notifications.ts';
+import { engine, setSession, useEngineState } from '../app/store.ts';
+import { markNotificationsRead, notificationsFor, readIds, unreadByWorkspace } from '../engine/notifications.ts';
 import type { Notification, NotificationKind } from '../engine/notifications.ts';
 import type { State } from '../engine/types.ts';
 import { useI18n } from '../i18n/i18n.tsx';
@@ -299,7 +299,31 @@ function NotificationRow({ n, read, onOpen, onRead }: { n: Notification; read: b
   );
 }
 
-/** The bell in the header: unread count, the latest items, all read, and the full list. */
+/** Unread items waiting in the account's other workspaces, each a switch to that workspace. */
+function OtherWorkspaces({ onSwitch }: { onSwitch: () => void }) {
+  const state = useEngineState();
+  const actor = useActor();
+  const { workspace } = useWorkspace();
+  const { L } = useI18n();
+  const others = useMemo(() => (actor ? unreadByWorkspace(state, actor).filter((x) => x.unread > 0 && x.workspaceId !== workspace?.id) : []), [state, actor, workspace]);
+  if (others.length === 0) return null;
+  return (
+    <div style={{ borderTop: '1px solid #f0f2f5', paddingTop: 8, marginTop: 4 }}>
+      <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+        {L('其他工作区的未读通知', 'Unread in your other workspaces')}
+      </Typography.Text>
+      <Space size={[4, 4]} wrap style={{ display: 'flex', marginTop: 4 }}>
+        {others.map((x) => (
+          <Button key={x.workspaceId} size="small" onClick={() => (setSession({ workspaceId: x.workspaceId }), onSwitch())}>
+            {state.workspaces[x.workspaceId]!.name} · {x.unread}
+          </Button>
+        ))}
+      </Space>
+    </div>
+  );
+}
+
+/** The bell in the header: unread count, the latest items, all read, other workspaces, and the full list. */
 export function NotificationBell() {
   const { L } = useI18n();
   const { items, read, unread, markRead, open } = useNotifications();
@@ -318,6 +342,7 @@ export function NotificationBell() {
       ) : (
         shown.map((n) => <NotificationRow key={n.id} n={n} read={read.has(n.id)} onOpen={() => (setVisible(false), open(n))} onRead={() => markRead([n.id])} />)
       )}
+      <OtherWorkspaces onSwitch={() => setVisible(false)} />
       <Button type="link" block onClick={() => (setVisible(false), navigate('notifications'))}>
         {L('查看全部', 'See all')} {items.length > shown.length ? `(${items.length})` : ''}
       </Button>

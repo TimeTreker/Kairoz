@@ -91,9 +91,28 @@ let session: Session = (() => {
 })();
 const sessionListeners = new Set<() => void>();
 
+const LAST_WORKSPACE_KEY = 'kairoz.lastWorkspace.v1';
+
+/** The workspace each account last worked in, in this browser. */
+export function lastWorkspaceOf(username: string): string | null {
+  try {
+    return (JSON.parse(safeGet(LAST_WORKSPACE_KEY) ?? '{}') as Record<string, string>)[username] ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export function setSession(next: Partial<Session>): void {
   session = { ...session, ...next };
   safeSet(SESSION_KEY, JSON.stringify(session));
+  if (session.username && session.workspaceId && next.workspaceId) {
+    try {
+      const all = JSON.parse(safeGet(LAST_WORKSPACE_KEY) ?? '{}') as Record<string, string>;
+      safeSet(LAST_WORKSPACE_KEY, JSON.stringify({ ...all, [session.username]: session.workspaceId }));
+    } catch {
+      safeSet(LAST_WORKSPACE_KEY, JSON.stringify({ [session.username]: session.workspaceId }));
+    }
+  }
   for (const l of sessionListeners) l();
 }
 
@@ -109,6 +128,7 @@ export function useSession(): Session {
 
 export function resetPlatform(kind: 'demo' | 'clean'): void {
   engine.replace(kind === 'demo' ? demoState() : cleanState());
+  safeSet(LAST_WORKSPACE_KEY, null);
   setSession({ username: null, workspaceId: null });
 }
 

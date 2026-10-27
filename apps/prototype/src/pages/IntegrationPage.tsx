@@ -9,7 +9,7 @@ import { navigate } from '../app/router.ts';
 import { setSession, useEngineState } from '../app/store.ts';
 import { DiffView } from '../components/DiffView.tsx';
 import { ApplicabilityChecks } from '../components/applicability.tsx';
-import { Hint, LabelTag, Mono, PageHeader, ShortId, StageTag, when } from '../components/common.tsx';
+import { FeatureName, Hint, LabelTag, Mono, PageHeader, ShortId, StageTag, when } from '../components/common.tsx';
 import { ResourceCheck } from '../components/budget.tsx';
 import { PatchedTag, TargetSet, patchTargetLabel } from '../components/patch.tsx';
 import { TechnicalTag } from '../components/technical.tsx';
@@ -119,14 +119,19 @@ function subsystemReleasesOf(s: State, workspaceId: string): SubsystemRelease[] 
     .sort((a, b) => a.domain.localeCompare(b.domain) || b.sequence - a.sequence);
 }
 
-export function IntegrationPage({ candidateId }: { candidateId?: string }) {
+const INTEGRATION_TABS = ['merge', 'candidates', 'subsystems', 'applicability'];
+
+/** `target` is a tab (integration/applicability) or a candidate, which opens on the candidates tab. */
+export function IntegrationPage({ target }: { target?: string }) {
   const state = useEngineState();
   const { L, B } = useI18n();
   const { workspace, access } = useWorkspace();
   const can = useCan();
   const projectId = projectOf(state, workspace?.id);
+  const candidateId = target && !INTEGRATION_TABS.includes(target) ? target : undefined;
   // A test-only integration workspace opens on its candidates; a merge workspace on merging.
-  const [tab, setTab] = useState<string>(candidateId || (workspace?.kind === 'INTEGRATION' && !isMergeWorkspace(state, workspace.id)) ? 'candidates' : 'merge');
+  const tab = target && INTEGRATION_TABS.includes(target) ? target : candidateId || (workspace?.kind === 'INTEGRATION' && !isMergeWorkspace(state, workspace.id)) ? 'candidates' : 'merge';
+  const setTab = (k: string) => navigate(`integration/${k}`);
 
   if (!projectId) {
     // DCL works across projects: list previews waiting for its confirmation.
@@ -171,12 +176,9 @@ export function IntegrationPage({ candidateId }: { candidateId?: string }) {
       />
       <Tabs
         activeKey={tab}
-        onChange={(k) => {
-          setTab(k);
-          if (candidateId) navigate('integration');
-        }}
+        onChange={setTab}
         items={[
-          { key: 'merge', label: L('合并与处理确认', 'Merge & processing'), children: <MergeTab projectId={projectId} onCandidate={(id) => (setTab('candidates'), navigate(`integration/${id}`))} /> },
+          { key: 'merge', label: L('合并与处理确认', 'Merge & processing'), children: <MergeTab projectId={projectId} onCandidate={(id) => navigate(`integration/${id}`)} /> },
           { key: 'candidates', label: L('集成候选', 'Candidates'), children: <CandidatesTab projectId={projectId} candidateId={candidateId} /> },
           ...(domainOnly || subsystems.length
             ? [{ key: 'subsystems', label: `${L('子系统发布', 'Subsystem releases')} · ${subsystems.length}`, children: <SubsystemsTab releases={subsystems} /> }]
@@ -335,7 +337,7 @@ function MergeTab({ projectId, onCandidate }: { projectId: string; onCandidate: 
               title: 'Feature',
               render: (_, f) => (
                 <Space size={4} wrap>
-                  <a onClick={() => navigate(`features/${f.id}`)}><Mono>{f.name}</Mono></a>
+                  <FeatureName featureId={f.id} />
                   <TechnicalTag feature={f} />
                   <PatchedTag feature={f} />
                 </Space>
@@ -885,8 +887,8 @@ function CandidateDetail({ candidate: c }: { candidate: Candidate }) {
             {c.sources.map((x) => {
               const f = state.features[x.featureId];
               return (
-                <Tag key={x.featureId} style={{ cursor: 'pointer' }} onClick={() => navigate(`features/${x.featureId}`)}>
-                  {f?.name} {f && <StageTag stage={f.stage} />}
+                <Tag key={x.featureId}>
+                  <FeatureName featureId={x.featureId} /> {f && <StageTag stage={f.stage} />}
                 </Tag>
               );
             })}
