@@ -25,6 +25,7 @@ import type { FileType, Privacy } from '../domain/file-types.ts';
 import { FEATURE_NAME, newId } from '../domain/ids.ts';
 import { WILDCARD } from '../domain/vocabulary.ts';
 import { intakeStage, reviewItems } from './approvals.ts';
+import { draftBudgetProblems } from './budget.ts';
 import type { Actor, Ctx } from './engine.ts';
 import { getGroup, getWorkspace } from './org.ts';
 import { bindingIssues, currentTemplate } from './processing.ts';
@@ -637,7 +638,7 @@ export interface SubmitIssue {
   problems: string[];
 }
 
-export function submitIssues(s: State, group: BusinessGroup, draft: GroupConfig): SubmitIssue[] {
+export function submitIssues(s: State, group: BusinessGroup, draft: GroupConfig, vehicleModelId?: string): SubmitIssue[] {
   const issues: SubmitIssue[] = [];
   for (const key of Object.keys(draft.files).sort()) {
     const problems: string[] = [];
@@ -664,6 +665,14 @@ export function submitIssues(s: State, group: BusinessGroup, draft: GroupConfig)
     if (owner && owner !== group.id) problems.push(`maintained by group ${owner}`);
     if (problems.length) issues.push({ kind: 'policy', key: policyId, problems });
   }
+  // Resource protection: a policy that could never be collected on the model is stopped here already.
+  if (vehicleModelId) {
+    for (const x of draftBudgetProblems(s, vehicleModelId, group.id, draft)) {
+      const existing = issues.find((i) => i.kind === 'policy' && i.key === x.policyId);
+      if (existing) existing.problems.push(x.problem);
+      else issues.push({ kind: 'policy', key: x.policyId, problems: [x.problem] });
+    }
+  }
   return issues;
 }
 
@@ -681,7 +690,7 @@ export function submitFeature(ctx: Ctx, featureId: string, input: { message?: st
     const scope = technicalScopeIssues(ctx.s, baseConfig(ctx.s, feature), draft);
     if (scope.length) throw rule('TECHNICAL_BINDINGS_ONLY', 'a DCL technical change only changes processing bindings', { issues: scope });
   }
-  const issues = submitIssues(ctx.s, group, draft);
+  const issues = submitIssues(ctx.s, group, draft, ctx.s.workspaces[feature.workspaceId]?.vehicleModelId);
   if (issues.length > 0) throw rule('SUBMIT_BLOCKED', 'the draft cannot be submitted yet', { issues });
   // DCL Ready at once unless a file needs sensitive review without a current approval.
   const stage = intakeStage(reviewItems(ctx.s, draft, { groupId: group.id, workspaceId: feature.workspaceId }));

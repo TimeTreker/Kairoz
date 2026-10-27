@@ -441,6 +441,32 @@ export function cancelDeployment(ctx: Ctx, deploymentId: string, reason: string)
 }
 
 /**
+ * Vehicle resources free one vehicle another team's dispatch still waits on (取消资源占用), e.g.
+ * before moving it to another environment: only that vehicle's target is cancelled, with a reason;
+ * the rest of the dispatch goes on. Rollouts to production vehicles have their own controls.
+ */
+export function releaseVehicle(ctx: Ctx, resourceId: string, reason: string): string {
+  const r = getResource(ctx.s, resourceId);
+  ctx.allow('resource.manage', { type: 'resource', id: r.id, scope: r.pool, env: r.env });
+  if (!reason.trim()) throw rule('REASON_REQUIRED', 'give a reason');
+  const id = pendingDeploymentOf(ctx.s, r.id);
+  const d = id ? ctx.s.deployments[id] : undefined;
+  if (!d) throw rule('NOT_PENDING', `${r.id} is not waiting for a dispatch`);
+  if (d.kind === 'OTA') throw rule('USE_ROLLOUT_CONTROLS', 'use the rollout controls for this deployment');
+  if (d.kind === 'PERSONAL') throw rule('PERSONAL_SIM_OWNER', 'a personal simulation is released by its owner');
+  const t = d.targets.find((x) => x.resourceId === r.id && x.status === 'PENDING')!;
+  t.status = 'CANCELLED';
+  t.error = `released by vehicle resources: ${reason.trim()}`;
+  t.updatedAt = ctx.now;
+  if (d.targets.every((x) => x.status !== 'PENDING' && x.status !== 'QUEUED')) {
+    d.status = d.targets.some((x) => x.status === 'APPLIED') ? 'COMPLETED' : 'CANCELLED';
+    if (d.kind === 'FEATURE' && d.status === 'CANCELLED') for (const vgId of d.vehicleGroupIds) restorePublication(ctx, vgId);
+  }
+  d.updatedAt = ctx.now;
+  return d.id;
+}
+
+/**
  * After a Feature dispatch is cancelled for every member of a group, the group's publication
  * returns to the latest dispatch that still stands there, so vehicles that join later follow what
  * the group actually runs. Cancelling never rolls back vehicles.

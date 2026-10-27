@@ -3,7 +3,7 @@
 
 import type { Draft } from 'immer';
 import { conflict, notFound, rule } from '../domain/errors.ts';
-import { GROUP_CODE, SLUG, VEHICLE_MODEL_ID } from '../domain/ids.ts';
+import { GROUP_CODE, newId, SLUG, VEHICLE_MODEL_ID } from '../domain/ids.ts';
 import { WILDCARD } from '../domain/vocabulary.ts';
 import type { Domain, GroupPurpose, Scope, WorkspaceKind } from '../domain/vocabulary.ts';
 import type { Actor, Ctx } from './engine.ts';
@@ -92,8 +92,12 @@ export function updateOrgUnit(ctx: Ctx, id: string, input: { name?: string; pare
   ctx.allow('org.manage', { type: 'orgUnit', id });
   const unit = getUnit(ctx.s, id);
   if (unit.source === 'DIRECTORY') throw rule('DIRECTORY_MANAGED', 'this unit mirrors the company directory; change it there');
-  if (input.name !== undefined) unit.name = input.name;
+  if (input.name !== undefined && input.name !== unit.name) {
+    noteChange(ctx, 'RENAMED', 'ORG_UNIT', id, unit.name, input.name);
+    unit.name = input.name;
+  }
   if (input.parentId !== undefined && input.parentId !== unit.parentId) {
+    const before = unitPath(ctx.s, id).map((u) => u.name).join(' / ');
     if (unit.kind === 'PROJECT' && unit.parentId === null) throw rule('PROJECT_ROOT_FIXED', 'a project root cannot be moved');
     if (input.parentId === null) {
       if (unit.kind === 'PROJECT') throw rule('PARENT_REQUIRED', 'project units need a parent');
@@ -107,7 +111,33 @@ export function updateOrgUnit(ctx: Ctx, id: string, input: { name?: string; pare
     }
     unit.parentId = input.parentId;
     assertTeamWorkspacesIntact(ctx.s);
+    // Ids stay; the record keeps where the unit sat before.
+    noteChange(ctx, 'MOVED', 'ORG_UNIT', id, before, unitPath(ctx.s, id).map((u) => u.name).join(' / '));
   }
+}
+
+/** A change of name, place or sources, kept with what it was before. */
+function noteChange(ctx: Ctx, kind: 'RENAMED' | 'MOVED' | 'SOURCES_CHANGED', object: 'WORKSPACE' | 'ORG_UNIT', objectId: string, before: string, after: string): void {
+  ctx.s.lifecycleEvents.push({ id: newId('lc'), seq: ctx.seq(), kind, object, objectId, reason: '', by: ctx.user().username, at: ctx.now, before, after });
+}
+
+/**
+ * What a source workspace still takes part in, in this merge workspace: open merge previews and
+ * candidates holding its Features, and open integration calls collecting from it.
+ */
+export function sourceInUse(s: State, workspaceId: string, sourceId: string): string[] {
+  const problems: string[] = [];
+  const fromSource = (featureIds: string[]) => featureIds.some((f) => s.features[f]?.workspaceId === sourceId);
+  for (const p of Object.values(s.mergePlans)) {
+    if (p.workspaceId === workspaceId && ['READY', 'CONFLICT', 'BLOCKED'].includes(p.status) && fromSource(p.sources.map((x) => x.featureId))) problems.push(`merge preview ${p.id} is open`);
+  }
+  for (const c of Object.values(s.candidates)) {
+    if (c.workspaceId === workspaceId && ['CANDIDATE', 'TESTING', 'VERIFIED'].includes(c.status) && fromSource(c.sources.map((x) => x.featureId))) problems.push(`candidate ${c.label} is open`);
+  }
+  for (const c of Object.values(s.integrationCalls)) {
+    if (c.workspaceId === workspaceId && c.status === 'OPEN' && c.modules.some((m) => m.workspaceId === sourceId && m.status !== 'EXCLUDED')) problems.push(`integration call ${c.title} is open`);
+  }
+  return problems;
 }
 
 /**
@@ -316,6 +346,12 @@ export function updateWorkspace(ctx: Ctx, id: string, input: Partial<Membership>
   const removed = ws.groupIds.filter((g) => !next.groupIds.includes(g));
   const busy = removed.filter((g) => Object.values(ctx.s.features).some((f) => f.workspaceId === id && f.groupId === g));
   if (busy.length) throw rule('GROUP_IN_USE', 'groups with features in this workspace cannot be removed', { groupIds: busy });
+  // A source taken away mid-integration would leave previews, candidates or calls built on it.
+  const droppedSources = ws.sourceWorkspaceIds.filter((w) => !next.sourceWorkspaceIds.includes(w));
+  const inUse = droppedSources.flatMap((w) => sourceInUse(ctx.s, id, w).map((p) => `${ctx.s.workspaces[w]?.name ?? w}: ${p}`));
+  if (inUse.length) throw rule('SOURCE_IN_USE', 'a source still takes part in an unfinished integration', { issues: inUse });
+  const sourceNames = (ids: string[]) => ids.map((w) => ctx.s.workspaces[w]?.name ?? w).join('、') || '—';
+  if (sourceNames(ws.sourceWorkspaceIds) !== sourceNames(next.sourceWorkspaceIds)) noteChange(ctx, 'SOURCES_CHANGED', 'WORKSPACE', id, sourceNames(ws.sourceWorkspaceIds), sourceNames(next.sourceWorkspaceIds));
   ws.groupIds = [...next.groupIds];
   ws.scopes = [...next.scopes];
   ws.sourceWorkspaceIds = [...next.sourceWorkspaceIds];

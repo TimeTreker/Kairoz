@@ -447,9 +447,12 @@ export function freezeCandidate(ctx: Ctx, planId: string, input: { label: string
   if (targetMoved(ctx.s, plan)) {
     throw rule('TARGET_CHANGED', plan.patch ? 'the set this patch targets was replaced for its software; preview the merge again' : 'a newer release was published; preview the merge again');
   }
+  const mergeWs = ctx.s.workspaces[plan.workspaceId]!;
   for (const src of plan.sources) {
     const f = ctx.s.features[src.featureId]!;
     if (!isCollectible(ctx.s, f) || f.headCommitId !== src.commitId) throw rule('SOURCE_CHANGED', `${f.name} changed since the preview; preview the merge again`);
+    // Its workspace must still be a source of this one.
+    if (f.workspaceId !== mergeWs.id && !mergeWs.sourceWorkspaceIds.includes(f.workspaceId)) throw rule('SOURCE_CHANGED', `${f.name}'s workspace is no longer a source of ${mergeWs.name}; preview the merge again`);
   }
   for (const ref of plan.subsystems) {
     const r = ctx.s.subsystemReleases[ref.subsystemReleaseId];

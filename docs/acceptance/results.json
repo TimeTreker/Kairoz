@@ -1,5 +1,5 @@
 {
-  "runAt": "2026-10-27T11:04:39.340Z",
+  "runAt": "2026-10-27T11:13:18.049Z",
   "layer": "engine",
   "counts": {
     "PASS": 214,
@@ -360,7 +360,7 @@
           "id": "F05",
           "title": "结束任务和预约、停止实例、回收配额、移出闲置资源；不移出占用资源。",
           "actor": "workspace_manager / 工作区管理员",
-          "adaptation": "原型不建模仿真配额；“回收配额”以停止实例与解除预约体现。",
+          "adaptation": "“回收配额”：停止实例后，它占用的仿真运行配额回到工作区（配额由车辆资源按工作区设定，见资源与配额剧本）；解除预约同样释放车辆。",
           "status": "PASS",
           "detail": null,
           "notes": []
@@ -1573,7 +1573,7 @@
         },
         {
           "id": "BG02",
-          "title": "合并时的资源保护检查",
+          "title": "提交与合并时的资源保护检查",
           "actor": "steering；steering_tester；integrator；dcl",
           "adaptation": null,
           "status": "PASS",

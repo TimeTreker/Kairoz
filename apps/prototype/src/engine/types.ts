@@ -1239,12 +1239,15 @@ export interface EnvironmentChange {
 export interface LifecycleEvent {
   id: string;
   seq: number;
-  kind: 'ARCHIVED' | 'RESTORED';
+  /** RENAMED and MOVED keep an org unit's name or path before and after; SOURCES_CHANGED a workspace's integration sources. */
+  kind: 'ARCHIVED' | 'RESTORED' | 'RENAMED' | 'MOVED' | 'SOURCES_CHANGED';
   object: 'WORKSPACE' | 'GROUP' | 'ORG_UNIT';
   objectId: string;
   reason: string;
   by: string;
   at: string;
+  before?: string;
+  after?: string;
 }
 
 /**

@@ -89,7 +89,7 @@ export function LifecycleModal({ target, onClose }: { target: LifecycleTarget | 
             dataSource={history}
             columns={[
               { title: L('操作', 'Action'), render: (_, x) => B(LIFECYCLE_KIND_LABELS[x.kind]) },
-              { title: L('原因', 'Reason'), dataIndex: 'reason' },
+              { title: L('原因', 'Reason'), render: (_, x) => (x.before !== undefined ? `${x.before} → ${x.after}` : x.reason) },
               { title: L('执行人', 'By'), render: (_, x) => <Typography.Text>{`${state.accounts[x.by]?.displayName ?? x.by} · ${when(x.at)}`}</Typography.Text> },
             ]}
           />

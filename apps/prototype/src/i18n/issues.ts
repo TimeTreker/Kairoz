@@ -12,6 +12,11 @@ const SIDE: Record<string, string> = { EDGE: '车端', CLOUD: '云端' };
 const STAGE: Record<string, string> = { DRAFT: '草稿', SUBMITTED: '已提交', DCL_READY: 'DCL Ready', TESTING: '测试中', VERIFIED: '已验证' };
 const HELD: Record<string, string> = { 'a rollback': '是回滚', paused: '已暂停', cancelled: '已取消', rolled_back: '已回滚' };
 
+/** Budget dimensions as the engine writes them (memory 4 MB > 3.5 MB, CPU 2 s > 1 s per hour). */
+function budgetDims(dims: string): string {
+  return dims.replace(/ s > /g, ' 秒 > ').replace(/\bmemory\b/g, '内存').replace(/\bstorage\b/g, '存储').replace(/\bupload\b/g, '上传').replace(/ s per hour/g, ' 秒/小时').replace(/ per hour/g, '/小时').replace(/, /g, '；');
+}
+
 /** Problem patterns, most specific first; capture groups feed the Chinese text. */
 const PROBLEMS: Pattern[] = [
   // Vehicles and dispatch
@@ -160,11 +165,8 @@ const PROBLEMS: Pattern[] = [
   [/not a valid username/, () => '不是有效的账号名'],
   [/the last platform administrator stays active/, () => '最后一个平台管理员保持启用'],
   // Resource protection
-  [
-    /policy (\S+): one capture exceeds the (\S+) budget \((.+)\)/,
-    ([p, m, dims]) =>
-      `策略 ${p}：单次采集就超出 ${m} 预算（${dims!.replace(/ s > /g, ' 秒 > ').replace(/\bmemory\b/g, '内存').replace(/\bstorage\b/g, '存储').replace(/\bupload\b/g, '上传').replace(/ s per hour/g, ' 秒/小时').replace(/ per hour/g, '/小时').replace(/, /g, '；')}）`,
-  ],
+  [/policy (\S+): one capture exceeds the (\S+) budget \((.+)\)/, ([p, m, dims]) => `策略 ${p}：单次采集就超出 ${m} 预算（${budgetDims(dims!)}）`],
+  [/one capture exceeds the (\S+) budget \((.+)\); shorten its window or capture less/, ([m, dims]) => `单次采集就超出 ${m} 预算（${budgetDims(dims!)}）；请缩短采集窗口或少采文件`],
   // After-sales requests the platform cancelled
   [/(\S+) is retired/, ([r]) => `${r} 已报废`],
   [/workspace (\S+) is archived/, ([w]) => `工作区 ${w} 已归档`],

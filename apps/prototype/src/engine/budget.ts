@@ -258,6 +258,17 @@ export function resourceCheck(s: State, plan: Pick<MergePlan, 'vehicleModelId' |
   return { budget, source, policies };
 }
 
+/**
+ * A draft's policies whose single capture exceeds the vehicle model's budget on their own: checked
+ * when the Feature is submitted, so the team hears it before testing, not at integration.
+ */
+export function draftBudgetProblems(s: State, vehicleModelId: string, groupId: string, draft: GroupConfig): { policyId: string; problem: string }[] {
+  const { budget, policies } = resourceCheck(s, { vehicleModelId, merged: { [groupId]: draft } });
+  return policies
+    .filter((p) => p.status === 'NEVER_FITS')
+    .map((p) => ({ policyId: p.policyId, problem: `one capture exceeds the ${vehicleModelId} budget (${p.dimensions.map((d) => dimensionText(d, p.cost, budget)).join(', ')}); shorten its window or capture less` }));
+}
+
 /** The resource-protection problems that block DCL's confirmation, as problem lines. */
 export function resourceBlockers(s: State, plan: Pick<MergePlan, 'vehicleModelId' | 'merged'>): string[] {
   const { budget, policies } = resourceCheck(s, plan);

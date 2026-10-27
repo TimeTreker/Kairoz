@@ -37,20 +37,24 @@ export const scenes: Record<string, SceneSpec> = {
     needs: ['BG01'],
     run: (w) => {
       // A steering change that keeps 115 s around the trigger: 23 MB a capture, more than an hour's upload.
+      // The submission already stops it, before anyone tests it.
       const id = w.as('steering', (c) => config.createFeature(c, { workspaceId: 'team-steering', groupId: 'steering', name: 'angle_jump_long' }));
       const p = w.s.features[id]!.draft.policies[ANGLE]!;
       w.as('steering', (c) => config.putPolicy(c, id, ANGLE, { ...p, postSeconds: 110 }));
-      w.as('steering', (c) => config.submitFeature(c, id, { message: '延长转角突变录制' }));
-      verifyFeatureOn(w, 'steering_tester', id, [group(w, '转向研发车组')]);
-      let plan = w.as('integrator', (c) => integ.previewMerge(c, { workspaceId: 'x89-project', featureIds: [id] }));
-      const check = resourceCheck(w.s, w.s.mergePlans[plan]!).policies.find((x) => x.policyId === ANGLE)!;
-      w.eq([check.status, check.dimensions, check.cost.networkMb], ['NEVER_FITS', ['network'], 23], 'one capture is more than an hour of upload');
-      w.fails('RESOURCE_BUDGET', () => w.as('dcl', (c) => integ.confirmProcessing(c, plan, { note: '' })));
-      // The team shortens the window and tests again; it fits, though a full hour of triggers would be throttled.
+      const refused = w.fails('SUBMIT_BLOCKED', () => w.as('steering', (c) => config.submitFeature(c, id, { message: '延长转角突变录制' })));
+      const issue = (refused.details as { issues: { key: string; problems: string[] }[] }).issues.find((i) => i.key === ANGLE);
+      w.check(issue?.problems.some((x) => x.startsWith('one capture exceeds the X89 budget (upload 23 MB > 5 MB per hour)')), 'the submission names the policy and the upload it would need');
+      // The team shortens the window and tests it.
       w.as('steering', (c) => config.putPolicy(c, id, ANGLE, { ...p, postSeconds: 15 }));
       w.as('steering', (c) => config.submitFeature(c, id, { message: '缩短到 20 秒' }));
       verifyFeatureOn(w, 'steering_tester', id, [group(w, '转向研发车组')]);
-      plan = w.as('integrator', (c) => integ.previewMerge(c, { workspaceId: 'x89-project', featureIds: [id] }));
+      // A budget tightened after testing is still caught at the merge.
+      w.as('dcl', (c) => setModelBudget(c, 'X89', { ...X89, networkMbPerHour: 3 }));
+      const plan = w.as('integrator', (c) => integ.previewMerge(c, { workspaceId: 'x89-project', featureIds: [id] }));
+      const check = resourceCheck(w.s, w.s.mergePlans[plan]!).policies.find((x) => x.policyId === ANGLE)!;
+      w.eq([check.status, check.dimensions, check.cost.networkMb], ['NEVER_FITS', ['network'], 4], 'one capture is more than an hour of the tightened upload');
+      w.fails('RESOURCE_BUDGET', () => w.as('dcl', (c) => integ.confirmProcessing(c, plan, { note: '' })));
+      w.as('dcl', (c) => setModelBudget(c, 'X89', X89));
       w.eq(resourceCheck(w.s, w.s.mergePlans[plan]!).policies.find((x) => x.policyId === ANGLE)!.status, 'MAY_THROTTLE', '4 MB a capture fits; three an hour may wait');
       w.as('dcl', (c) => integ.confirmProcessing(c, plan, { note: '高频时会排队，可接受' }));
     },

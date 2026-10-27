@@ -3,6 +3,7 @@
 import { authorize } from '../src/domain/authz.ts';
 import { ENVS, ROLES } from '../src/domain/vocabulary.ts';
 import { reviewItems } from '../src/engine/approvals.ts';
+import { draftBudgetProblems } from '../src/engine/budget.ts';
 import * as config from '../src/engine/config.ts';
 import * as ev from '../src/engine/events.ts';
 import * as fleet from '../src/engine/fleet.ts';
@@ -263,8 +264,10 @@ export const scenes: Record<string, SceneSpec> = {
       w.as('business', (c) =>
         config.putPolicy(c, f, 'chassis.brake.pressure_speed', { name: '制动压力异常', trigger: 'brake_pressure > 80 AND vehicle_speed > 30', captures: [w.ref.debugKey!], preSeconds: 10, postSeconds: 20 }),
       );
+      const feature = w.s.features[f]!;
+      w.eq(draftBudgetProblems(w.s, w.s.workspaces[feature.workspaceId]!.vehicleModelId, feature.groupId, feature.draft), [], 'every policy fits the model’s collection budget');
       const r = w.as('business', (c) => config.submitFeature(c, f, { message: '首版制动诊断' }));
-      w.eq(r.stage, 'DCL_READY', 'checks pass; testable without a manual DCL mark');
+      w.eq(r.stage, 'DCL_READY', 'checks pass (completeness, references, templates, resources); testable without a manual DCL mark');
       w.ref.firstBrakeR1 = r.commitId;
     },
   },
@@ -605,7 +608,10 @@ export const scenes: Record<string, SceneSpec> = {
       w.fails('VEHICLE_BUSY', () => w.as('workspace_manager', (c) => fleet.removeGroupMember(c, w.ref.devGroup!, 'SIM-901', '回收')));
       answerAll(w, d!);
       w.fails('SIMULATION_RUNNING', () => w.as('workspace_manager', (c) => fleet.removeGroupMember(c, w.ref.devGroup!, 'SIM-901', '回收')));
+      const ws = w.s.resources['SIM-901']!.homeWorkspaceId!;
+      const running = fleet.runningSimulations(w.s, ws).length;
       w.as('workspace_manager', (c) => fleet.stopSimulation(c, 'SIM-901'));
+      w.eq(fleet.runningSimulations(w.s, ws).length, running - 1, 'stopping the instance gives its run back to the workspace’s simulation quota');
       w.as('workspace_manager', (c) => fleet.removeGroupMember(c, w.ref.devGroup!, 'SIM-901', '研发结束，回收'));
       w.fails('GROUP_HAS_MEMBERS', () => w.as('workspace_manager', (c) => fleet.archiveVehicleGroup(c, w.ref.testGroup!, '结束')));
       w.as('workspace_manager', (c) => fleet.archiveVehicleGroup(c, w.ref.devGroup!, '研发结束'));

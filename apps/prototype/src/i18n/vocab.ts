@@ -904,7 +904,13 @@ Object.assign(ERROR_LABELS, {
 export const LIFECYCLE_KIND_LABELS: Record<string, Bilingual> = {
   ARCHIVED: b('归档', 'Archived'),
   RESTORED: b('恢复', 'Restored'),
+  RENAMED: b('改名', 'Renamed'),
+  MOVED: b('移动', 'Moved'),
+  SOURCES_CHANGED: b('调整集成来源', 'Integration sources changed'),
 };
+Object.assign(ERROR_LABELS, {
+  SOURCE_IN_USE: b('该来源还有进行中的集成：先结束这些合并预览、候选或征集', 'The source is still in an unfinished integration: finish those previews, candidates or calls first'),
+});
 
 // Integration calls (集成征集) and the release history (发布记录)
 Object.assign(ERROR_LABELS, {

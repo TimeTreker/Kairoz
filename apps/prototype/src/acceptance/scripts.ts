@@ -3334,7 +3334,7 @@ export const SCRIPTS: Script[] = [
       },
       {
         "id": "BG02",
-        "title": "合并时的资源保护检查",
+        "title": "提交与合并时的资源保护检查",
         "actor": "steering；steering_tester；integrator；dcl",
         "accounts": [
           "steering",
@@ -3343,14 +3343,15 @@ export const SCRIPTS: Script[] = [
           "dcl"
         ],
         "workspace": "x89-project",
-        "page": "配置集成 → 合并预览 → 资源保护",
+        "page": "研发 Feature → 提交；配置集成 → 合并预览 → 资源保护",
         "pre": "BG01 完成。",
         "steps": [
-          "steering 新建 angle_jump_long，把转角突变的录制后时长改为 110 秒，提交；steering_tester 在转向研发车组验证。",
-          "integrator 预览合并：资源保护中转角突变“单次就超出预算 · 上传网络”（23 MB > 5 MB/小时）；DCL 的“确认处理集合”不可用。",
-          "steering 把录制后时长改回 15 秒重新提交并验证；再次预览为“高频时会被限流”，DCL 确认。"
+          "steering 新建 angle_jump_long，把转角突变的录制后时长改为 110 秒并提交：提交被拒绝，转角突变“单次采集就超出 X89 预算（上传 23 MB > 5 MB/小时）”。",
+          "steering 把录制后时长改为 15 秒提交；steering_tester 在转向研发车组验证。",
+          "dcl 把 X89 的上传预算临时降到 3 MB/小时；integrator 预览合并：资源保护中转角突变“单次就超出预算 · 上传网络”（4 MB > 3 MB/小时），DCL 的“确认处理集合”不可用。",
+          "dcl 把上传预算恢复为 5 MB/小时；同一预览变为“高频时会被限流”，DCL 确认。"
         ],
-        "done": "一次采集就超出预算的策略不能进入集合。",
+        "done": "一次采集就超出预算的策略在提交时就被拦下；验证之后预算变紧的，合并时仍会被拦下。",
         "fail": "检查按策略逐条进行，只阻止永远采集不到的策略。"
       },
       {

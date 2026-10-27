@@ -54,7 +54,8 @@ import {
 import { registerDeviceKey } from '../engine/client-report.ts';
 import { displayName } from '../engine/config.ts';
 import { devicePublicKey, provisionDevice } from '../engine/simulator.ts';
-import { decideTestRequest, testRequestsOf } from '../engine/validation.ts';
+import { decideTestRequest, releaseVehicle, testRequestsOf } from '../engine/validation.ts';
+import { deploymentNumber } from '../engine/labels.ts';
 import { answerConfigRequest } from '../engine/ota.ts';
 import { compareVersions, releasesOf } from '../engine/release.ts';
 import type { Resource, SoftwareVersion, State, TestRequest } from '../engine/types.ts';
@@ -721,6 +722,8 @@ function Registry() {
   const run = useRun();
   const [registering, setRegistering] = useState(false);
   const [confirming, setConfirming] = useState<Resource | null>(null);
+  const [releasing, setReleasing] = useState<Resource | null>(null);
+  const [releaseNote, setReleaseNote] = useState('');
   const [statusOf, setStatusOf] = useState<Resource | null>(null);
   const [envOf, setEnvOf] = useState<string | null>(null);
   const [reporting, setReporting] = useState<Resource | null>(null);
@@ -734,9 +737,28 @@ function Registry() {
   const [sf] = Form.useForm();
   const vehicles = managedResources(state, actor);
   const unrecorded = unrecordedReports(state, actor);
+  const releasingDispatch = releasing ? state.deployments[pendingDeploymentOf(state, releasing.id) ?? ''] : undefined;
   return (
     <Card extra={<Button icon={<PlusOutlined />} onClick={() => (form.resetFields(), setRegistering(true))}>{L('登记实车', 'Register vehicle')}</Button>}>
       <Hint>{L('实车登记时整车版本为空，由 DIP / OTA 等可信来源上报后确认；仿真车的版本由镜像决定。', 'Physical vehicles start with unknown software, confirmed later from a trusted source (DIP, OTA); a simulation’s version comes from its image.')}</Hint>
+      <Modal
+        open={!!releasing}
+        title={`${L('解除下发占用', 'Release from dispatch')} · ${releasing?.id ?? ''}`}
+        okText={L('解除', 'Release')}
+        okButtonProps={{ danger: true, disabled: !releaseNote.trim() }}
+        onCancel={() => setReleasing(null)}
+        onOk={() => {
+          if (releasing && run((c) => releaseVehicle(c, releasing.id, releaseNote), L('已解除：该车不再等待这次下发', 'Released: the vehicle no longer waits for this dispatch')) !== undefined) setReleasing(null);
+        }}
+      >
+        <Hint>
+          {L(
+            `${releasingDispatch ? `${state.workspaces[releasingDispatch.workspaceId]?.name ?? ''} 的下发 #${deploymentNumber(state, releasingDispatch)}` : '这次下发'}还在等这辆车的回执。解除后只取消这辆车，下发的其他车辆照常；该团队会在下发记录里看到原因。`,
+            `${releasingDispatch ? `Dispatch #${deploymentNumber(state, releasingDispatch)} of ${state.workspaces[releasingDispatch.workspaceId]?.name ?? ''}` : 'The dispatch'} still waits for this vehicle’s receipt. Releasing cancels only this vehicle; the dispatch goes on for the others, and the team sees the reason in its dispatch record.`,
+          )}
+        </Hint>
+        <Input.TextArea rows={2} value={releaseNote} onChange={(e) => setReleaseNote(e.target.value)} placeholder={L('原因，例如：车辆要转到测试环境', 'Reason, e.g. the vehicle moves to testing')} />
+      </Modal>
       <VehicleTable
         vehicles={vehicles}
         extra={(r) => r.personal ? (
@@ -752,7 +774,7 @@ function Registry() {
                   <>
                     {reported && (
                       <Tag color="purple">
-                        {L('上报', 'Reported')} {reported.toVersion}（{known ? L('已登记，待确认', 'recorded; confirm it') : L('未登记', 'not recorded')}）
+                        {L('上报', 'Reported')} {reported.toVersion}（{known?.status === 'PLANNED' && r.env === 'production' ? L('规划中，发布后再确认', 'planned; confirm it once released') : known ? L('已登记，待确认', 'recorded; confirm it') : L('未登记', 'not recorded')}）
                       </Tag>
                     )}
                     <Button
@@ -788,6 +810,15 @@ function Registry() {
             <Button type="link" size="small" onClick={() => setEnvOf(r.id)}>
               {L('变更环境', 'Change environment')}
             </Button>
+            {(() => {
+              // Another team's dispatch still waiting on the vehicle (its occupancy): vehicle resources may free it.
+              const d = state.deployments[pendingDeploymentOf(state, r.id) ?? ''];
+              return d && d.kind !== 'OTA' && d.kind !== 'PERSONAL' ? (
+                <Button type="link" size="small" danger onClick={() => (setReleaseNote(''), setReleasing(r))}>
+                  {L('解除下发占用', 'Release from dispatch')}
+                </Button>
+              ) : null;
+            })()}
             {r.deviceKey ? (
               <Button type="link" size="small" onClick={() => setClientOf(r.id)}>
                 {L('客户端状态', 'Client state')}
