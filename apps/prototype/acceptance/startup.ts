@@ -505,6 +505,7 @@ export const scenes: Record<string, SceneSpec> = {
       w.ref.ota = w.as('release', (c) => ota.createOta(c, { releaseId: w.ref.release!, vehicleGroupIds: [w.ref.prodGroup!], firstWave: ['VEH-951'] }));
       const d = w.s.deployments[w.ref.ota]!;
       w.eq(d.targets.map((t) => [t.resourceId, t.status]), [['VEH-951', 'PENDING'], ['VEH-952', 'QUEUED']], 'a fixed target snapshot');
+      w.fails('OTA_WAVE_PENDING', () => w.as('release', (c) => ota.expandOta(c, d.id, 'ALL')));
       w.sys((c) => sendReceipt(c, d.id, 'VEH-951', 'APPLIED'));
       w.eq(w.s.resources['VEH-951']!.appliedConfigId, w.s.releases[w.ref.release!]!.resolvedConfigId, 'applied only after the receipt');
     },

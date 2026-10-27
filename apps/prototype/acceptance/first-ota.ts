@@ -224,6 +224,7 @@ export const scenes: Record<string, SceneSpec> = {
       const d = w.s.deployments[id]!;
       w.eq([d.targets.map((t) => [t.resourceId, t.status]), d.resolvedConfigId], [[['VEH-903', 'PENDING'], ['VEH-904', 'QUEUED']], w.s.releases[w.ref.release!]!.resolvedConfigId], 'a fixed target list and configuration digest');
       w.eq(w.s.resources['VEH-903']!.appliedConfigId, null, 'expected is not applied');
+      w.fails('OTA_WAVE_PENDING', () => w.as('release', (c) => ota.expandOta(c, id, ['VEH-904'])));
       w.sys((c) => sendReceipt(c, id, 'VEH-903', 'APPLIED'));
       w.eq([w.s.resources['VEH-903']!.appliedConfigId, w.s.resources['VEH-903']!.integrationVersion], [d.resolvedConfigId, '1.0'], 'DCL 1.0.0 applied; software still 1.0');
       w.eq(w.s.deployments[id]!.status, 'PENDING', 'ready to expand');

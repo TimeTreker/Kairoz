@@ -40,6 +40,7 @@ export const NOTIFICATION_CATEGORY: Record<NotificationKind, string> = {
   EMERGENCY_STOP: 'RELEASE',
   ROLLOUT_PAUSED: 'RELEASE',
   PRODUCTION_BLOCKED: 'RELEASE',
+  MODULE_OUTDATED: 'RELEASE',
   UNRECORDED_SOFTWARE: 'VEHICLE',
   GROUP_MISMATCH: 'VEHICLE',
   SOFTWARE_UPDATE: 'VEHICLE',
@@ -150,6 +151,15 @@ export function useNotificationText() {
         return { title: L(`OTA ${s} 已暂停`, `Rollout ${s} paused`), body: d };
       case 'PRODUCTION_BLOCKED':
         return { title: L(`量产车 ${s} 被阻止`, `Production vehicle ${s} is blocked`), body: L(`软件 ${d} 没有适用的策略集。`, `No policy set applies to software ${d}.`) };
+      case 'MODULE_OUTDATED': {
+        const [carried, current] = d.split(' · ');
+        return {
+          title: L(`${s} 的 OTA 包内配置模块已不是当前策略集`, `The DCL module in ${s}’s OTA package is no longer the set in effect`),
+          body: current
+            ? L(`包内是策略集 ${carried}，当前生效 ${current}。刷这个版本的量产车会先运行 ${carried}：更新模块，并用配置 OTA 更新已刷的车。`, `It carries policy set ${carried}; ${current} is in effect. Production vehicles flashed with it run ${carried} first: update the module, and bring flashed vehicles up to date by configuration OTA.`)
+            : L(`包内是策略集 ${carried}，它已不适用于这个版本，也没有其他生效的策略集。`, `It carries policy set ${carried}, which no longer applies to this version, and no other set is in effect.`),
+        };
+      }
       case 'UNRECORDED_SOFTWARE':
         return { title: L(`${s} 上报了未登记的软件版本`, `${s} reported an unrecorded software version`), body: L(`先登记 ${d}，再确认。`, `Record ${d}, then confirm it.`) };
       case 'GROUP_MISMATCH': {

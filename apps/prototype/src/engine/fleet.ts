@@ -10,6 +10,7 @@ import { newId } from '../domain/ids.ts';
 import { WILDCARD } from '../domain/vocabulary.ts';
 import type { Env, Scope } from '../domain/vocabulary.ts';
 import { openCheckForNewSoftware } from './applicability.ts';
+import { appliesTo, releaseFor } from './release.ts';
 import type { Actor, Ctx } from './engine.ts';
 import { getWorkspace } from './org.ts';
 import { displayName } from './config.ts';
@@ -270,26 +271,70 @@ export function confirmIntegration(ctx: Ctx, resourceId: string, input: { versio
     throw rule('PLANNED_VERSION_IN_PRODUCTION', `${r.vehicleModelId} ${input.version} is planned, not released; production vehicles run released software only`);
   }
   if (!input.source.trim()) throw rule('SOURCE_REQUIRED', 'name the trusted source (e.g. DIP report, OTA confirmation)');
+  const previous = r.integrationVersion;
   const changeId = recordSoftwareChange(ctx, r, input.version, 'CONFIRMED');
   r.integrationVersion = input.version;
   r.integrationSource = input.source.trim();
   r.softwareStatus = input.version ? 'CONSISTENT' : 'UNKNOWN';
   r.controllers = [];
   r.updatedAt = ctx.now;
-  applyBundledModule(ctx, r, changeId);
+  afterSoftwareChange(ctx, r, previous, changeId);
 }
 
 /**
- * The DCL configuration module bundled into the vehicle OTA package: a production vehicle now
- * running a version that carries one runs its set from now on, without waiting for a cloud push
- * (weak or no signal included). Changes after that still come by configuration OTA.
+ * What follows a physical vehicle's software change (`previous` is the version it had). Only a real
+ * change counts: confirming the version a vehicle already runs changes nothing it runs.
  */
-export function applyBundledModule(ctx: Ctx, r: Draft<Resource>, changeId: string | null): void {
+export function afterSoftwareChange(ctx: Ctx, r: Draft<Resource>, previous: string | null, changeId: string | null): void {
+  if (r.integrationVersion === previous) return;
+  applyBundledModule(ctx, r, changeId);
+  dropStaleRolloutTargets(ctx, r);
+}
+
+/**
+ * The DCL configuration module bundled into the vehicle OTA package: a production vehicle flashed
+ * with a version that carries one runs the module's set from then on, without waiting for a cloud
+ * push (weak or no signal included). The package carries the module as it was exported, even when
+ * another set has taken the version over since; release is told so (MODULE_OUTDATED) and brings
+ * such vehicles up to date by configuration OTA.
+ */
+function applyBundledModule(ctx: Ctx, r: Draft<Resource>, changeId: string | null): void {
   if (r.type !== 'PHYSICAL' || r.env !== 'production' || !r.integrationVersion || r.softwareStatus !== 'CONSISTENT') return;
   const m = ctx.s.softwareVersions[softwareKey(r.vehicleModelId, r.integrationVersion)]?.dclModule;
   if (!m || r.appliedConfigId === m.resolvedConfigId) return;
   r.appliedConfigId = m.resolvedConfigId;
   if (changeId) ctx.s.softwareChanges[changeId]!.configId = m.resolvedConfigId;
+}
+
+/**
+ * A production vehicle's software changed while configuration OTAs were still on their way to it.
+ * A rollout keeps the vehicle only while its set is still the one to run on the new software (for a
+ * rollback: still applies to it); otherwise the vehicle leaves the rollout, so a late receipt can
+ * never put a set on software it does not apply to.
+ */
+function dropStaleRolloutTargets(ctx: Ctx, r: Draft<Resource>): void {
+  if (r.env !== 'production') return;
+  for (const d of Object.values(ctx.s.deployments)) {
+    if (d.kind !== 'OTA' || (d.status !== 'PENDING' && d.status !== 'PAUSED')) continue;
+    const t = d.targets.find((x) => x.resourceId === r.id && (x.status === 'PENDING' || x.status === 'QUEUED'));
+    if (!t) continue;
+    const release = ctx.s.releases[d.subjectId];
+    const version = r.integrationVersion;
+    const fits = !!release && !!version && appliesTo(ctx.s, release, version) && (!!d.rollbackOf || releaseFor(ctx.s, r).release?.id === release.id);
+    if (fits) {
+      t.software = version;
+      continue;
+    }
+    t.status = 'CANCELLED';
+    t.error = `software changed to ${version ?? 'unknown'}`;
+    t.updatedAt = ctx.now;
+    (d.log ??= []).push({ kind: 'DROPPED', by: null, at: ctx.now, reason: version, resourceIds: [r.id] });
+    if (d.status === 'PENDING' && d.targets.every((x) => x.status !== 'PENDING' && x.status !== 'QUEUED')) {
+      d.status = 'COMPLETED';
+      d.log.push({ kind: 'COMPLETED', by: null, at: ctx.now, reason: null, resourceIds: [] });
+    }
+    d.updatedAt = ctx.now;
+  }
 }
 
 /**
@@ -340,6 +385,7 @@ export function reportControllers(ctx: Ctx, resourceId: string, input: { target:
     throw rule('PLANNED_VERSION_IN_PRODUCTION', `${r.vehicleModelId} ${input.target} is planned, not released; production vehicles run released software only`);
   }
   const consistent = input.controllers.every((c) => c.status === 'PASS' && c.version === input.target);
+  const previous = r.integrationVersion;
   const changeId = consistent ? recordSoftwareChange(ctx, r, input.target, 'CONTROLLERS') : null;
   r.controllers = input.controllers.map((c) => ({ name: c.name.trim(), version: c.version.trim(), status: c.status }));
   r.softwareStatus = consistent ? 'CONSISTENT' : 'PARTIAL_FAILURE';
@@ -347,7 +393,7 @@ export function reportControllers(ctx: Ctx, resourceId: string, input: { target:
   r.integrationVersion = consistent ? input.target : null;
   r.integrationSource = input.source.trim();
   r.updatedAt = ctx.now;
-  applyBundledModule(ctx, r, changeId);
+  afterSoftwareChange(ctx, r, previous, changeId);
 }
 
 /** Only the owner acts on a personal simulation, and only within a grant for its workspace and group. */

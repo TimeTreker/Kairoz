@@ -668,7 +668,8 @@ export interface DeploymentTarget {
 
 /** One step of an OTA rollout (下发记录), kept for the release history. */
 export interface RolloutEvent {
-  kind: 'STARTED' | 'EXPANDED' | 'PAUSED' | 'AUTO_PAUSED' | 'RESUMED' | 'COMPLETED' | 'CANCELLED' | 'ROLLED_BACK';
+  /** DROPPED: a vehicle left the rollout because its software changed (`reason` = the new version). */
+  kind: 'STARTED' | 'EXPANDED' | 'PAUSED' | 'AUTO_PAUSED' | 'RESUMED' | 'COMPLETED' | 'CANCELLED' | 'ROLLED_BACK' | 'DROPPED';
   /** null: the platform itself (a failed or the last receipt). */
   by: string | null;
   at: string;

@@ -39,6 +39,18 @@ export function otaProblems(s: State, r: Resource, release: Release, except?: st
   return problems;
 }
 
+/** Why a vehicle cannot be returned to an earlier set by a rollback now; empty when it can. */
+function returnProblems(s: State, r: Resource, release: Release, except?: string): string[] {
+  const problems: string[] = [];
+  if (r.status !== 'AVAILABLE') problems.push(`${r.id}: ${r.status.toLowerCase()}`);
+  if (!r.integrationVersion || !appliesTo(s, release, r.integrationVersion)) problems.push(`${r.id}: policy set ${release.dclVersion} does not apply to software ${r.integrationVersion ?? 'unknown'}`);
+  const pending = pendingDeploymentOf(s, r.id);
+  if (pending && pending !== except) problems.push(`${r.id}: waiting for deployment ${pending}`);
+  const open = openOtaOf(s, r.id, except);
+  if (open) problems.push(`${r.id}: part of unfinished rollout ${open}`);
+  return problems;
+}
+
 function getOta(s: State, id: string): Deployment {
   const d = s.deployments[id];
   if (!d || d.kind !== 'OTA') throw notFound('OTA rollout', id);
@@ -150,12 +162,22 @@ export function createOta(
   return id;
 }
 
-/** Sends the rollout to more of its queued vehicles. Each one is checked again first. */
+/** Vehicles already sent the rollout that have not confirmed it yet: they hold an expansion. */
+export function waveWaiting(d: Deployment): string[] {
+  return d.targets.filter((t) => t.status === 'PENDING').map((t) => t.resourceId);
+}
+
+/**
+ * Sends the rollout to more of its queued vehicles, once every vehicle sent so far has applied it
+ * (gray release: the first wave proves the set before the rest gets it). Each one is checked again.
+ */
 export function expandOta(ctx: Ctx, deploymentId: string, resourceIds: string[] | 'ALL'): void {
   const d = getOta(ctx.s, deploymentId);
   allowOta(ctx, d);
   if (d.status === 'PAUSED') throw rule('OTA_PAUSED', 'the rollout is paused; resume it first');
   if (d.status !== 'PENDING') throw rule('OTA_CLOSED', 'the rollout is finished');
+  const waiting = waveWaiting(d);
+  if (waiting.length) throw rule('OTA_WAVE_PENDING', `wait until the vehicles already sent have applied it: ${waiting.join(', ')}`);
   const queued = d.targets.filter((t) => t.status === 'QUEUED');
   const chosen = resourceIds === 'ALL' ? queued : queued.filter((t) => resourceIds.includes(t.resourceId));
   if (chosen.length === 0) throw rule('NOTHING_QUEUED', 'choose queued vehicles to send to');
@@ -199,7 +221,8 @@ export function resumeOta(ctx: Ctx, deploymentId: string): void {
   if (d.status !== 'PAUSED') throw rule('OTA_NOT_PAUSED', 'the rollout is not paused');
   const release = getRelease(ctx.s, d.subjectId);
   const failed = d.targets.filter((t) => t.status === 'FAILED');
-  const problems = failed.flatMap((t) => otaProblems(ctx.s, ctx.s.resources[t.resourceId]!, release, d.id));
+  // A rollback returns vehicles to an older set on purpose: it needs that set to still apply, not to be the newest.
+  const problems = failed.flatMap((t) => (d.rollbackOf ? returnProblems : otaProblems)(ctx.s, ctx.s.resources[t.resourceId]!, release, d.id));
   if (problems.length) throw rule('OTA_BLOCKED', 'some failed vehicles can no longer take this release', { issues: problems });
   const draft = ctx.s.deployments[d.id] as Draft<Deployment>;
   for (const t of draft.targets) {

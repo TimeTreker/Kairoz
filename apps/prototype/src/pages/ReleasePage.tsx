@@ -17,7 +17,7 @@ import { DeliveryTag } from '../components/testing.tsx';
 import type { JsonFile } from '../components/JsonExport.tsx';
 import { displayName, mainlineRelease } from '../engine/config.ts';
 import { membersOf, ungroupedVehicles, vehicleGroupsOf } from '../engine/fleet.ts';
-import { answerConfigRequest, cancelOta, createOta, expandOta, otaProblems, otaRollouts, outsideRollout, pauseOta, resumeOta, rollbackOta, rollbackProblems } from '../engine/ota.ts';
+import { answerConfigRequest, cancelOta, createOta, expandOta, otaProblems, otaRollouts, outsideRollout, pauseOta, resumeOta, rollbackOta, rollbackProblems, waveWaiting } from '../engine/ota.ts';
 import { isOpenCheck } from '../engine/applicability.ts';
 import { releaseWorkspace } from '../engine/emergency.ts';
 import { applicableVersions, previousRelease, releaseConfiguration, releaseFor, releasesOf, setInEffect, targetMoved, testedVersions, versionsInEffect } from '../engine/release.ts';
@@ -427,7 +427,10 @@ function CreateOtaModal({ projectId, onClose }: { projectId: string; onClose: ()
             </Checkbox.Group>
           </>
         )}
-        <Typography.Text strong>{L('第一批（灰度）', 'First wave (gray)')}</Typography.Text>
+        <Typography.Text strong>{L('第一批（灰度）', 'First wave (canary)')}</Typography.Text>
+        {candidates.length > 1 && candidates.every((r) => firstWave.includes(r.id)) && (
+          <Alert type="warning" showIcon title={L('第一批包含全部车辆：没有灰度，任何问题会同时出现在所有车上。', 'The first wave holds every vehicle: no canary, so any problem reaches every vehicle at once.')} />
+        )}
         {release &&
           vehicles.map((r) => {
             const done = r.appliedConfigId === release.resolvedConfigId;
@@ -474,6 +477,7 @@ function RolloutCard({ deployment: d, canManage }: { deployment: Deployment; can
   const [reason, setReason] = useState('');
   const [chosen, setChosen] = useState<string[]>([]);
   const queued = d.targets.filter((t) => t.status === 'QUEUED');
+  const waiting = waveWaiting(d);
   const open = d.status === 'PENDING' || d.status === 'PAUSED';
   const rollbackIssues = rollbackProblems(state, d);
   const counts = (status: string) => d.targets.filter((t) => t.status === status).length;
@@ -507,9 +511,11 @@ function RolloutCard({ deployment: d, canManage }: { deployment: Deployment; can
         canManage && (
           <Space size={4} wrap>
             {d.status === 'PENDING' && queued.length > 0 && (
-              <Button size="small" type="primary" onClick={() => (setChosen(queued.map((t) => t.resourceId)), setPrompt({ kind: 'expand' }))}>
-                {L('扩大范围', 'Expand')}
-              </Button>
+              <Tooltip title={waiting.length ? L(`等 ${waiting.join('、')} 回执成功后再扩大范围`, `Expand once ${waiting.join(', ')} applied it`) : undefined}>
+                <Button size="small" type="primary" disabled={waiting.length > 0} onClick={() => (setChosen(queued.map((t) => t.resourceId)), setPrompt({ kind: 'expand' }))}>
+                  {L('扩大范围', 'Expand')}
+                </Button>
+              </Tooltip>
             )}
             {d.status === 'PAUSED' && (
               <Button size="small" type="primary" onClick={() => run((c) => resumeOta(c, d.id), L('已恢复，失败车辆以新尝试重新下发', 'Resumed; failed vehicles retry with a new attempt'))}>

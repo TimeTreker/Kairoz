@@ -825,6 +825,7 @@ const ENTRY_COLORS: Record<string, string> = {
   ROUND_PASSED: 'green',
   CALL_CANCELLED: 'red',
   OTA_AUTO_PAUSED: 'red',
+  OTA_DROPPED: 'orange',
   OTA_PAUSED: 'orange',
   OTA_ROLLED_BACK: 'orange',
   OTA_CANCELLED: 'gray',
@@ -950,6 +951,8 @@ function useEntryText(): (e: HistoryEntry) => ReactNode {
         return L(`配置 OTA 取消${reason}`, `Configuration OTA cancelled${reasonEn}`);
       case 'OTA_ROLLED_BACK':
         return L(`配置 OTA 回滚${reason}`, `Configuration OTA rolled back${reasonEn}`);
+      case 'OTA_DROPPED':
+        return L(`${cars(e.resourceIds)} 的软件换到 ${e.reason ?? '未知'}，退出本次配置 OTA`, `${cars(e.resourceIds)} moved to software ${e.reason ?? 'unknown'} and left the rollout`);
       case 'VEHICLE_ARRIVED':
         return e.releaseId
           ? L(`${cars(e.resourceIds)} 的软件从 ${e.reason ?? '—'} 换到 ${v}，随 OTA 包生效 ${set(e.releaseId)}`, `${cars(e.resourceIds)} moved from ${e.reason ?? '—'} to ${v}, running ${set(e.releaseId)} from the OTA package`)

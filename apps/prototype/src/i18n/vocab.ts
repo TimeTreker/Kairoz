@@ -321,6 +321,7 @@ Object.assign(ERROR_LABELS, {
   OTA_BLOCKED: b('OTA 被拒绝：并非所有车辆都满足条件', 'OTA blocked: not every vehicle qualifies'),
   NOTHING_TO_ROLL_OUT: b('所有车辆都已运行该策略集', 'Every vehicle already runs this policy set'),
   OTA_PAUSED: b('OTA 已暂停，请先恢复', 'The rollout is paused; resume it first'),
+  OTA_WAVE_PENDING: b('已下发的车辆尚未全部回执成功，暂不能扩大范围', 'Vehicles already sent have not all applied it yet; the rollout cannot be expanded'),
   OTA_CLOSED: b('OTA 已结束', 'The rollout is finished'),
   OTA_NOT_RUNNING: b('只有进行中的 OTA 可以暂停', 'Only a running rollout can be paused'),
   OTA_NOT_PAUSED: b('OTA 未暂停', 'The rollout is not paused'),

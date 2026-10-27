@@ -11,7 +11,7 @@ import { covered, policyCompatibility } from '../domain/compatibility.ts';
 import { conflict, notFound, rule } from '../domain/errors.ts';
 import { newId } from '../domain/ids.ts';
 import type { Actor, Ctx } from './engine.ts';
-import { applyBundledModule, recordSoftwareChange, softwareKey } from './fleet.ts';
+import { afterSoftwareChange, isPlanned, recordSoftwareChange, softwareKey } from './fleet.ts';
 import { releaseDiff } from './release.ts';
 import { commitSnapshot, resolveFiles } from './snapshots.ts';
 import type { Resource, SoftwareChange, State, VehicleGroup } from './types.ts';
@@ -25,7 +25,10 @@ import { baseTarget, vehicleBase } from './validation.ts';
 export function noteReportedSoftware(ctx: Ctx, resourceId: string, reported: string | null): void {
   const r = ctx.s.resources[resourceId] as Draft<Resource> | undefined;
   if (!r || r.type !== 'PHYSICAL' || !reported || reported === r.integrationVersion) return;
-  if (ctx.s.softwareVersions[softwareKey(r.vehicleModelId, reported)]) {
+  // A production vehicle runs released software only: a planned version it reports waits, like an
+  // unrecorded one, until the version is released and vehicle resources confirm it.
+  if (ctx.s.softwareVersions[softwareKey(r.vehicleModelId, reported)] && !(r.env === 'production' && isPlanned(ctx.s, r.vehicleModelId, reported))) {
+    const previous = r.integrationVersion;
     const changeId = recordSoftwareChange(ctx, r, reported, 'CLIENT_REPORT');
     const request = Object.values(ctx.s.vehicleSoftwareRequests).find(
       (q) => q.resourceId === r.id && q.status === 'APPLIED' && q.toVersion === reported && !Object.values(ctx.s.softwareChanges).some((c) => c.requestId === q.id),
@@ -45,7 +48,7 @@ export function noteReportedSoftware(ctx: Ctx, resourceId: string, reported: str
     r.softwareStatus = 'CONSISTENT';
     r.controllers = [];
     r.updatedAt = ctx.now;
-    applyBundledModule(ctx, r, changeId);
+    afterSoftwareChange(ctx, r, previous, changeId);
     return;
   }
   if (Object.values(ctx.s.softwareChanges).some((c) => c.resourceId === r.id && c.status === 'UNRECORDED' && c.toVersion === reported)) return;

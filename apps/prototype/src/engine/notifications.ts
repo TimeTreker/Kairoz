@@ -20,6 +20,7 @@ import { isConfirmed, isMergeWorkspace, verifiedSources } from './integration.ts
 import { borrowedBy, lentBy, loansToAgree, loansToApprove, managedLoans } from './loans.ts';
 import { orphanedOrgObjects } from './org.ts';
 import { otaRollouts } from './ota.ts';
+import { setInEffect } from './release.ts';
 import { referenceRequestsFor } from './references.ts';
 import { assessSoftwareChange, softwareChangesFor, unrecordedReports } from './software-change.ts';
 import type { State } from './types.ts';
@@ -47,6 +48,7 @@ export type NotificationKind =
   | 'EMERGENCY_STOP'
   | 'ROLLOUT_PAUSED'
   | 'PRODUCTION_BLOCKED'
+  | 'MODULE_OUTDATED'
   | 'UNRECORDED_SOFTWARE'
   | 'GROUP_MISMATCH'
   | 'SOFTWARE_UPDATE'
@@ -327,6 +329,20 @@ export function notificationsFor(s: State, actor: Actor, workspaceId: string): N
       }
       for (const r of blockedProductionVehicles(s, ws.vehicleModelId)) {
         add('CONFIG_RELEASE', 'PRODUCTION_BLOCKED', [r.id, r.integrationVersion], { severity: 'WARNING', subject: r.id, detail: r.integrationVersion, link: 'release/applicability', at: r.updatedAt });
+      }
+      // A module the OTA package still carries after another set took its version over: vehicles
+      // flashed with it run the old set until a configuration OTA reaches them.
+      for (const v of Object.values(s.softwareVersions).filter((x) => x.vehicleModelId === ws.vehicleModelId && x.dclModule)) {
+        const current = setInEffect(s, v.vehicleModelId, v.version);
+        if (current?.id === v.dclModule!.releaseId) continue;
+        const carried = s.releases[v.dclModule!.releaseId]?.dclVersion ?? '';
+        add('CONFIG_RELEASE', 'MODULE_OUTDATED', [v.version, v.dclModule!.releaseId, current?.id ?? null], {
+          severity: 'WARNING',
+          subject: `${v.vehicleModelId} ${v.version}`,
+          detail: `${carried} · ${current?.dclVersion ?? ''}`,
+          link: 'release/applicability',
+          at: v.dclModule!.exportedAt,
+        });
       }
     }
   }

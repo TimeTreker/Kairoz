@@ -27,12 +27,22 @@ export function capturablePolicies(s: State, resourceId: string): { groupId: str
   );
 }
 
-/** The workspace whose dispatch put the vehicle's applied configuration there. */
+/**
+ * The workspace whose dispatch put the vehicle's applied configuration there. A set that came with
+ * the software (the OTA package's DCL module) was dispatched by no one: its data belongs to the
+ * workspace whose vehicle group the vehicle is in, else to the one the set was integrated in.
+ */
 function sourceWorkspace(s: State, resourceId: string, configId: string): string | undefined {
   const deployments = Object.values(s.deployments)
     .filter((d) => d.resolvedConfigId === configId && d.targets.some((t) => t.resourceId === resourceId && t.status === 'APPLIED'))
     .sort((a, b) => b.id.localeCompare(a.id));
-  return deployments[0]?.workspaceId;
+  if (deployments[0]) return deployments[0].workspaceId;
+  const group = s.groupMembers[resourceId];
+  if (group && s.vehicleGroups[group]) return s.vehicleGroups[group].workspaceId;
+  const config = s.resolvedConfigs[configId];
+  const release = config?.kind === 'RELEASE' ? s.releases[config.sourceId] : undefined;
+  const source = release?.emergency ? s.releases[release.emergency.sourceReleaseId] : release;
+  return source?.candidateId ? s.candidates[source.candidateId]?.workspaceId : undefined;
 }
 
 /** Deterministic pseudo size of a personal trial capture, so repeated runs of the demo look the same. */
