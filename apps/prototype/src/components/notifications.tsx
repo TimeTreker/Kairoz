@@ -105,7 +105,7 @@ export function useNotificationText() {
       }
       case 'FEATURE_TO_TEST':
         return d === 'TESTING'
-          ? { title: L(`${s} 等待验证结果`, `${s} waits for test results`), body: L('先仿真后实车登记结果，再确认 Verified。', 'Record results, simulation first, then confirm Verified.') }
+          ? { title: L(`${s} 等待验证结果`, `${s} waits for test results`), body: L('先仿真后实车登记结果，再确认验证通过。', 'Record results, simulation first, then confirm Verified.') }
           : { title: L(`${s} 可下发验证`, `${s} can be dispatched for testing`), body: L('按车辆组下发当前固定提交。', 'Dispatch the head commit to vehicle groups.') };
       case 'DISPATCH_FAILED':
         return { title: L(`${s} 下发失败`, `${s} dispatch failed`), body: L(`应用失败的车辆：${d}`, `Vehicles that failed to apply: ${d}`) };
@@ -165,7 +165,7 @@ export function useNotificationText() {
       case 'GROUP_MISMATCH': {
         const [group, outcome] = d.split(' · ');
         return {
-          title: L(`${s} 与车辆组的发布不匹配`, `${s} does not fit what ${group} runs`),
+          title: L(`${s} 与车辆组的配置不匹配`, `${s} does not fit what ${group} runs`),
           body: `${B(CHANGE_OUTCOME_LABELS[outcome ?? ''] as Bilingual | undefined, outcome ?? '')} · ${L('修改策略并下发，或更新车辆整车版本', 'adapt the policies and dispatch, or update the vehicle’s software')}`,
         };
       }
@@ -173,7 +173,7 @@ export function useNotificationText() {
         const [version, status] = d.split(' · ');
         return status === 'FAILED'
           ? { title: L(`${s} 整车软件更新失败`, `Software update of ${s} failed`), body: L(`未能更新到 ${version}，车辆保持原版本。`, `It did not move to ${version}; it keeps its software.`) }
-          : { title: L(`${s} 已更新到 ${version}`, `${s} updated to ${version}`), body: L('车辆重启上报后，按车辆组的发布推送配置。', 'After its restart report, the group’s publication is pushed if it fits.') };
+          : { title: L(`${s} 已更新到 ${version}`, `${s} updated to ${version}`), body: L('车辆重启上报后，按车辆组的配置推送。', 'After its restart report, the group’s configuration is pushed if it fits.') };
       }
       case 'LOAN_TO_AGREE':
         return { title: L(`${d} 申请借用 ${s}`, `${d} asks to borrow ${s}`), body: L('同意后由车辆资源批准；批准时车辆离开本工作区的车辆组。', 'Vehicle resources approve after you agree; the vehicle then leaves your vehicle group.') };

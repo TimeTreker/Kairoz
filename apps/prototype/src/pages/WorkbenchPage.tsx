@@ -7,7 +7,7 @@ import type { LifecycleTarget } from '../components/lifecycle.tsx';
 import { WorkspaceGroups } from '../components/workspace-groups.tsx';
 import { navigate } from '../app/router.ts';
 import { setSession, useEngineState } from '../app/store.ts';
-import { LabelTag, Mono, RoleTag, StageTag, when } from '../components/common.tsx';
+import { LabelTag, Mono, RoleTag, StageTag, day, when } from '../components/common.tsx';
 import { HoldTag } from '../components/budget.tsx';
 import { PatchedTag } from '../components/patch.tsx';
 import { authorize } from '../domain/authz.ts';
@@ -151,7 +151,7 @@ export function WorkbenchPage() {
   const misfits = workspace ? mismatchesFor(state, actor, workspace.id) : [];
   if (misfits.length > 0) {
     cards.push(
-      <Card key="misfits" title={L('车辆与车辆组的发布不匹配', 'Vehicles that do not fit their group')}>
+      <Card key="misfits" title={L('车辆与车辆组的配置不匹配', 'Vehicles that do not fit their group')}>
         <Typography.Paragraph type="secondary">
           {L('这些车辆加入车辆组或更新了整车软件，但车辆组已下发的配置不适合它们的软件，云端不会推送。修改策略并下发，或更新车辆的整车版本。', 'These vehicles joined a group or had their software updated, but what was dispatched to the group does not fit their software, so nothing is pushed. Adapt the policies and dispatch, or update the vehicle’s software.')}
         </Typography.Paragraph>
@@ -218,7 +218,7 @@ export function WorkbenchPage() {
               <Space>
                 <span>{L('借入', 'Borrowed')}</span>
                 <Mono>{l.resourceId}</Mono>
-                <span>{L(`至 ${l.dueDate}`, `until ${l.dueDate}`)}</span>
+                <span>{L(`至 ${day(l.dueDate)}`, `until ${day(l.dueDate)}`)}</span>
               </Space>
               <LoanStatusTag loan={l} />
             </Row2>

@@ -4,7 +4,7 @@ import { useActor, useCanOpen } from '../app/hooks.ts';
 import { navigate } from '../app/router.ts';
 import { useEngineState } from '../app/store.ts';
 import { canReadFeature } from '../engine/config.ts';
-import { useI18n } from '../i18n/i18n.tsx';
+import { currentLang, useI18n } from '../i18n/i18n.tsx';
 import type { Bilingual } from '../i18n/i18n.tsx';
 import type { State } from '../engine/types.ts';
 import { ENV_LABELS, ROLE_LABELS, STAGE_COLORS, STAGE_LABELS, setName } from '../i18n/vocab.ts';
@@ -68,10 +68,24 @@ export function Hint({ children }: { children: ReactNode }) {
   );
 }
 
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const pad = (n: number) => String(n).padStart(2, '0');
+
+/** A moment in the interface language, local time: 2026-10-27 14:30 / 27 Oct 2026, 14:30. */
 export function when(iso: string | null | undefined): string {
   if (!iso) return '—';
   const d = new Date(iso);
-  return `${d.toLocaleDateString()} ${d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+  if (Number.isNaN(d.getTime())) return iso;
+  const time = `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  return currentLang() === 'zh' ? `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${time}` : `${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()}, ${time}`;
+}
+
+/** A calendar day (YYYY-MM-DD, e.g. a due date) in the interface language: 2026-11-03 / 3 Nov 2026. */
+export function day(date: string | null | undefined): string {
+  if (!date) return '—';
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date);
+  if (!m || currentLang() === 'zh') return date;
+  return `${Number(m[3])} ${MONTHS[Number(m[2]) - 1]} ${m[1]}`;
 }
 
 /** How a configuration is named: a policy set by its version, anything else by its label. */

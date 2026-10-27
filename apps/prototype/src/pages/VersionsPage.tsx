@@ -9,7 +9,7 @@ import type { ReactNode } from 'react';
 import { useCan, useCanOpen, useRun, useWorkspace } from '../app/hooks.ts';
 import { navigate } from '../app/router.ts';
 import { useEngineState } from '../app/store.ts';
-import { Hint, LabelTag, Mono, PageHeader, when } from '../components/common.tsx';
+import { Hint, LabelTag, Mono, PageHeader, day, when } from '../components/common.tsx';
 import { LineTag } from '../components/patch.tsx';
 import { PromoteModal } from '../components/promote.tsx';
 import { callPhase, callsOf, closeUnchanged, cancelCall, defaultModules, excludeModule, isOverdueCall, isStale, moduleName, openCall, openRound, previewCall, remindModules, retargetCall, returnModules, submitDomain, submitGroup, waitingModules } from '../engine/calls.ts';
@@ -134,7 +134,7 @@ function CallList() {
               },
             },
             { title: L('轮次', 'Rounds'), render: (_, c) => c.rounds.filter((r) => r.candidateId).length || '—' },
-            { title: L('截止', 'Due'), render: (_, c) => (c.dueDate ? <Typography.Text type={isOverdueCall(state, c) ? 'danger' : undefined}>{c.dueDate}</Typography.Text> : '—') },
+            { title: L('截止', 'Due'), render: (_, c) => (c.dueDate ? <Typography.Text type={isOverdueCall(state, c) ? 'danger' : undefined}>{day(c.dueDate)}{isOverdueCall(state, c) ? L(' · 已逾期', ' · overdue') : ''}</Typography.Text> : '—') },
             { title: L('发起', 'Opened'), render: (_, c) => `${state.accounts[c.createdBy]?.displayName ?? c.createdBy} · ${when(c.createdAt)}` },
           ]}
         />
@@ -317,7 +317,7 @@ function CallDetail({ callId }: { callId: string }) {
           <Descriptions.Item label={L('范围', 'Scope')}>{scopeText(L, call.scope)}</Descriptions.Item>
           <Descriptions.Item label={L('发起', 'Opened')}>{`${state.accounts[call.createdBy]?.displayName ?? call.createdBy} · ${when(call.createdAt)} · ${state.workspaces[call.workspaceId]?.name}`}</Descriptions.Item>
           <Descriptions.Item label={L('截止', 'Due')}>
-            {call.dueDate ? <Typography.Text type={isOverdueCall(state, call) ? 'danger' : undefined}>{call.dueDate}</Typography.Text> : '—'}
+            {call.dueDate ? <Typography.Text type={isOverdueCall(state, call) ? 'danger' : undefined}>{day(call.dueDate)}{isOverdueCall(state, call) ? L(' · 已逾期', ' · overdue') : ''}</Typography.Text> : '—'}
           </Descriptions.Item>
           {call.baseVersion && <Descriptions.Item label={L('基线软件版本', 'Base software')}>{`${call.vehicleModelId} ${call.baseVersion}`}</Descriptions.Item>}
           {parent && (

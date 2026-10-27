@@ -193,7 +193,7 @@ function EventDetail({ event: e }: { event: CollectionEvent }) {
           { title: L('车端', 'Edge'), render: (_, f) => <LabelTag map={FILE_PROCESS_LABELS} value={f.edgeStatus} color={f.edgeStatus === 'UPLOADED' ? 'green' : undefined} /> },
           { title: L('云端', 'Cloud'), render: (_, f) => <LabelTag map={FILE_PROCESS_LABELS} value={f.cloudStatus} color={f.cloudStatus === 'DONE' ? 'green' : f.cloudStatus === 'PARSER_FAILED' ? 'red' : undefined} /> },
           { title: L('大小', 'Size'), render: (_, f) => kb(f.sizeBytes) },
-          { title: L('保留', 'Retention'), render: (_, f) => L(`${f.retentionDays} 天`, `${f.retentionDays} d`) },
+          { title: L('保留', 'Retention'), render: (_, f) => L(`${f.retentionDays} 天`, `${f.retentionDays} days`) },
         ]}
       />
       <Collapse
@@ -265,7 +265,7 @@ function TrainingTab({ workspaceId }: { workspaceId: string }) {
           <Input allowClear placeholder="chassis.steering…" style={{ width: 190 }} />
         </Form.Item>
         <Form.Item name="scenario" label={L('场景', 'Scenario')}>
-          <Input allowClear placeholder={L('例如 转角突变', 'e.g. 转角突变')} style={{ width: 160 }} />
+          <Input allowClear placeholder={L('例如 转角突变', 'a policy name, e.g. 转角突变')} style={{ width: 160 }} />
         </Form.Item>
         <Form.Item name="from" label={L('从', 'From')}>
           <Input type="date" style={{ width: 150 }} />

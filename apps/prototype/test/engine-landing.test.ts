@@ -23,3 +23,13 @@ describe('where an account starts', () => {
     assert.equal(counts(), 0);
   });
 });
+
+describe('what a vehicle of unknown software is told', () => {
+  test('it waits for its software to be known, rather than for a new dispatch', async () => {
+    const { answerConfigRequest } = await import('../src/engine/ota.ts');
+    const fleet = await import('../src/engine/fleet.ts');
+    const e = new Engine(demoState());
+    e.run('resource', (c) => fleet.confirmIntegration(c, 'VEH-001', { version: null, source: '刷写记录丢失' }));
+    assert.equal(answerConfigRequest(e.getState(), 'VEH-001').reason, 'UNKNOWN_SOFTWARE');
+  });
+});

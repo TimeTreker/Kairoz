@@ -18,7 +18,7 @@ function GrantSummary({ grant }: { grant: Grant }) {
     <Space size={4} wrap>
       <RoleTag role={grant.role} />
       {grant.dispatchOnly && <Tag color="orange">{L('仅下发', 'dispatch only')}</Tag>}
-      <Typography.Text type="secondary">{L('工作区', 'ws')}:</Typography.Text>
+      <Typography.Text type="secondary">{L('工作区', 'Workspaces')}:</Typography.Text>
       <Mono>{grant.workspaces.join(',')}</Mono>
       {dim === 'groups' && (
         <>

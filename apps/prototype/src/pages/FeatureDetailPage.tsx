@@ -126,7 +126,7 @@ export function FeatureDetailPage({ featureId, tab = 'files' }: { featureId: str
               type="warning"
               showIcon
               title={L('草稿中未提交的修改没有进入发布，已随归档冻结。', 'Unsubmitted draft changes did not go into the release and are frozen with the archive.')}
-              description={L('后续修改请基于最新正式版本新建 Feature。', 'Make further changes in a new Feature based on the latest release.')}
+              description={L('后续修改请基于最新策略集新建 Feature。', 'Make further changes in a new Feature based on the latest policy set.')}
             />
           )}
           {feature.stage === 'SUBMITTED' && <Alert type="warning" showIcon title={L('等待 DCL 工程审核敏感文件。', 'Waiting for DCL engineering to review sensitive files.')} />}

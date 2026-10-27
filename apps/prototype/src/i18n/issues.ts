@@ -111,7 +111,7 @@ const PROBLEMS: Pattern[] = [
   [/vehicle group has no vehicles/, () => '车辆组没有车辆'],
   [/Features never go to production vehicles/, () => 'Feature 不下发到量产车辆'],
   [/all vehicle groups of one dispatch share an environment/, () => '同一次下发的车辆组须在同一环境'],
-  [/formal releases roll out to production vehicle groups/, () => '正式版本只下发到量产车辆组'],
+  [/formal releases roll out to production vehicle groups/, () => '策略集只通过配置 OTA 下发到量产车辆组'],
   [/candidates only go to testing vehicle groups/, () => '候选只下发到测试车辆组'],
   [/not in the integration workspace/, () => '不在集成工作区'],
   [/in another workspace/, () => '属于其他工作区'],
@@ -189,6 +189,46 @@ const PROBLEMS: Pattern[] = [
   [/training use not confirmed/, () => '训练用途待确认'],
   [/training use denied/, () => '不允许训练'],
 ];
+
+/** The trigger parser's messages (domain/trigger.ts), most specific first. */
+const TRIGGER: Pattern[] = [
+  [/trigger is empty/, () => '触发条件为空'],
+  [/trigger exceeds (\d+) characters/, ([n]) => `触发条件超过 ${n} 个字符`],
+  [/trigger references no signal/, () => '触发条件没有引用任何信号'],
+  [/unterminated string/, () => '字符串缺少结束引号'],
+  [/number out of range/, () => '数字超出范围'],
+  [/unexpected character (.+)/, ([c]) => `无法识别的字符 ${c}`],
+  [/unexpected token after expression/, () => '表达式后面有多余的内容'],
+  [/nesting deeper than (\d+)/, ([n]) => `括号嵌套超过 ${n} 层`],
+  [/compare signals or literals, not sub-expressions/, () => '比较的两边应是信号或常量，不能是子表达式'],
+  [/a comparison must involve at least one signal/, () => '比较至少要包含一个信号'],
+  [/(\S+) compares numbers; use == or != for text and booleans/, ([op]) => `${op} 只比较数字；文本和布尔值请用 == 或 !=`],
+  [/a literal is not a condition on its own/, () => '单独的常量不能作为条件'],
+  [/unexpected keyword (\S+)/, ([k]) => `这里不能出现关键字 ${k}`],
+  [/missing closing parenthesis/, () => '缺少右括号'],
+  [/unexpected end of expression/, () => '表达式不完整'],
+  [/unexpected (.+)/, ([t]) => `这里不能出现 ${t}`],
+];
+const TRIGGER_COMPILED = TRIGGER.map(([re, zh]) => [new RegExp(`^${re.source}$`), zh] as const);
+
+function triggerZh(message: string): string {
+  for (const [re, zh] of TRIGGER_COMPILED) {
+    const m = re.exec(message);
+    if (m) return zh(m.slice(1));
+  }
+  return message;
+}
+
+/** A trigger parse error, with its position counted from 1: 缺少右括号（第 24 个字符）. */
+export function triggerError(message: string, position: number): Bilingual {
+  return { zh: `${triggerZh(message)}（第 ${position + 1} 个字符）`, en: `${message} (character ${position + 1})` };
+}
+
+// Engine lines that carry a parser message translate it too.
+PROBLEMS.unshift(
+  [/policy (\S+) has an invalid trigger: (.+) at (\d+)/, ([p, m, at]) => `策略 ${p} 的触发条件无效：${triggerZh(m!)}（第 ${Number(at) + 1} 个字符）`],
+  [/trigger: (.+) at (\d+)/, ([m, at]) => `触发条件：${triggerZh(m!)}（第 ${Number(at) + 1} 个字符）`],
+);
 
 const COMPILED = PROBLEMS.map(([re, zh]) => [new RegExp(`^(?:(.+?): )?${re.source}$`), zh] as const);
 

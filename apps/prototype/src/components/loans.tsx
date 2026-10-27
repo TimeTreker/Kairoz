@@ -31,7 +31,7 @@ import { ENVS } from '../domain/vocabulary.ts';
 import { useI18n } from '../i18n/i18n.tsx';
 import { issueLabel } from '../i18n/issues.ts';
 import { EXTENSION_STATUS_LABELS, LENDER_DECISION_LABELS, LOAN_STATUS_COLORS, LOAN_STATUS_LABELS, RESOURCE_STATUS_LABELS, RESOURCE_TYPE_LABELS } from '../i18n/vocab.ts';
-import { EnvTag, Hint, Mono, when } from './common.tsx';
+import { EnvTag, Hint, Mono, day, when } from './common.tsx';
 
 /** A loan's state as people read it: who it waits for, or overdue. */
 export function loanState(s: State, l: Loan): string {
@@ -62,12 +62,12 @@ export function LoanVehicleTag({ resourceId, workspaceId }: { resourceId: string
   if (l.workspaceId === workspaceId) {
     return (
       <Tooltip title={l.purpose}>
-        <Tag color={overdue ? 'red' : 'geekblue'}>{overdue ? L(`借用已到期 · ${l.dueDate}`, `Loan overdue · ${l.dueDate}`) : L(`借用 · 至 ${l.dueDate}`, `Borrowed · until ${l.dueDate}`)}</Tag>
+        <Tag color={overdue ? 'red' : 'geekblue'}>{overdue ? L(`借用已到期 · ${day(l.dueDate)}`, `Loan overdue · ${day(l.dueDate)}`) : L(`借用 · 至 ${day(l.dueDate)}`, `Borrowed · until ${day(l.dueDate)}`)}</Tag>
       </Tooltip>
     );
   }
   const borrower = state.workspaces[l.workspaceId]?.name ?? l.workspaceId;
-  return <Tag>{L(`借出至 ${borrower} · 至 ${l.dueDate}`, `Lent to ${borrower} · until ${l.dueDate}`)}</Tag>;
+  return <Tag>{L(`借出至 ${borrower} · 至 ${day(l.dueDate)}`, `Lent to ${borrower} · until ${day(l.dueDate)}`)}</Tag>;
 }
 
 const wsName = (s: State, id: string) => s.workspaces[id]?.name ?? id;
@@ -258,7 +258,7 @@ function BorrowedCard({ workspaceId }: { workspaceId: string }) {
         columns={[
           { title: L('车辆', 'Vehicle'), render: (_, l) => <Mono>{l.resourceId}</Mono> },
           { title: L('车辆组', 'Vehicle group'), render: (_, l) => state.vehicleGroups[l.vehicleGroupId]?.name ?? '—' },
-          { title: L('最后一天', 'Last day'), render: (_, l) => <Typography.Text type={isOverdue(state, l) ? 'danger' : undefined}>{l.dueDate}</Typography.Text> },
+          { title: L('最后一天', 'Last day'), render: (_, l) => <Typography.Text type={isOverdue(state, l) ? 'danger' : undefined}>{day(l.dueDate)}</Typography.Text> },
           { title: L('状态', 'Status'), render: (_, l) => <LoanStatusTag loan={l} /> },
           {
             title: L('使用方意见', 'Lenders'),
@@ -395,7 +395,7 @@ function ApprovalsCard() {
     { title: L('车辆', 'Vehicle'), render: (_: unknown, l: Loan) => <Mono>{l.resourceId}</Mono> },
     { title: L('借用方', 'Borrower'), render: (_: unknown, l: Loan) => `${wsName(state, l.workspaceId)} · ${state.vehicleGroups[l.vehicleGroupId]?.name ?? '—'}` },
     { title: L('用途', 'Purpose'), dataIndex: 'purpose' },
-    { title: L('最后一天', 'Last day'), render: (_: unknown, l: Loan) => <Typography.Text type={isOverdue(state, l) ? 'danger' : undefined}>{l.dueDate}</Typography.Text> },
+    { title: L('最后一天', 'Last day'), render: (_: unknown, l: Loan) => <Typography.Text type={isOverdue(state, l) ? 'danger' : undefined}>{day(l.dueDate)}</Typography.Text> },
     { title: L('状态', 'Status'), render: (_: unknown, l: Loan) => <LoanStatusTag loan={l} /> },
   ];
   return (

@@ -10,10 +10,11 @@ import { EDITABLE_STAGES, putPolicy, removePolicy } from '../../engine/config.ts
 import { resolveFiles } from '../../engine/snapshots.ts';
 import type { Feature } from '../../engine/types.ts';
 import { useI18n } from '../../i18n/i18n.tsx';
+import { triggerError } from '../../i18n/issues.ts';
 
 export function PoliciesTab({ feature }: { feature: Feature }) {
   const state = useEngineState();
-  const { L } = useI18n();
+  const { L, B } = useI18n();
   const can = useCan();
   const run = useRun();
   const group = state.groups[feature.groupId]!;
@@ -135,7 +136,7 @@ export function PoliciesTab({ feature }: { feature: Feature }) {
               title={
                 parsed.ok
                   ? `${L('信号', 'Signals')}: ${parsed.signals.join(', ')}`
-                  : `${parsed.error.message} @ ${parsed.error.position}`
+                  : B(triggerError(parsed.error.message, parsed.error.position))
               }
             />
           )}

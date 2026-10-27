@@ -348,12 +348,13 @@ export interface ConfigAnswer {
    * vehicle keeps what it confirmed. TASK: a running rollout's fixed target. LATEST_RELEASE: the
    * policy set in effect for the vehicle's software. GROUP_TARGET: what was published to a development
    * or testing group, on the vehicle's own base. REPUBLISH: the vehicle's software or its set changed
-   * since; BASE_CONFLICT: the new base changed the Feature's own group; NO_BASE: no set applies to the
-   * software and the group names no base. These three keep the applied configuration until someone
-   * publishes again. PERSONAL: the draft a personal simulation's owner just sent it. APPLIED /
+   * since; UNKNOWN_SOFTWARE: the vehicle's software is unknown, so nothing was dispatched for it yet;
+   * BASE_CONFLICT: the new base changed the Feature's own group; NO_BASE: no set applies to the
+   * software and the group names no base. These keep the applied configuration until someone
+   * dispatches again. PERSONAL: the draft a personal simulation's owner just sent it. APPLIED /
    * INITIAL: nothing newer is assigned. BLOCKED: no configuration may run.
    */
-  reason: 'HELD' | 'TASK' | 'LATEST_RELEASE' | 'GROUP_TARGET' | 'REPUBLISH' | 'BASE_CONFLICT' | 'NO_BASE' | 'PERSONAL' | 'APPLIED' | 'INITIAL' | 'BLOCKED';
+  reason: 'HELD' | 'TASK' | 'LATEST_RELEASE' | 'GROUP_TARGET' | 'REPUBLISH' | 'UNKNOWN_SOFTWARE' | 'BASE_CONFLICT' | 'NO_BASE' | 'PERSONAL' | 'APPLIED' | 'INITIAL' | 'BLOCKED';
   detail: string | null;
 }
 
@@ -393,7 +394,9 @@ export function answerConfigRequest(s: State, resourceId: string): ConfigAnswer 
       const digest = featureTargetDigest(s, feature, t);
       const config = Object.values(s.resolvedConfigs).find((c) => c.digest === digest);
       if (config) return { configId: config.id, reason: 'GROUP_TARGET', detail: group.name };
-      return { configId: r.appliedConfigId, reason: 'REPUBLISH', detail: 'the software or its policy set changed; publish to the group again' };
+      // Nothing was ever dispatched for a vehicle of unknown software: it waits for a confirmation, an update or a dispatch.
+      if (!r.integrationVersion) return { configId: r.appliedConfigId, reason: 'UNKNOWN_SOFTWARE', detail: 'the vehicle’s software is unknown; confirm or update it, or confirm and dispatch to it' };
+      return { configId: r.appliedConfigId, reason: 'REPUBLISH', detail: 'the software or its policy set changed; dispatch to the group again' };
     }
   }
   return r.appliedConfigId ? { configId: r.appliedConfigId, reason: 'APPLIED', detail: null } : { configId: null, reason: 'INITIAL', detail: null };

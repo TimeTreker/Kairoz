@@ -27,7 +27,7 @@ import {
 import type { State, Workspace } from '../engine/types.ts';
 import { useI18n } from '../i18n/i18n.tsx';
 import { issueLabel } from '../i18n/issues.ts';
-import { SYNC_KIND_LABELS, WORKSPACE_KIND_LABELS } from '../i18n/vocab.ts';
+import { ENV_LABELS, SYNC_KIND_LABELS, WORKSPACE_KIND_LABELS } from '../i18n/vocab.ts';
 
 function treeOf(state: State, filter: (kind: string, projectId: string | null) => boolean, L: (zh: string, en: string) => string): TreeDataNode[] {
   const units = Object.values(state.orgUnits).filter((u) => filter(u.kind, u.projectId));
@@ -70,7 +70,7 @@ export function OrgPage() {
   const [form] = Form.useForm();
   const units = Object.values(state.orgUnits).filter((u) => u.status === 'ACTIVE');
   const fromDirectory = units.some((u) => u.source === 'DIRECTORY');
-  const unitOptions = units.map((u) => ({ value: u.id, label: `${unitPath(state, u.id).map((p) => p.name).join(' / ')} (${u.kind})` }));
+  const unitOptions = units.map((u) => ({ value: u.id, label: `${unitPath(state, u.id).map((p) => p.name).join(' / ')}${L(u.kind === 'TEAM' ? '（团队树）' : '（项目树）', u.kind === 'TEAM' ? ' (team tree)' : ' (project tree)')}` }));
   const close = () => (setModal(null), form.resetFields());
   const modalTitle =
     modal === 'unit'
@@ -308,7 +308,7 @@ export function OrgPage() {
                     { title: L('角色', 'Role'), render: (_, r) => <RoleTag role={r.role} /> },
                     { title: L('工作区', 'Workspaces'), render: (_, r) => r.workspaces.map((w) => <Tag key={w}>{state.workspaces[w]?.name ?? w}</Tag>) },
                     { title: L('业务分组', 'Groups'), render: (_, r) => r.groups.map((g) => <Tag key={g}>{state.groups[g]?.name ?? g}</Tag>) },
-                    { title: L('环境', 'Envs'), render: (_, r) => r.envs.join(', ') },
+                    { title: L('环境', 'Envs'), render: (_, r) => r.envs.map((e) => B(ENV_LABELS[e], e)).join(L('、', ', ')) },
                     {
                       title: L('覆盖人员', 'Members'),
                       render: (_, r) =>
@@ -317,14 +317,14 @@ export function OrgPage() {
                           .map((a) => a.displayName)
                           .join('、') || '—',
                     },
-                    { title: L('状态', 'Status'), render: (_, r) => (r.status === 'ACTIVE' ? (state.orgUnits[r.orgUnitId]?.status === 'ACTIVE' ? <Tag color="green">{L('生效', 'Active')}</Tag> : <Tag color="red">{L('组织节点已失效', 'Org unit no longer exists')}</Tag>) : <Tag>{L('已停用', 'Archived')}</Tag>) },
+                    { title: L('状态', 'Status'), render: (_, r) => (r.status === 'ACTIVE' ? (state.orgUnits[r.orgUnitId]?.status === 'ACTIVE' ? <Tag color="green">{L('生效', 'Active')}</Tag> : <Tag color="red">{L('组织节点已失效', 'Org unit no longer exists')}</Tag>) : <Tag>{L('已停用', 'Deactivated')}</Tag>) },
                     {
                       title: '',
                       render: (_, r) =>
                         canAccounts &&
                         r.status === 'ACTIVE' && (
-                          <Button size="small" type="link" danger onClick={() => run((c) => archiveGrantRule(c, r.id), L('已停用；成员立即失去这条基础权限', 'Archived; members lose this base right at once'))}>
-                            {L('停用', 'Archive')}
+                          <Button size="small" type="link" danger onClick={() => run((c) => archiveGrantRule(c, r.id), L('已停用；成员立即失去这条基础权限', 'Deactivated; members lose this base right at once'))}>
+                            {L('停用', 'Deactivate')}
                           </Button>
                         ),
                     },
@@ -370,7 +370,7 @@ export function OrgPage() {
             label: L('车型', 'Vehicle models'),
             children: (
               <Card extra={canOrg && <Button icon={<PlusOutlined />} onClick={() => setModal('model')}>{L('登记车型', 'Register model')}</Button>}>
-                <Table rowKey="id" pagination={false} dataSource={Object.values(state.vehicleModels)} columns={[{ title: 'ID', dataIndex: 'id' }, { title: L('名称', 'Name'), dataIndex: 'name' }, { title: L('状态', 'Status'), dataIndex: 'status' }]} />
+                <Table rowKey="id" pagination={false} dataSource={Object.values(state.vehicleModels)} columns={[{ title: 'ID', dataIndex: 'id' }, { title: L('名称', 'Name'), dataIndex: 'name' }, { title: L('状态', 'Status'), render: (_, m) => (m.status === 'ACTIVE' ? L('使用中', 'Active') : L('已停用', 'Retired')) }]} />
               </Card>
             ),
           },

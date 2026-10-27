@@ -218,7 +218,7 @@ Object.assign(ERROR_LABELS, {
   NOT_APPLIED: b('车辆尚未确认应用该配置', 'The vehicle has not confirmed applying this configuration'),
   NOT_A_TEST_TARGET: b('该车辆不在本提交的验证目标中', 'This vehicle is not a test target of the commit'),
   SIMULATION_FIRST: b('实车测试前须先有仿真测试通过', 'A simulation test must pass before a physical one'),
-  VERIFY_BLOCKED: b('暂不能确认 Verified', 'Cannot verify yet'),
+  VERIFY_BLOCKED: b('暂不能确认验证通过', 'Cannot verify yet'),
   NOT_TESTING: b('不在测试中', 'Not in testing'),
   SUMMARY_REQUIRED: b('请填写测试说明', 'Describe the test'),
   VEHICLE_BUSY: b('车辆还有未完成的下发（等待回执或 OTA 未结束），请完成后再操作', 'The vehicle still has an unfinished dispatch (awaiting a receipt or an open OTA rollout); try again when it finishes'),
@@ -443,10 +443,10 @@ export const TRAINING_BLOCKER_LABELS: Record<string, Bilingual> = {
 };
 
 export const GROUP_CHANGE_LABELS: Record<string, Bilingual> = {
-  ADDED: b('新增 Added', 'Added'),
-  CHANGED: b('变更 Changed', 'Changed'),
-  REMOVED: b('移除 Removed', 'Removed'),
-  INHERITED: b('继承 Inherited', 'Inherited'),
+  ADDED: b('新增', 'Added'),
+  CHANGED: b('变更', 'Changed'),
+  REMOVED: b('移除', 'Removed'),
+  INHERITED: b('继承', 'Inherited'),
   EMPTY: b('无配置（继承）', 'Empty (inherited)'),
 };
 export const GROUP_CHANGE_COLORS: Record<string, string> = { ADDED: 'green', CHANGED: 'blue', REMOVED: 'red', INHERITED: 'default', EMPTY: 'default' };
@@ -542,8 +542,9 @@ export const CONFIG_ANSWER_LABELS: Record<string, Bilingual> = {
   HELD: b('保持已确认（同步暂停）', 'Held (sync paused)'),
   TASK: b('当前任务目标', 'Rollout target'),
   LATEST_RELEASE: b('软件版本当前适用的策略集', 'Policy set in effect for its software'),
-  GROUP_TARGET: b('车辆组发布内容（本车基线）', 'Group publication (on this vehicle’s base)'),
-  REPUBLISH: b('软件或策略集已变化，需重新下发', 'Software or policy set changed; publish again'),
+  GROUP_TARGET: b('车辆组的配置（本车基线）', 'Group configuration (on this vehicle’s base)'),
+  REPUBLISH: b('软件或策略集已变化，需重新下发', 'Software or policy set changed; dispatch again'),
+  UNKNOWN_SOFTWARE: b('整车软件版本未知，暂不推送', 'Software unknown; nothing is pushed'),
   BASE_CONFLICT: b('与新基线冲突，保持已生效配置', 'Conflicts with the new base; keeps the applied configuration'),
   NO_BASE: b('没有适用基线，保持已生效配置', 'No base applies; keeps the applied configuration'),
   PERSONAL: b('本人刚下发的个人配置', 'Personal configuration its owner just sent'),
@@ -607,7 +608,7 @@ Object.assign(ERROR_LABELS, {
 export const SUBSYSTEM_STATUS_LABELS: Record<string, Bilingual> = {
   ACTIVE: b('可供整车集成', 'Ready for whole-vehicle integration'),
   INTEGRATING: b('整车集成中', 'In a whole-vehicle candidate'),
-  INTEGRATED: b('已纳入正式版本', 'In a formal release'),
+  INTEGRATED: b('已纳入策略集', 'In a policy set'),
   SUPERSEDED: b('已被新子系统发布替代', 'Superseded by a newer subsystem release'),
 };
 
@@ -767,7 +768,7 @@ Object.assign(ERROR_LABELS, {
 export const CHANGE_OUTCOME_LABELS: Record<string, Bilingual> = {
   NONE: b('无需修改', 'No change needed'),
   FIX: b('需修改本组文件或策略', 'Fix the group’s files or policies'),
-  REPUBLISH: b('基线已变化，需重新下发', 'Base changed; publish again'),
+  REPUBLISH: b('基线已变化，需重新下发', 'Base changed; dispatch again'),
   NEW_FEATURE: b('基线改了本组内容，需在新基线上新建 Feature', 'The new base changed this group; start a Feature on it'),
   NO_BASE: b('新软件没有适用的策略集', 'No policy set applies to the new software'),
   UNKNOWN_SOFTWARE: b('整车软件版本未知，无法检查', 'Software version unknown; cannot check'),
@@ -975,3 +976,17 @@ Object.assign(ERROR_LABELS, {
   NO_SET_FOR_VERSION: b('没有适用这个软件版本的策略集，无法导出配置模块', 'No policy set applies to this software version; there is no module to export'),
   MODULE_CURRENT: b('配置模块已经是当前生效的策略集', 'The module already carries the set in effect'),
 });
+
+/** Privacy levels: P1 is ordinary; P2 and P3 always go through DCL's sensitive review. */
+export const PRIVACY_LABELS: Record<string, Bilingual> = {
+  P1: b('P1 · 普通', 'P1 · ordinary'),
+  P2: b('P2 · 敏感，需审核', 'P2 · sensitive, reviewed'),
+  P3: b('P3 · 高度敏感，需审核', 'P3 · highly sensitive, reviewed'),
+};
+
+/** Capture priority: HIGH is core business and still goes over budget; LOW is the first to wait. */
+export const PRIORITY_LABELS: Record<string, Bilingual> = {
+  LOW: b('LOW · 低', 'LOW'),
+  NORMAL: b('NORMAL · 普通', 'NORMAL'),
+  HIGH: b('HIGH · 核心，超预算仍采集', 'HIGH · core, even over budget'),
+};

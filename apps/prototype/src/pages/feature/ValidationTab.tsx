@@ -77,8 +77,8 @@ export function ValidationTab({ feature }: { feature: Feature }) {
               </Button>
             )}
             {canVerify && (
-              <Button disabled={blockers.length > 0} onClick={() => run((c) => verifyFeature(c, feature.id), L('已确认 Verified，可交给配置集成', 'Verified; ready for integration'))}>
-                {L('确认 Verified', 'Confirm Verified')}
+              <Button disabled={blockers.length > 0} onClick={() => run((c) => verifyFeature(c, feature.id), L('已确认验证通过，可交给配置集成', 'Verified; ready for integration'))}>
+                {L('确认验证通过', 'Confirm Verified')}
               </Button>
             )}
           </Space>
@@ -93,7 +93,7 @@ export function ValidationTab({ feature }: { feature: Feature }) {
         {feature.headCommitId && <Typography.Paragraph><Mono>{displayName(state, feature.headCommitId)}</Mono></Typography.Paragraph>}
         {!dispatchable && <Alert type="info" showIcon title={L('Feature 达到 DCL Ready 后才能下发。', 'Dispatch becomes available once the Feature is DCL Ready.')} />}
         {feature.stage === 'TESTING' && blockers.length > 0 && (
-          <Alert type="warning" showIcon style={{ marginBottom: 12 }} title={L('尚不能确认 Verified', 'Not verifiable yet')} description={blockers.map((x) => B(issueLabel(x), x)).join(L('；', '; '))} />
+          <Alert type="warning" showIcon style={{ marginBottom: 12 }} title={L('尚不能确认验证通过', 'Not verifiable yet')} description={blockers.map((x) => B(issueLabel(x), x)).join(L('；', '; '))} />
         )}
         {feature.stage === 'VERIFIED' && <Alert type="success" showIcon style={{ marginBottom: 12 }} title={L('当前提交已验证，可由配置集成收集。', 'The head commit is verified and can be collected by integration.')} />}
         <TargetsTable

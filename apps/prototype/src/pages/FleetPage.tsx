@@ -64,7 +64,7 @@ import { CHANGE_OUTCOME_LABELS, CONFIG_ANSWER_LABELS, ENV_LABELS, GROUP_EVENT_LA
 import { issueLabel } from '../i18n/issues.ts';
 import { navigate } from '../app/router.ts';
 
-const ANSWER_COLORS: Record<string, string> = { PERSONAL: 'purple', GROUP_TARGET: 'blue', REPUBLISH: 'gold', BASE_CONFLICT: 'red', NO_BASE: 'red', HELD: 'purple', TASK: 'processing', APPLIED: 'default', INITIAL: 'default', BLOCKED: 'red' };
+const ANSWER_COLORS: Record<string, string> = { PERSONAL: 'purple', GROUP_TARGET: 'blue', REPUBLISH: 'gold', UNKNOWN_SOFTWARE: 'gold', BASE_CONFLICT: 'red', NO_BASE: 'red', HELD: 'purple', TASK: 'processing', APPLIED: 'default', INITIAL: 'default', BLOCKED: 'red' };
 
 /** The delivery state of the vehicle's pending dispatch: not pushed yet, or pushed and awaiting its receipt. */
 function PendingDeliveryTag({ resourceId }: { resourceId: string }) {
@@ -290,7 +290,7 @@ function WorkspaceVehicles() {
           locale={{ emptyText: L('没有可加入的车辆', 'No vehicles to add') }}
           columns={[
             { title: L('车辆', 'Vehicle'), render: (_, r) => <Mono>{r.id}</Mono> },
-            { title: L('类型', 'Type'), render: (_, r) => r.type },
+            { title: L('类型', 'Type'), render: (_, r) => <LabelTag map={RESOURCE_TYPE_LABELS} value={r.type} color={r.type === 'PHYSICAL' ? 'blue' : 'cyan'} /> },
             { title: L('环境', 'Env'), render: (_, r) => <EnvTag env={r.env} /> },
             { title: L('资源池', 'Pool'), dataIndex: 'pool' },
             {
@@ -415,7 +415,7 @@ function VehicleGroups() {
                 <Space orientation="vertical" style={{ width: '100%' }}>
                   <Typography.Text type="secondary">
                     {g.groupId ? `${L('业务分组', 'Business group')}: ${state.groups[g.groupId]?.name} · ` : ''}
-                    {L('已发布', 'Published')}: <Mono>{g.publication ? publicationLabel(state, g.publication) : '—'}</Mono> · {L('绑定修订', 'binding rev.')} {g.bindingRevision}
+                    {L('已下发', 'Dispatched')}: <Mono>{g.publication ? publicationLabel(state, g.publication) : '—'}</Mono> · {L('绑定修订', 'binding rev.')} {g.bindingRevision}
                   </Typography.Text>
                   {g.publication?.kind === 'FEATURE' && g.publication.disabledPolicies.length > 0 && (
                     <Typography.Text type="secondary">
@@ -430,7 +430,7 @@ function VehicleGroups() {
                           size="small"
                           style={{ minWidth: 220 }}
                           value={g.baseReleaseId ?? ''}
-                          onChange={(v) => run((c) => setGroupBase(c, g.id, v || null), v ? L('已指定显式基线，下次下发生效', 'Explicit base set; it applies from the next publish') : L('已恢复按车辆软件取基线', 'Back to each vehicle’s software'))}
+                          onChange={(v) => run((c) => setGroupBase(c, g.id, v || null), v ? L('已指定显式基线，下次下发生效', 'Explicit base set; it applies from the next dispatch') : L('已恢复按车辆软件取基线', 'Back to each vehicle’s software'))}
                           options={[
                             { value: '', label: L('跟随每辆车的软件版本', 'Follow each vehicle’s software') },
                             ...releasesOf(state, workspace.vehicleModelId).map((r) => ({ value: r.id, label: `${L('显式基线', 'Explicit base')}: ${B(setName(r.dclVersion))}` })),
@@ -501,7 +501,7 @@ function VehicleGroups() {
                                       <Tag color={ANSWER_COLORS[a.reason] ?? 'default'}>{B(CONFIG_ANSWER_LABELS[a.reason])}</Tag>
                                       {a.reason === 'GROUP_TARGET' && <Mono>{B(configName(state, a.configId))}</Mono>}
                                       {/* Not applied: a receipt is on its way, or (after an image change) nothing was sent yet. */}
-                                      {due && (pendingDeploymentOf(state, id) ? <PendingDeliveryTag resourceId={id} /> : !fitOf(state, id)?.fits && <Tag color="gold">{L('需重新下发', 'publish again')}</Tag>)}
+                                      {due && (pendingDeploymentOf(state, id) ? <PendingDeliveryTag resourceId={id} /> : !fitOf(state, id)?.fits && <Tag color="gold">{L('需重新下发', 'dispatch again')}</Tag>)}
                                     </Space>
                                   </Tooltip>
                                 );
@@ -600,7 +600,7 @@ function VehicleGroups() {
                 options={workspaceVehicles(state, workspace.id)
                   // A vehicle lent to another workspace stays out of this workspace's groups.
                   .filter((r) => !state.groupMembers[r.id] && (activeLoanOf(state, r.id)?.workspaceId ?? workspace.id) === workspace.id)
-                  .map((r) => ({ value: r.id, label: `${r.id} · ${r.type} · ${r.env}` }))}
+                  .map((r) => ({ value: r.id, label: `${r.id} · ${B(RESOURCE_TYPE_LABELS[r.type], r.type)} · ${B(ENV_LABELS[r.env], r.env)}` }))}
               />
             </Form.Item>
           )}

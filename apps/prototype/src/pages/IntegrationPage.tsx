@@ -301,7 +301,7 @@ function MergeTab({ projectId, onCandidate }: { projectId: string; onCandidate: 
           description={
             chain
               ? L(`本次合并会自动包含 ${chain.label}（${SUBSYSTEM_STATUS_LABELS[chain.status]!.zh}），新的子系统发布包含它的全部内容。`, `The merge includes ${chain.label} (${SUBSYSTEM_STATUS_LABELS[chain.status]!.en}) by itself, so the new subsystem release contains all of it.`)
-              : L('本域还没有子系统发布：首次子系统集成以当前正式版本为目标。', 'The domain has no subsystem release yet: the first one builds on the current formal release.')
+              : L('本域还没有子系统发布：首次子系统集成以当前策略集为目标。', 'The domain has no subsystem release yet: the first one builds on the current policy set.')
           }
         />
       )}
@@ -367,7 +367,7 @@ function MergeTab({ projectId, onCandidate }: { projectId: string; onCandidate: 
         <Card title={`${L('可集成的子系统发布', 'Subsystem releases to integrate')} · ${subsystems.length}`}>
           <Hint>
             {L(
-              '各域先做子系统集成并发布；整车集成按域收集最新的子系统发布，与其他 Feature 一起三方合并。子系统发布不是正式版本，也不会下发给量产车。',
+              '各域先做子系统集成并发布；整车集成按域收集最新的子系统发布，与其他 Feature 一起三方合并。子系统发布不是策略集，也不会下发给量产车。',
               'Domains integrate and publish their subsystems first; whole-vehicle integration collects each domain’s newest subsystem release and merges it three-way with other Features. A subsystem release is not a formal release and never goes to production vehicles.',
             )}
           </Hint>
@@ -607,7 +607,7 @@ function PlanCard({ plan, onCandidate }: { plan: MergePlan; onCandidate: (id: st
           title={
             unreviewed.length
               ? L(`有 ${unreviewed.length} 个敏感文件的合并结果未获批准，DCL 无法确认`, `${unreviewed.length} sensitive file(s) lack an approval of the merged content; DCL cannot confirm`)
-              : L('等待 DCL 工程确认最终处理集合（格式、Schema、边缘与云端处理）', 'Waiting for DCL engineering to confirm the final processing set (format, schema, edge and cloud processing)')
+              : L('等待 DCL 工程确认最终处理集合（格式、Schema、车端与云端处理）', 'Waiting for DCL engineering to confirm the final processing set (format, schema, edge and cloud processing)')
           }
         />
       )}
@@ -649,7 +649,7 @@ function PlanCard({ plan, onCandidate }: { plan: MergePlan; onCandidate: (id: st
               { title: L('文件', 'File'), render: (_, l) => (l.owned ? l.name : <Space size={4}>{l.name}<Tag>{L('引用', 'reference')}</Tag></Space>) },
               { title: L('类型', 'Type'), render: (_, l) => B(FILE_TYPE_LABELS[l.fileType], l.fileType) },
               { title: L('格式 / Schema', 'Format / schema'), render: (_, l) => <Mono>{`${l.format} · ${l.schema}`}</Mono> },
-              { title: L('边缘 / 云端处理', 'Edge / cloud'), render: (_, l) => <Mono>{`${pipelineName(state, l.edgePipelineId)} → ${pipelineName(state, l.cloudPipelineId)}`}</Mono> },
+              { title: L('车端 / 云端处理', 'Vehicle / cloud processing'), render: (_, l) => <Mono>{`${pipelineName(state, l.edgePipelineId)} → ${pipelineName(state, l.cloudPipelineId)}`}</Mono> },
               {
                 title: L('敏感审核', 'Sensitive review'),
                 render: (_, l) => (!l.requiresReview ? <Typography.Text type="secondary">{L('不需要', 'not needed')}</Typography.Text> : <LabelTag map={REVIEW_STATUS_LABELS} value={l.review?.status ?? 'PENDING'} color={l.review?.status === 'APPROVED' ? 'green' : 'orange'} />),
@@ -928,7 +928,7 @@ function CandidateDetail({ candidate: c }: { candidate: Candidate }) {
             title={L('目标策略集已变化，这个候选不能再发布：取消它，在新的目标上重新集成。', 'Its target set changed, so this candidate can no longer be released: cancel it and integrate again on the new target.')}
           />
         )}
-        {c.status === 'VERIFIED' && !subsystem && !targetMoved(state, c) && <Alert type="success" showIcon style={{ marginBottom: 12 }} title={L('候选已通过集成验证，可由配置发布推广为正式版本。', 'The candidate is verified and can be promoted to a release by configuration release.')} />}
+        {c.status === 'VERIFIED' && !subsystem && !targetMoved(state, c) && <Alert type="success" showIcon style={{ marginBottom: 12 }} title={L('候选已通过集成验证，可由配置发布发布为策略集。', 'The candidate is verified and can be promoted to a release by configuration release.')} />}
         {c.status === 'VERIFIED' && subsystem && (
           <Alert
             type="success"
@@ -995,7 +995,7 @@ function CandidateDetail({ candidate: c }: { candidate: Candidate }) {
       >
         <Hint>
           {L(
-            '子系统发布是整车集成的输入：它不是 DCL 策略集版本，不列适用整车软件版本，也不会下发给量产车。本域之前未纳入正式版本的子系统发布会被它替代，它包含其全部内容。',
+            '子系统发布是整车集成的输入：它不是 DCL 策略集版本，不列适用整车软件版本，也不会下发给量产车。本域之前未纳入策略集的子系统发布会被它替代，它包含其全部内容。',
             'A subsystem release is an input to whole-vehicle integration: not a DCL policy set version, no software versions, never sent to production vehicles. It replaces the domain’s earlier subsystem release not yet in a formal release, and contains all of it.',
           )}
         </Hint>
@@ -1028,7 +1028,7 @@ function SubsystemsTab({ releases }: { releases: SubsystemRelease[] }) {
     <Card title={L('子系统发布', 'Subsystem releases')}>
       <Hint>
         {L(
-          '子系统发布由各域在子系统集成后发布，是整车集成的输入。新的子系统发布包含本域之前尚未纳入正式版本的子系统发布。',
+          '子系统发布由各域在子系统集成后发布，是整车集成的输入。新的子系统发布包含本域之前尚未纳入策略集的子系统发布。',
           'Domains publish subsystem releases after subsystem integration, as inputs to whole-vehicle integration. A new one contains the domain’s earlier subsystem release not yet in a formal release.',
         )}
       </Hint>

@@ -69,8 +69,8 @@ export function UpdateSoftwareModal({ workspaceId, resourceId, onClose }: { work
     >
       <Hint>
         {L(
-          '不修改策略，而是请整车 OTA 系统把这辆车刷到另一个已登记的版本。车辆重启后上报版本，平台据此更新记录；如果车辆组的发布适用于新版本，云端会推送配置。',
-          'Instead of changing the policies, the vehicle OTA system puts this vehicle on another recorded version. The vehicle restarts and reports it, and the platform records it; if the group’s publication fits the new version, the cloud pushes it.',
+          '不修改策略，而是请整车 OTA 系统把这辆车刷到另一个已登记的版本。车辆重启后上报版本，平台据此更新记录；如果车辆组的配置适用于新版本，云端会推送它。',
+          'Instead of changing the policies, the vehicle OTA system puts this vehicle on another recorded version. The vehicle restarts and reports it, and the platform records it; if the group’s configuration fits the new version, the cloud pushes it.',
         )}
       </Hint>
       <Descriptions size="small" column={1} bordered style={{ marginBottom: 12 }}>
@@ -103,7 +103,7 @@ export function UpdateSoftwareModal({ workspaceId, resourceId, onClose }: { work
               showIcon
               title={
                 <Space>
-                  {L('车辆组的发布在该版本上', 'The group’s publication on this version')}
+                  {L('车辆组的配置在该版本上', 'The group’s configuration on this version')}
                   <CheckOutcomeTag check={preview} />
                 </Space>
               }
@@ -169,7 +169,7 @@ export function GroupFitDrawer({ resourceId, onClose }: { resourceId: string | n
     CANNOT_CHECK: L('这辆车的软件没有登记软件清单，无法逐条检查。请车辆资源补录清单，或确认并下发。', 'The vehicle’s software has no recorded manifest, so nothing can be checked. Ask vehicle resources to record it, or confirm and dispatch.'),
   };
   return (
-    <Drawer open size={820} title={`${fit.state === 'MISMATCH' ? L('与车辆组的发布不匹配', 'Does not fit the group') : L('跟随车辆组', 'Following the group')} · ${r.id}`} onClose={onClose}>
+    <Drawer open size={820} title={`${fit.state === 'MISMATCH' ? L('与车辆组的配置不匹配', 'Does not fit the group') : L('跟随车辆组', 'Following the group')} · ${r.id}`} onClose={onClose}>
       <Space orientation="vertical" size={16} style={{ width: '100%' }}>
         <Descriptions size="small" column={{ xs: 1, sm: 1, md: 2 }} bordered>
           <Descriptions.Item label={L('车辆组', 'Vehicle group')}>{g.name}</Descriptions.Item>
@@ -177,7 +177,7 @@ export function GroupFitDrawer({ resourceId, onClose }: { resourceId: string | n
             {B(FOLLOW_REASON_LABELS[fit.follow.reason])} · {when(fit.follow.since)}
           </Descriptions.Item>
           <Descriptions.Item label={L('整车版本', 'Software')}>{r.integrationVersion ? `${r.vehicleModelId} ${r.integrationVersion}` : L('未知', 'Unknown')}</Descriptions.Item>
-          <Descriptions.Item label={L('车辆组的发布', 'Group publication')}>{feature && p?.kind === 'FEATURE' ? <Mono>{`${feature.name} · r${String(state.commits[p.commitId]?.sequence ?? 0).padStart(3, '0')}`}</Mono> : '—'}</Descriptions.Item>
+          <Descriptions.Item label={L('车辆组的配置', 'Group configuration')}>{feature && p?.kind === 'FEATURE' ? <Mono>{`${feature.name} · r${String(state.commits[p.commitId]?.sequence ?? 0).padStart(3, '0')}`}</Mono> : '—'}</Descriptions.Item>
         </Descriptions>
         <Alert
           type={fit.state === 'FITS' ? 'success' : fit.state === 'BLOCKED' ? 'info' : outcomeAlert(check.outcome)}

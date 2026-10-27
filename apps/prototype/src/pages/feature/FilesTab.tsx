@@ -12,7 +12,7 @@ import { referenceCatalog } from '../../engine/references.ts';
 import { latestCommittedVersion } from '../../engine/snapshots.ts';
 import type { Feature } from '../../engine/types.ts';
 import { useI18n } from '../../i18n/i18n.tsx';
-import { DATA_STATUS_LABELS, FILE_TYPE_LABELS } from '../../i18n/vocab.ts';
+import { DATA_STATUS_LABELS, FILE_TYPE_LABELS, PRIORITY_LABELS, PRIVACY_LABELS } from '../../i18n/vocab.ts';
 
 type FileForm = {
   unit: string;
@@ -138,7 +138,7 @@ export function FilesTab({ feature }: { feature: Feature }) {
             },
             { title: L('来源', 'Source'), render: (_, [, spec]) => <Mono>{`${spec.source.unit}:${spec.source.directory}/${spec.source.pattern}`}</Mono> },
             { title: L('类型', 'Type'), render: (_, [, spec]) => B(FILE_TYPE_LABELS[spec.fileType]) },
-            { title: L('隐私 / 保留', 'Privacy / retention'), render: (_, [, spec]) => `${spec.privacy} · ${spec.retentionDays}${L(' 天', 'd')}` },
+            { title: L('隐私 / 保留', 'Privacy / retention'), render: (_, [, spec]) => `${spec.privacy} · ${L(`${spec.retentionDays} 天`, `${spec.retentionDays} days`)}` },
             {
               title: L('敏感审核', 'Review'),
               render: (_, [key, spec]) =>
@@ -157,11 +157,11 @@ export function FilesTab({ feature }: { feature: Feature }) {
               render: (_, [, spec]) => (
                 <div>
                   <div>
-                    <Typography.Text type="secondary">Edge </Typography.Text>
+                    <Typography.Text type="secondary">{L('车端 ', 'Vehicle ')}</Typography.Text>
                     <Mono>{spec.edgePipelineId}</Mono>
                   </div>
                   <div>
-                    <Typography.Text type="secondary">Cloud </Typography.Text>
+                    <Typography.Text type="secondary">{L('云端 ', 'Cloud ')}</Typography.Text>
                     <Mono>{spec.cloudPipelineId}</Mono>
                   </div>
                 </div>
@@ -309,13 +309,13 @@ export function FilesTab({ feature }: { feature: Feature }) {
               />
             </Form.Item>
             <Form.Item name="privacy" label={L('隐私等级', 'Privacy')}>
-              <Select allowClear style={{ width: 120 }} options={PRIVACY_LEVELS.map((p) => ({ value: p, label: p }))} />
+              <Select allowClear style={{ width: 200 }} options={PRIVACY_LEVELS.map((p) => ({ value: p, label: B(PRIVACY_LABELS[p], p) }))} />
             </Form.Item>
             <Form.Item name="retentionDays" label={L('保留天数', 'Retention (days)')}>
               <InputNumber min={1} max={3650} />
             </Form.Item>
             <Form.Item name="priority" label={L('优先级', 'Priority')}>
-              <Select allowClear style={{ width: 120 }} options={['LOW', 'NORMAL', 'HIGH'].map((p) => ({ value: p, label: p }))} />
+              <Select allowClear style={{ width: 240 }} options={['LOW', 'NORMAL', 'HIGH'].map((p) => ({ value: p, label: B(PRIORITY_LABELS[p], p) }))} />
             </Form.Item>
           </Space>
           <Form.Item name="contentTags" label={L('内容标签（location / identity / image / voice / sensitive 会触发审核）', 'Content tags (location / identity / image / voice / sensitive require review)')}>

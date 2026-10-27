@@ -35,8 +35,8 @@ export function PromoteModal({ candidate, onClose }: { candidate: Candidate; onC
   return (
     <Modal
       open
-      title={`${L('发布候选', 'Promote candidate')} · ${candidate.label}`}
-      okText={L('发布', 'Promote')}
+      title={`${L('发布候选', 'Release candidate')} · ${candidate.label}`}
+      okText={L('发布', 'Release')}
       okButtonProps={{ disabled: moved }}
       onCancel={onClose}
       onOk={() =>

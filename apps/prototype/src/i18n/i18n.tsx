@@ -23,6 +23,12 @@ interface I18n {
 
 const Ctx = createContext<I18n | null>(null);
 
+/** The language being rendered, for plain helpers (dates) that take no hook; the provider keeps it current. */
+let active: Lang = 'zh';
+export function currentLang(): Lang {
+  return active;
+}
+
 function initialLang(): Lang {
   try {
     const saved = localStorage.getItem(LANG_KEY);
@@ -35,6 +41,7 @@ function initialLang(): Lang {
 
 export function I18nProvider({ children }: { children: ReactNode }) {
   const [lang, setLangState] = useState<Lang>(initialLang);
+  active = lang;
   const value = useMemo<I18n>(
     () => ({
       lang,

@@ -142,7 +142,7 @@ function ReleasesTab({ modelId, workspaceId }: { modelId: string; workspaceId: s
         <Hint>
           {L(
             '发布复核 DCL 处理确认、集成测试与目标版本；发布者指定独立的 DCL 策略集版本和适用的整车软件版本，每个适用版本都要有通过的集成测试。之后的软件版本可以经适用性确认追加，不必重新发布。发布不刷写软件，也不改变车辆已生效的配置。',
-            'Promotion re-checks the DCL confirmation, integration tests and target; the publisher sets an independent DCL policy set version and the whole-vehicle software versions it applies to, each backed by a passing integration test. Later software versions are added by an applicability check, without a new release. Publishing flashes no software and changes no vehicle’s applied configuration.',
+            'Releasing re-checks the DCL confirmation, integration tests and target; the publisher sets an independent DCL policy set version and the whole-vehicle software versions it applies to, each backed by a passing integration test. Later software versions are added by an applicability check, without a new release. Publishing flashes no software and changes no vehicle’s applied configuration.',
           )}
         </Hint>
         <Table
@@ -170,7 +170,7 @@ function ReleasesTab({ modelId, workspaceId }: { modelId: string; workspaceId: s
               render: (_, c) =>
                 can('release.promote', { workspaceId: c.workspaceId, scope: 'Vehicle' }) && (
                   <Button type="primary" size="small" onClick={() => setPromoting(c)}>
-                    {L('发布', 'Promote')}
+                    {L('发布', 'Release')}
                   </Button>
                 ),
             },

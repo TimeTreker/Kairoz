@@ -13,7 +13,7 @@ import type { FileType } from '../domain/file-types.ts';
 import { budgetOf, modelBudget, setModelBudget, setVehicleBudget } from '../engine/budget.ts';
 import { createPipeline, createTemplate, currentTemplate } from '../engine/processing.ts';
 import { useI18n } from '../i18n/i18n.tsx';
-import { BUDGET_SOURCE_LABELS, FILE_TYPE_LABELS } from '../i18n/vocab.ts';
+import { BUDGET_SOURCE_LABELS, FILE_TYPE_LABELS, PRIVACY_LABELS } from '../i18n/vocab.ts';
 
 export function ProcessingPage({ tab = 'templates' }: { tab?: string }) {
   const state = useEngineState();
@@ -99,7 +99,17 @@ export function ProcessingPage({ tab = 'templates' }: { tab?: string }) {
         }
       >
         <Hint>{L('同一 code 再次发布会生成下一个不可变版本；一个 code 只属于车端或云端。', 'Publishing an existing code creates its next immutable version; a code belongs to one side only.')}</Hint>
-        <Form form={pf} name="pipeline" layout="vertical" initialValues={{ side: 'CLOUD', capability: 'Parse' }}>
+        <Form
+          form={pf}
+          name="pipeline"
+          layout="vertical"
+          initialValues={{ side: 'CLOUD', capability: 'Parse' }}
+          onValuesChange={(changed: Record<string, unknown>, all: Record<string, unknown>) => {
+            // The usual capability follows the side: a vehicle-side pipeline stores raw data, a cloud one parses it.
+            if (changed.side === 'EDGE' && all.capability === 'Parse') pf.setFieldValue('capability', 'RawStorage');
+            if (changed.side === 'CLOUD' && all.capability === 'RawStorage') pf.setFieldValue('capability', 'Parse');
+          }}
+        >
           <Form.Item name="code" label="Code" rules={[{ required: true }]}>
             <Input placeholder="chassis-parser" />
           </Form.Item>
@@ -154,7 +164,7 @@ export function ProcessingPage({ tab = 'templates' }: { tab?: string }) {
           </Form.Item>
           <Space>
             <Form.Item name="defaultPrivacy" label={L('默认隐私', 'Default privacy')}>
-              <Select allowClear style={{ width: 120 }} options={PRIVACY_LEVELS.map((p) => ({ value: p, label: p }))} />
+              <Select allowClear style={{ width: 200 }} options={PRIVACY_LEVELS.map((p) => ({ value: p, label: B(PRIVACY_LABELS[p], p) }))} />
             </Form.Item>
             <Form.Item name="defaultRetentionDays" label={L('默认保留天数', 'Default retention')} rules={[{ required: true }]}>
               <InputNumber min={1} />

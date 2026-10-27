@@ -19,7 +19,8 @@ A runnable **product prototype** of the DCL data acquisition platform. It is not
 
 ## Conventions
 
-- Bilingual text sits at the point of use: `L('中文', 'English')`. Closed vocabularies (roles, stages, statuses, error codes) are in `src/i18n/vocab.ts`.
+- Bilingual text sits at the point of use: `L('中文', 'English')`. Closed vocabularies (roles, stages, statuses, error codes) are in `src/i18n/vocab.ts`. Dates go through `when()` / `day()` (`src/components/common.tsx`), which follow the interface language.
+- Terms: 策略集 / policy set (never 正式版本); 下发 / dispatch (what a vehicle group gets: 车辆组的配置); 发布 / release only for policy sets and subsystem releases; 车端 / 云端 for the two processing sides.
 - Authorization is always one complete grant (`authorize()` in `src/domain/authz.ts`); never union grants. New actions go in `ACTIONS` with their environment (`all`, a fixed env, or `target`).
 - Errors are `DomainError` helpers with a stable `code`; add a friendly label in `ERROR_LABELS` when users will see it.
 - Engine results leaving `run()` must be plain data (ids or detached values), never drafts.
