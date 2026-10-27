@@ -264,6 +264,7 @@ function PersonalSimDrawer({ id, onClose }: { id: string | null; onClose: () => 
                 {switchable.length > 0 && (
                   <Select
                     mode="multiple"
+                    optionFilterProp="label"
                     style={{ width: '100%' }}
                     value={disabled}
                     onChange={setDisabled}

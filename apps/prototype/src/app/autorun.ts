@@ -6,15 +6,23 @@ import { tick } from '../engine/simulator.ts';
 import { engine } from './store.ts';
 
 let timer: ReturnType<typeof setInterval> | undefined;
+let failures = 0;
 const listeners = new Set<() => void>();
+
+/** Consecutive failed steps after which auto-run stops, so the header never shows a run that is stuck. */
+const MAX_FAILURES = 5;
 
 export function setAutoRun(on: boolean): void {
   if (on && !timer) {
+    failures = 0;
     timer = setInterval(() => {
       try {
         engine.run(null, (c) => tick(c));
-      } catch {
-        // A step that cannot run now is tried again on the next one.
+        failures = 0;
+      } catch (e) {
+        // A step that cannot run now is tried again on the next one, a few times.
+        console.warn('simulator step failed', e);
+        if (++failures >= MAX_FAILURES) setAutoRun(false);
       }
     }, 2000);
   }

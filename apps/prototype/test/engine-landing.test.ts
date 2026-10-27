@@ -5,12 +5,12 @@ import { landingWorkspace, markNotificationsRead, notificationsFor, unreadByWork
 import { demoState } from '../src/engine/seed.ts';
 
 describe('where an account starts', () => {
-  test('in the workspace with the most to do, else project before team before integration', () => {
+  test('in the workspace with the most to do, else the one most grants name, else project before team before integration', () => {
     const e = new Engine(demoState());
     const land = (u: string) => e.read(u, (s, a) => landingWorkspace(s, a));
     assert.deepEqual(
-      ['integrator', 'release', 'integration_tester', 'business', 'steering', 'dcl'].map(land),
-      ['x89-project', 'x89-project', 'x89-integration', 'team-brake', 'team-steering', 'team-adc-parking'],
+      ['integrator', 'release', 'integration_tester', 'business', 'steering', 'dcl', 'adc_integrator', 'cdc_integrator'].map(land),
+      ['x89-project', 'x89-project', 'x89-integration', 'team-brake', 'team-steering', 'team-adc-parking', 'x89-adc-integration', 'x89-cdc-integration'],
     );
   });
 

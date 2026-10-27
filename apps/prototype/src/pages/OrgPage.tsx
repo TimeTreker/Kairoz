@@ -415,23 +415,23 @@ export function OrgPage() {
           {modal === 'rule' && (
             <>
               <Form.Item name="orgUnitId" label={L('团队组织节点', 'Team unit')} rules={[{ required: true }]}>
-                <Select options={unitOptions.filter((u) => state.orgUnits[u.value]!.kind === 'TEAM')} />
+                <Select showSearch optionFilterProp="label" options={unitOptions.filter((u) => state.orgUnits[u.value]!.kind === 'TEAM')} />
               </Form.Item>
               <Form.Item name="includeSubunits" valuePropName="checked">
                 <Checkbox>{L('包含下级节点的成员', 'Include members of units below')}</Checkbox>
               </Form.Item>
               <Typography.Paragraph type="secondary">{L('角色：业务研发；环境：研发（组织规则只能授予这一项）', 'Role: business development; environment: development (the only base right a rule may give)')}</Typography.Paragraph>
               <Form.Item name="workspaces" label={L('工作区', 'Workspaces')} rules={[{ required: true }]}>
-                <Select mode="multiple" options={Object.values(state.workspaces).filter((w) => w.kind === 'TEAM').map((w) => ({ value: w.id, label: w.name }))} />
+                <Select mode="multiple" optionFilterProp="label" options={Object.values(state.workspaces).filter((w) => w.kind === 'TEAM').map((w) => ({ value: w.id, label: w.name }))} />
               </Form.Item>
               <Form.Item name="groups" label={L('业务分组', 'Business groups')} rules={[{ required: true }]}>
-                <Select mode="multiple" options={Object.values(state.groups).map((g) => ({ value: g.id, label: g.name }))} />
+                <Select mode="multiple" optionFilterProp="label" options={Object.values(state.groups).map((g) => ({ value: g.id, label: g.name }))} />
               </Form.Item>
             </>
           )}
           {(modal === 'unit' || (modal !== null && typeof modal === 'object' && 'edit' in modal)) && (
             <Form.Item name="parentId" label={L('上级节点（团队树留空 = 根）', 'Parent (blank for a team root)')}>
-              <Select allowClear options={unitOptions} />
+              <Select allowClear showSearch optionFilterProp="label" options={unitOptions} />
             </Form.Item>
           )}
           {modal !== null && typeof modal === 'object' && 'edit' in modal && (
@@ -466,7 +466,7 @@ export function OrgPage() {
                 </Form.Item>
               </Space>
               <Form.Item name="orgUnitId" label={L('所属节点', 'Organization unit')} rules={[{ required: true }]}>
-                <Select options={unitOptions} />
+                <Select showSearch optionFilterProp="label" options={unitOptions} />
               </Form.Item>
               <Form.Item name="workspaceId" label={L('加入工作区（可选）', 'Join workspace (optional)')}>
                 <Select allowClear options={Object.values(state.workspaces).map((w) => ({ value: w.id, label: w.name }))} />
@@ -481,7 +481,7 @@ export function OrgPage() {
                     <Select options={(['TEAM', 'PROJECT', 'INTEGRATION'] as const).map((k) => ({ value: k, label: B(WORKSPACE_KIND_LABELS[k]) }))} />
                   </Form.Item>
                   <Form.Item name="orgUnitId" label={L('组织节点', 'Organization unit')} rules={[{ required: true }]}>
-                    <Select options={unitOptions.filter((u) => (kind === 'TEAM' ? state.orgUnits[u.value]!.kind === 'TEAM' : state.orgUnits[u.value]!.kind === 'PROJECT'))} />
+                    <Select showSearch optionFilterProp="label" options={unitOptions.filter((u) => (kind === 'TEAM' ? state.orgUnits[u.value]!.kind === 'TEAM' : state.orgUnits[u.value]!.kind === 'PROJECT'))} />
                   </Form.Item>
                   <Form.Item name="vehicleModelId" label={L('车型', 'Vehicle model')} rules={[{ required: true }]}>
                     <Select options={Object.keys(state.vehicleModels).map((m) => ({ value: m, label: m }))} />
@@ -491,6 +491,7 @@ export function OrgPage() {
               <Form.Item name="groupIds" label={L('业务分组', 'Business groups')}>
                 <Select
                   mode="multiple"
+                  optionFilterProp="label"
                   options={Object.values(state.groups).map((g) => {
                     // An archived group a workspace holds may stay; it is never added anew.
                     const held = typeof modal === 'object' && modal !== null && 'ws' in modal && !!state.workspaces[modal.ws]?.groupIds.includes(g.id);
@@ -499,10 +500,10 @@ export function OrgPage() {
                 />
               </Form.Item>
               <Form.Item name="scopes" label={L('范围', 'Scopes')}>
-                <Select mode="multiple" options={SCOPES.map((s) => ({ value: s, label: s }))} />
+                <Select mode="multiple" optionFilterProp="label" options={SCOPES.map((s) => ({ value: s, label: s }))} />
               </Form.Item>
               <Form.Item name="sourceWorkspaceIds" label={L('来源工作区（项目 / 集成工作区）', 'Source workspaces (project / integration)')}>
-                <Select mode="multiple" options={Object.values(state.workspaces).map((w) => ({ value: w.id, label: w.name }))} />
+                <Select mode="multiple" optionFilterProp="label" options={Object.values(state.workspaces).map((w) => ({ value: w.id, label: w.name }))} />
               </Form.Item>
             </>
           )}

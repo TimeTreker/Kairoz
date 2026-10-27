@@ -82,11 +82,11 @@ export function LoginPage() {
                   : L('没有任何有效授权', 'Holds no grant')}
               </Typography.Text>
             ) : (
-              p.landing && (
-                <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                  {L(`进入：${state.workspaces[p.landing]?.name}`, `Opens ${state.workspaces[p.landing]?.name}`)}
-                </Typography.Text>
-              )
+              <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                {p.landing
+                  ? L(`进入：${state.workspaces[p.landing]?.name}`, `Opens ${state.workspaces[p.landing]?.name}`)
+                  : L('进入：工作台（还没有可用的工作区）', 'Opens the workbench (no workspace to work in yet)')}
+              </Typography.Text>
             )}
           </div>
         </Flex>

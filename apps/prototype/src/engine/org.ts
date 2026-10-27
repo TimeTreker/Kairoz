@@ -123,16 +123,17 @@ function noteChange(ctx: Ctx, kind: 'RENAMED' | 'MOVED' | 'SOURCES_CHANGED', obj
 
 /**
  * What a source workspace still takes part in, in this merge workspace: open merge previews and
- * candidates holding its Features, and open integration calls collecting from it.
+ * candidates holding its Features or subsystem releases, and open integration calls collecting from it.
  */
 export function sourceInUse(s: State, workspaceId: string, sourceId: string): string[] {
   const problems: string[] = [];
-  const fromSource = (featureIds: string[]) => featureIds.some((f) => s.features[f]?.workspaceId === sourceId);
+  const fromSource = (x: { sources: { featureId: string }[]; subsystems: { subsystemReleaseId: string }[] }) =>
+    x.sources.some((f) => s.features[f.featureId]?.workspaceId === sourceId) || x.subsystems.some((r) => s.subsystemReleases[r.subsystemReleaseId]?.workspaceId === sourceId);
   for (const p of Object.values(s.mergePlans)) {
-    if (p.workspaceId === workspaceId && ['READY', 'CONFLICT', 'BLOCKED'].includes(p.status) && fromSource(p.sources.map((x) => x.featureId))) problems.push(`merge preview ${p.id} is open`);
+    if (p.workspaceId === workspaceId && ['READY', 'CONFLICT', 'BLOCKED'].includes(p.status) && fromSource(p)) problems.push(`merge preview ${p.id} is open`);
   }
   for (const c of Object.values(s.candidates)) {
-    if (c.workspaceId === workspaceId && ['CANDIDATE', 'TESTING', 'VERIFIED'].includes(c.status) && fromSource(c.sources.map((x) => x.featureId))) problems.push(`candidate ${c.label} is open`);
+    if (c.workspaceId === workspaceId && ['CANDIDATE', 'TESTING', 'VERIFIED'].includes(c.status) && fromSource(c)) problems.push(`candidate ${c.label} is open`);
   }
   for (const c of Object.values(s.integrationCalls)) {
     if (c.workspaceId === workspaceId && c.status === 'OPEN' && c.modules.some((m) => m.workspaceId === sourceId && m.status !== 'EXCLUDED')) problems.push(`integration call ${c.title} is open`);

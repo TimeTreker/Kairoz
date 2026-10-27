@@ -277,7 +277,7 @@ Object.assign(ERROR_LABELS, {
   ALREADY_CONFIRMED: b('该预览已确认', 'This preview is already confirmed'),
   PROCESSING_NOT_CONFIRMED: b('须先由 DCL 确认最终处理集合', 'DCL must confirm the final processing set first'),
   TARGET_CHANGED: b('目标策略集已变化，请重新预览', 'The target policy set changed; preview again'),
-  SOURCE_CHANGED: b('来源 Feature 在预览后有变化，请重新预览', 'A source Feature changed since the preview; preview again'),
+  SOURCE_CHANGED: b('来源（Feature 或子系统发布）在预览后有变化，请重新预览', 'A source (Feature or subsystem release) changed since the preview; preview again'),
   CANDIDATE_OPEN: b('本工作区在这条线上还有未结束的集成候选', 'An open candidate exists in this workspace on this line'),
   NOT_A_PATCH_TARGET: b('补丁只能以仍有整车软件版本在用的旧策略集为目标，不能是主线', 'A patch targets an older policy set still in effect for some software, not the mainline'),
   PATCH_FEATURES_ONLY: b('同软件版本补丁是整车合并，只收 Verified Feature', 'A same-software patch is a whole-vehicle merge of Verified Features'),

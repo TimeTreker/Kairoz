@@ -164,7 +164,7 @@ export function openCall(
     const module = parent.modules.find((m) => m.kind === 'DOMAIN' && m.domain === scope && m.workspaceId === ws.id);
     if (!module) throw rule('NOT_A_CALL_MODULE', `the call for ${parent.targetVersion} does not collect ${scope} from this workspace`);
     if (module.status === 'EXCLUDED') throw rule('MODULE_EXCLUDED', `${scope} does not take part in the call for ${parent.targetVersion}`);
-    assertNotInTest(ctx.s, parent);
+    // The domain may prepare its answer while the whole-vehicle round is tested: the answer waits (answerParent).
     const child = Object.values(ctx.s.integrationCalls).find((c) => c.parentCallId === parent!.id && c.scope === scope && c.status === 'OPEN');
     if (child) throw conflict('CALL_EXISTS', `the ${scope} call for ${parent.targetVersion} is already open`);
   } else if (input.parentCallId) {
@@ -376,6 +376,18 @@ export function excludeModule(ctx: Ctx, callId: string, key: string, reason: str
   if (call.modules.filter((x) => x.status !== 'EXCLUDED').length === 1) throw rule('NO_MODULES', 'a call needs at least one module taking part');
   // The running round merged the module's submission: it no longer is what the call records.
   closeRound(ctx, call, why);
+  // A domain left out has nothing to answer: its open domain call closes, keeping a frozen candidate.
+  if (m.kind === 'DOMAIN') {
+    for (const child of Object.values(ctx.s.integrationCalls)) {
+      if (child.parentCallId !== call.id || child.status !== 'OPEN' || child.scope !== m.domain || child.workspaceId !== m.workspaceId) continue;
+      detachCandidate(ctx, child, why);
+      closeRound(ctx, child, why);
+      child.status = 'CANCELLED';
+      child.note = why;
+      child.closedBy = ctx.user().username;
+      child.closedAt = ctx.now;
+    }
+  }
   m.status = 'EXCLUDED';
   m.featureId = null;
   m.commitId = null;
@@ -459,10 +471,15 @@ export function closeUnchanged(ctx: Ctx, callId: string, note?: string): void {
   else closeChildren(ctx, call, 'the whole-vehicle call closed with no change');
 }
 
-/** Open domain calls of a whole-vehicle call that closed have nothing left to answer. */
+/**
+ * Open domain calls of a whole-vehicle call that closed have nothing left to answer. A test
+ * integration version a domain call already froze stays open as the domain's own candidate, so
+ * its tests are kept and it can still be published as a subsystem release for a later call.
+ */
 function closeChildren(ctx: Ctx, call: IntegrationCall, why: string): void {
   for (const child of Object.values(ctx.s.integrationCalls)) {
     if (child.parentCallId !== call.id || child.status !== 'OPEN') continue;
+    detachCandidate(ctx, child, why);
     closeRound(ctx, child, why);
     child.status = 'CANCELLED';
     child.note = why;
@@ -471,15 +488,40 @@ function closeChildren(ctx: Ctx, call: IntegrationCall, why: string): void {
   }
 }
 
-/** A domain call's result goes up to its whole-vehicle call's module for the domain. */
+/**
+ * A frozen, still open test integration version leaves its call, which closes the round: it is
+ * the domain's own candidate from now on.
+ */
+function detachCandidate(ctx: Ctx, call: IntegrationCall, why: string): void {
+  const round = openRound(ctx.s, call);
+  const c = round?.candidateId ? ctx.s.candidates[round.candidateId] : undefined;
+  if (!c || !['CANDIDATE', 'TESTING', 'VERIFIED'].includes(c.status)) return;
+  c.callId = null;
+  round!.outcome = 'CANCELLED';
+  round!.reason = why;
+  round!.closedBy = ctx.user().username;
+  round!.closedAt = ctx.now;
+}
+
+/**
+ * A domain call's result goes up to its whole-vehicle call's module for the domain. While the
+ * whole-vehicle round is being tested its modules do not change: the domain's result stays with
+ * the domain call, noted there, and goes up when the integration admin sends the module back.
+ */
 function answerParent(ctx: Ctx, call: IntegrationCall, subsystemReleaseId: string | null): void {
   const parent = ctx.s.integrationCalls[call.parentCallId!];
   if (!parent || parent.status !== 'OPEN') return;
   const m = parent.modules.find((x) => x.kind === 'DOMAIN' && x.domain === call.scope && x.workspaceId === call.workspaceId);
   if (!m || m.status === 'EXCLUDED') return;
-  assertNotInTest(ctx.s, parent);
+  if (openRound(ctx.s, parent)?.candidateId) {
+    ctx.s.integrationCalls[call.id]!.note = PARENT_IN_TEST;
+    return;
+  }
   setSubmission(ctx, m, subsystemReleaseId ? { subsystemReleaseId } : null, `${call.title}`);
 }
+
+/** The note on a domain call whose result could not go up while the whole-vehicle round was tested. */
+export const PARENT_IN_TEST = 'the whole-vehicle call was being tested; its module keeps its submission until sent back';
 
 /**
  * Merges a complete call's submissions (one round): a merge preview of the submitted Features and
@@ -522,7 +564,9 @@ export function callRoundProblem(s: State, plan: MergePlan): string | null {
   if (!round || round.planId !== plan.id) return 'this preview is no longer the call’s current round';
   const submitted = call.modules.filter((m) => m.status === 'SUBMITTED');
   const want = [...submitted.filter((m) => m.featureId).map((m) => `${m.featureId}@${m.commitId}`), ...submitted.filter((m) => m.subsystemReleaseId).map((m) => m.subsystemReleaseId!)].sort();
-  const have = [...plan.sources.map((x) => `${x.featureId}@${x.commitId}`), ...plan.subsystems.map((x) => x.subsystemReleaseId)].sort();
+  // A domain merge builds on its domain's current subsystem release by itself; only a
+  // whole-vehicle merge takes subsystem releases as submissions.
+  const have = [...plan.sources.map((x) => `${x.featureId}@${x.commitId}`), ...(plan.scope === 'Vehicle' ? plan.subsystems.map((x) => x.subsystemReleaseId) : [])].sort();
   if (want.join() !== have.join()) return 'the call’s submissions changed since this preview; preview it again';
   return null;
 }

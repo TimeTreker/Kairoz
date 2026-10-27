@@ -240,6 +240,8 @@ export function Shell() {
         <Layout.Header className="kz-header">
           <Select
             className="kz-header-workspace"
+            showSearch
+            optionFilterProp="label"
             value={workspace?.id}
             placeholder={L('没有可用工作区', 'No workspace available')}
             options={options}

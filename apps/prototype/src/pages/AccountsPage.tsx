@@ -179,16 +179,16 @@ export function AccountsPage() {
                           <Select style={{ width: 170 }} options={ROLES.map((r) => ({ value: r, label: B(ROLE_LABELS[r]) }))} />
                         </Form.Item>
                         <Form.Item name={[field.name, 'workspaces']} label={L('工作区', 'Workspaces')}>
-                          <Select mode="multiple" style={{ width: 220 }} options={workspaceOptions} />
+                          <Select mode="multiple" optionFilterProp="label" style={{ width: 220 }} options={workspaceOptions} />
                         </Form.Item>
                         {dim === 'groups' && (
                           <Form.Item name={[field.name, 'groups']} label={L('业务分组', 'Groups')}>
-                            <Select mode="multiple" style={{ width: 180 }} options={groupOptions} />
+                            <Select mode="multiple" optionFilterProp="label" style={{ width: 180 }} options={groupOptions} />
                           </Form.Item>
                         )}
                         {dim === 'scopes' && (
                           <Form.Item name={[field.name, 'scopes']} label={L('范围', 'Scopes')}>
-                            <Select mode="multiple" style={{ width: 180 }} options={SCOPES.map((s) => ({ value: s, label: s }))} />
+                            <Select mode="multiple" optionFilterProp="label" style={{ width: 180 }} options={SCOPES.map((s) => ({ value: s, label: s }))} />
                           </Form.Item>
                         )}
                         <Form.Item name={[field.name, 'envs']} label={L('环境', 'Environments')}>

@@ -13,7 +13,7 @@ import { mismatchesFor } from './delivery.ts';
 import type { Actor, Ctx } from './engine.ts';
 import { emergencyStopsOf } from './emergency.ts';
 import { carriesData } from './events.ts';
-import { isOverdue, workspaceVehicles } from './fleet.ts';
+import { isOverdue, softwareKey, workspaceVehicles } from './fleet.ts';
 import { workspaceAccess } from './identity.ts';
 import { intakeQueue } from './intake.ts';
 import { isConfirmed, isMergeWorkspace, verifiedSources } from './integration.ts';
@@ -349,6 +349,9 @@ export function notificationsFor(s: State, actor: Actor, workspaceId: string): N
   }
   if (has('VEHICLE_RESOURCE')) {
     for (const c of unrecordedReports(s, actor)) {
+      // A production vehicle reporting a planned version is confirmed once the version is released.
+      const planned = s.softwareVersions[softwareKey(s.resources[c.resourceId]!.vehicleModelId, c.toVersion)]?.status === 'PLANNED';
+      if (planned && s.resources[c.resourceId]!.env === 'production') continue;
       add('VEHICLE_RESOURCE', 'UNRECORDED_SOFTWARE', [c.id, c.status], { severity: 'WARNING', subject: c.resourceId, detail: c.toVersion, link: 'fleet/registry', at: c.at });
     }
   }
@@ -378,13 +381,18 @@ const KIND_ORDER = { PROJECT: 0, TEAM: 1, INTEGRATION: 2 } as const;
 
 /**
  * Where an account starts when it signs in: the workspace with the most unread warnings, then the
- * most unread items; with nothing to do anywhere, a project workspace before a team one before an
- * integration one (where configuration is collected, written, then tested).
+ * most unread items; with as much to do, the one most of its grants name, then a project workspace
+ * before a team one before an integration one (where configuration is collected, written, then tested).
  */
 export function landingWorkspace(s: State, actor: Actor): string | null {
   const counts = unreadByWorkspace(s, actor);
   const kind = (id: string) => KIND_ORDER[s.workspaces[id]!.kind];
-  const best = [...counts].sort((a, b) => b.warnings - a.warnings || b.unread - a.unread || kind(a.workspaceId) - kind(b.workspaceId) || a.workspaceId.localeCompare(b.workspaceId))[0];
+  // Roles granted for the workspace by name: a domain integrator's own integration workspace
+  // before the teams it also administers.
+  const named = (id: string) => actor.grants.filter((g) => g.workspaces.includes(id)).length;
+  const best = [...counts].sort(
+    (a, b) => b.warnings - a.warnings || b.unread - a.unread || named(b.workspaceId) - named(a.workspaceId) || kind(a.workspaceId) - kind(b.workspaceId) || a.workspaceId.localeCompare(b.workspaceId),
+  )[0];
   return best?.workspaceId ?? null;
 }
 

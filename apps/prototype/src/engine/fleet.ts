@@ -312,14 +312,15 @@ function applyBundledModule(ctx: Ctx, r: Draft<Resource>, changeId: string | nul
 /**
  * A production vehicle's software changed while configuration OTAs were still on their way to it.
  * A rollout keeps the vehicle only while its set is still the one to run on the new software (for a
- * rollback: still applies to it); otherwise the vehicle leaves the rollout, so a late receipt can
- * never put a set on software it does not apply to.
+ * rollback: still applies to it); otherwise the vehicle leaves the rollout, waiting or failed, so a
+ * late receipt or a retry can never put a set on software it does not apply to.
  */
 function dropStaleRolloutTargets(ctx: Ctx, r: Draft<Resource>): void {
   if (r.env !== 'production') return;
   for (const d of Object.values(ctx.s.deployments)) {
     if (d.kind !== 'OTA' || (d.status !== 'PENDING' && d.status !== 'PAUSED')) continue;
-    const t = d.targets.find((x) => x.resourceId === r.id && (x.status === 'PENDING' || x.status === 'QUEUED'));
+    // A failed vehicle of a paused rollout would be retried on resume: it leaves too.
+    const t = d.targets.find((x) => x.resourceId === r.id && (x.status === 'PENDING' || x.status === 'QUEUED' || x.status === 'FAILED'));
     if (!t) continue;
     const release = ctx.s.releases[d.subjectId];
     const version = r.integrationVersion;
@@ -328,13 +329,17 @@ function dropStaleRolloutTargets(ctx: Ctx, r: Draft<Resource>): void {
       t.software = version;
       continue;
     }
+    if (t.status === 'FAILED') t.history.push({ attempt: t.attempt, status: t.status, error: t.error, at: t.updatedAt });
     t.status = 'CANCELLED';
     t.error = `software changed to ${version ?? 'unknown'}`;
     t.updatedAt = ctx.now;
     (d.log ??= []).push({ kind: 'DROPPED', by: null, at: ctx.now, reason: version, resourceIds: [r.id] });
-    if (d.status === 'PENDING' && d.targets.every((x) => x.status !== 'PENDING' && x.status !== 'QUEUED')) {
-      d.status = 'COMPLETED';
-      d.log.push({ kind: 'COMPLETED', by: null, at: ctx.now, reason: null, resourceIds: [] });
+    // Nothing left to send or retry: the rollout ends, cancelled when no vehicle took the set.
+    if (d.targets.every((x) => x.status === 'APPLIED' || x.status === 'CANCELLED')) {
+      const applied = d.targets.some((x) => x.status === 'APPLIED');
+      d.status = applied ? 'COMPLETED' : 'CANCELLED';
+      d.pauseReason = null;
+      d.log.push({ kind: applied ? 'COMPLETED' : 'CANCELLED', by: null, at: ctx.now, reason: null, resourceIds: [] });
     }
     d.updatedAt = ctx.now;
   }

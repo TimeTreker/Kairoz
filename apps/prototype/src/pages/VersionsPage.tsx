@@ -12,7 +12,7 @@ import { useEngineState } from '../app/store.ts';
 import { Hint, LabelTag, Mono, PageHeader, day, when } from '../components/common.tsx';
 import { LineTag } from '../components/patch.tsx';
 import { PromoteModal } from '../components/promote.tsx';
-import { callPhase, callsOf, closeUnchanged, cancelCall, defaultModules, excludeModule, isOverdueCall, isStale, moduleName, openCall, openRound, previewCall, remindModules, retargetCall, returnModules, submitDomain, submitGroup, waitingModules } from '../engine/calls.ts';
+import { PARENT_IN_TEST, callPhase, callsOf, closeUnchanged, cancelCall, defaultModules, excludeModule, isOverdueCall, isStale, moduleName, openCall, openRound, previewCall, remindModules, retargetCall, returnModules, submitDomain, submitGroup, waitingModules } from '../engine/calls.ts';
 import type { CallPhase } from '../engine/calls.ts';
 import { displayName } from '../engine/config.ts';
 import { productionDistribution, releaseHistory, setsOverTime, softwareVersionsOf, vehiclesOnVersion, vehiclesRunning, versionHistory } from '../engine/history.ts';
@@ -32,6 +32,24 @@ import {
   SOFTWARE_STATUS_LABELS,
   setName,
 } from '../i18n/vocab.ts';
+
+/** Notes and reasons the platform writes itself, in the reader's language; people's own text as written. */
+function callNote(L: (zh: string, en: string) => string, text: string | null): string {
+  switch (text) {
+    case 'previewed again':
+      return L('重新生成了预览', 'previewed again');
+    case 'no change':
+      return L('本次无变更', 'no change');
+    case 'the whole-vehicle call closed with no change':
+      return L('整车征集已按"本次无变更"结束', 'the whole-vehicle call closed with no change');
+    case 'the whole-vehicle call was released':
+      return L('整车征集已发布', 'the whole-vehicle call was released');
+    case PARENT_IN_TEST:
+      return L('发布时整车征集正在测试，结果没有交上去；整车征集退回本域模块后，再提交这个子系统发布', 'The whole-vehicle call was being tested when this was published, so the result did not go up; submit this subsystem release once the call sends the domain module back');
+    default:
+      return text ?? '';
+  }
+}
 
 export function VersionsPage({ tab = 'calls', id, sub }: { tab?: string; id?: string; sub?: string }) {
   const { L } = useI18n();
@@ -190,7 +208,7 @@ function OpenCallModal({ onClose, parentCallId }: { onClose: () => void; parentC
     >
       <Form form={form} name="open-call" layout="vertical" initialValues={{ baseVersion: recorded[0]?.version, modules: modules.map((m) => m.key), parentCallId: parentCallId ?? parents[0]?.id }}>
         {domain ? (
-          <Form.Item name="parentCallId" label={L('响应的整车征集', 'Whole-vehicle call answered')} rules={[{ required: true }]} extra={L('目标版本跟随整车征集；子征集发布的子系统发布会自动提交给整车征集。', 'The target follows the whole-vehicle call; the subsystem release it publishes is submitted to that call by itself.')}>
+          <Form.Item name="parentCallId" label={L('响应的整车征集', 'Whole-vehicle call answered')} rules={[{ required: true }]} extra={L('目标版本跟随整车征集；子征集发布的子系统发布会自动提交给整车征集（整车征集正在测试时，等它退回本域模块后再提交）。', 'The target follows the whole-vehicle call; the subsystem release it publishes is submitted to that call by itself (while that call is being tested, submit it once the call sends the domain module back).')}>
             <Select options={parents.map((c) => ({ value: c.id, label: c.title }))} placeholder={L('没有在征集本域的整车征集', 'No whole-vehicle call collects this domain')} />
           </Form.Item>
         ) : (
@@ -350,7 +368,7 @@ function CallDetail({ callId }: { callId: string }) {
             </Descriptions.Item>
           )}
           {call.subsystemReleaseId && <Descriptions.Item label={L('发布结果', 'Result')}>{state.subsystemReleases[call.subsystemReleaseId]?.label}</Descriptions.Item>}
-          {call.note && <Descriptions.Item label={L('说明', 'Note')}>{call.note}</Descriptions.Item>}
+          {call.note && <Descriptions.Item label={L('说明', 'Note')}>{callNote(L, call.note)}</Descriptions.Item>}
         </Descriptions>
         <Flex gap={8} wrap style={{ marginTop: 16 }}>
           {manage && waiting.length > 0 && (
@@ -502,7 +520,7 @@ function CallDetail({ callId }: { callId: string }) {
             { title: L('预览', 'Preview'), render: (_, r) => <LabelTag map={PLAN_STATUS_LABELS} value={state.mergePlans[r.planId]?.status ?? '—'} /> },
             { title: L('测试', 'Testing'), render: (_, r) => (r.candidateId ? <LabelTag map={CANDIDATE_STATUS_LABELS} value={state.candidates[r.candidateId]!.status} /> : '—') },
             { title: L('结果', 'Outcome'), render: (_, r) => <LabelTag map={ROUND_OUTCOME_LABELS} value={r.outcome} color={r.outcome === 'RELEASED' ? 'green' : r.outcome === 'CANCELLED' ? 'default' : 'processing'} /> },
-            { title: L('原因', 'Reason'), render: (_, r) => (r.reason === 'previewed again' ? L('重新生成了预览', 'previewed again') : r.reason) || '—' },
+            { title: L('原因', 'Reason'), render: (_, r) => callNote(L, r.reason) || '—' },
             { title: L('时间', 'When'), render: (_, r) => `${state.accounts[r.by]?.displayName ?? r.by} · ${when(r.at)}${r.closedAt ? ` → ${when(r.closedAt)}` : ''}` },
           ]}
         />
@@ -922,8 +940,8 @@ function useEntryText(): (e: HistoryEntry) => ReactNode {
   const cars = (ids: string[]) => (ids.length ? ids.join(', ') : '');
   return (e) => {
     const v = e.version ? `${workspace?.vehicleModelId ?? ''} ${e.version}`.trim() : '';
-    const reason = e.reason ? `：${e.reason}` : '';
-    const reasonEn = e.reason ? `: ${e.reason}` : '';
+    const reason = e.reason ? `：${callNote(L, e.reason)}` : '';
+    const reasonEn = e.reason ? `: ${callNote(L, e.reason)}` : '';
     switch (e.kind) {
       case 'CALL_OPENED':
         return L(`发起集成征集「${e.reason}」`, `Integration call “${e.reason}” opened`);
@@ -944,7 +962,7 @@ function useEntryText(): (e: HistoryEntry) => ReactNode {
       case 'ROUND_PASSED':
         return L(`${e.reason} 集成测试通过`, `${e.reason} passed integration testing`);
       case 'ROUND_CANCELLED':
-        return e.reason === 'previewed again' ? L('本轮取消：重新生成了预览', 'Round cancelled: previewed again') : L(`本轮取消${reason}`, `Round cancelled${reasonEn}`);
+        return L(`本轮取消${reason}`, `Round cancelled${reasonEn}`);
       case 'CALL_CANCELLED':
         return L(`集成征集取消${reason}`, `Integration call cancelled${reasonEn}`);
       case 'CALL_NO_CHANGE':

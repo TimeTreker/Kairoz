@@ -8,7 +8,7 @@ import { policyCompatibility } from '../domain/compatibility.ts';
 import { notFound, rule } from '../domain/errors.ts';
 import { newId } from '../domain/ids.ts';
 import type { Env } from '../domain/vocabulary.ts';
-import { authorizeFeature, displayName, latestRelease } from './config.ts';
+import { authorizeFeature, changesRequested, displayName, latestRelease, submitIssues } from './config.ts';
 import type { Ctx } from './engine.ts';
 import { authorizePersonal, directTargetProblems, getResource, livePublication, membersOf, occupancyProblems, pendingDeploymentOf, pendingImageChangeOf, recordGroupBinding, softwareKey } from './fleet.ts';
 import { getGroup } from './org.ts';
@@ -193,12 +193,18 @@ export function dispatchFeature(ctx: Ctx, featureId: string, input: DispatchInpu
 /** Authorization, stage and per-vehicle checks shared by dispatches and team test requests. */
 /**
  * An earlier commit of the Feature that may be dispatched on its own (回归历史提交): submitted from
- * this Feature, with every file it needs approved for its exact content. Its results stay its own.
+ * this Feature, not sent back for changes, still passing the submit checks (data items, granted
+ * references, policies, budgets), and with every file it needs approved for its exact content.
+ * Its results stay its own.
  */
 export function historyCommitProblem(s: State, feature: Feature, commitId: string): string | null {
   const c = s.commits[commitId];
   if (!c || c.featureId !== feature.id) return 'not a commit of this Feature';
-  const items = reviewItems(s, commitSnapshot(s, commitId), { groupId: feature.groupId, workspaceId: feature.workspaceId });
+  if (changesRequested(s, feature.id, commitId)) return 'changes were requested on that commit';
+  const snapshot = commitSnapshot(s, commitId);
+  const issues = submitIssues(s, getGroup(s, feature.groupId), snapshot, s.workspaces[feature.workspaceId]?.vehicleModelId);
+  if (issues.length) return `that commit no longer passes the submit checks (${issues.map((i) => i.key).join(', ')})`;
+  const items = reviewItems(s, snapshot, { groupId: feature.groupId, workspaceId: feature.workspaceId });
   return intakeStage(items) === 'DCL_READY' ? null : 'a file of that commit lacks a current DCL approval';
 }
 
@@ -450,6 +456,7 @@ export function cancelDeployment(ctx: Ctx, deploymentId: string, reason: string)
       t.status = 'CANCELLED';
       t.error = reason.trim();
       t.updatedAt = ctx.now;
+      dropTestTarget(ctx, d.id, t.resourceId);
     }
   }
   d.status = 'CANCELLED';
@@ -475,12 +482,20 @@ export function releaseVehicle(ctx: Ctx, resourceId: string, reason: string): st
   t.status = 'CANCELLED';
   t.error = `released by vehicle resources: ${reason.trim()}`;
   t.updatedAt = ctx.now;
+  dropTestTarget(ctx, d.id, r.id);
   if (d.targets.every((x) => x.status !== 'PENDING' && x.status !== 'QUEUED')) {
     d.status = d.targets.some((x) => x.status === 'APPLIED') ? 'COMPLETED' : 'CANCELLED';
-    if (d.kind === 'FEATURE' && d.status === 'CANCELLED') for (const vgId of d.vehicleGroupIds) restorePublication(ctx, vgId);
   }
+  // A group left without a member on this dispatch returns to what still stands there.
+  if (d.kind === 'FEATURE') for (const vgId of d.vehicleGroupIds) restorePublication(ctx, vgId);
   d.updatedAt = ctx.now;
   return d.id;
+}
+
+/** A vehicle whose dispatch was cancelled before it applied is no longer one the version must be tested on. */
+function dropTestTarget(ctx: Ctx, deploymentId: string, resourceId: string): void {
+  const i = ctx.s.testTargets.findIndex((x) => x.deploymentId === deploymentId && x.resourceId === resourceId);
+  if (i >= 0) ctx.s.testTargets.splice(i, 1);
 }
 
 /**

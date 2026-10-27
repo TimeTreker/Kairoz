@@ -297,12 +297,13 @@ export function DispatchModal({
           </Typography.Paragraph>
           <Typography.Paragraph type="secondary" style={{ marginBottom: 4 }}>
             {L(
-              '每辆车运行它的基线（软件版本当前适用的策略集，或车辆组的显式基线）加本分组提交。可关闭基线中其他分组的策略以减少干扰；开关随本次发布记录，测试证据绑定实际运行的组合。',
-              'Each vehicle runs its base (the set in effect for its software, or the group’s explicit base) plus this group’s commit. Other groups’ base policies can be switched off to reduce noise; the switches are recorded with this publish and test evidence binds to the combination actually run.',
+              '每辆车运行它的基线（软件版本当前适用的策略集，或车辆组的显式基线）加本分组提交。可关闭基线中其他分组的策略以减少干扰；开关随本次下发记录，测试证据绑定实际运行的组合。',
+              'Each vehicle runs its base (the set in effect for its software, or the group’s explicit base) plus this group’s commit. Other groups’ base policies can be switched off to reduce noise; the switches are recorded with this dispatch and test evidence binds to the combination actually run.',
             )}
           </Typography.Paragraph>
           <Select
             mode="multiple"
+            optionFilterProp="label"
             style={{ width: '100%' }}
             value={disabled}
             onChange={setDisabled}

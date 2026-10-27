@@ -122,7 +122,11 @@ export function ValidationTab({ feature }: { feature: Feature }) {
             title={L('历史提交：可以单独下发和登记结果，做回归对比。', 'An earlier commit: it can be dispatched and tested on its own, for a regression comparison.')}
             description={
               historyProblem
-                ? L('这个提交有文件没有现行的 DCL 批准，不能下发。', 'A file of this commit lacks a current DCL approval, so it cannot be dispatched.')
+                ? historyProblem.startsWith('changes were requested')
+                  ? L('这个提交被要求修改（退回、处理绑定调整或引用撤销），不能下发。', 'Changes were requested on this commit (returned, binding changed or reference revoked), so it cannot be dispatched.')
+                  : historyProblem.startsWith('that commit no longer passes')
+                    ? L(`这个提交已不符合提交检查（数据项、引用授权、策略或预算），不能下发：${historyProblem.match(/\((.*)\)$/)?.[1] ?? ''}`, `This commit no longer passes the submit checks (data items, granted references, policies or budgets), so it cannot be dispatched: ${historyProblem.match(/\((.*)\)$/)?.[1] ?? ''}`)
+                    : L('这个提交有文件没有现行的 DCL 批准，不能下发。', 'A file of this commit lacks a current DCL approval, so it cannot be dispatched.')
                 : L('结果只属于这个提交；确认验证通过仍只看当前提交。下发后车辆组改为运行这个提交。', 'Results belong to this commit only; Verified still looks at the head. Once dispatched, the group runs this commit.')
             }
           />

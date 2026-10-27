@@ -458,6 +458,9 @@ export function freezeCandidate(ctx: Ctx, planId: string, input: { label: string
     const r = ctx.s.subsystemReleases[ref.subsystemReleaseId];
     const usable = plan.scope === 'Vehicle' ? r?.status === 'ACTIVE' : r?.status === 'ACTIVE' || r?.status === 'INTEGRATING';
     if (!usable) throw rule('SOURCE_CHANGED', `${r?.label ?? ref.subsystemReleaseId} changed since the preview; preview the merge again`);
+    if (plan.scope === 'Vehicle' && r!.workspaceId !== mergeWs.id && !mergeWs.sourceWorkspaceIds.includes(r!.workspaceId)) {
+      throw rule('SOURCE_CHANGED', `${r!.label}'s workspace is no longer a source of ${mergeWs.name}; preview the merge again`);
+    }
   }
   // One open candidate per line: a patch can be tested while a mainline candidate is.
   const open = Object.values(ctx.s.candidates).find((c) => c.workspaceId === plan.workspaceId && c.scope === plan.scope && sameLine(c, plan) && ['CANDIDATE', 'TESTING', 'VERIFIED'].includes(c.status));

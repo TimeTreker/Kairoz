@@ -143,7 +143,7 @@ export function PoliciesTab({ feature }: { feature: Feature }) {
             />
           )}
           <Form.Item name="captures" label={L('采集文件', 'Captured files')} rules={[{ required: true }]}>
-            <Select mode="multiple" options={Object.keys(files).map((k) => ({ value: k, label: nameOf(k) + (k in feature.draft.references ? L('（引用）', ' (reference)') : '') }))} />
+            <Select mode="multiple" optionFilterProp="label" options={Object.keys(files).map((k) => ({ value: k, label: nameOf(k) + (k in feature.draft.references ? L('（引用）', ' (reference)') : '') }))} />
           </Form.Item>
           <Space>
             <Form.Item name="preSeconds" label={L('触发前（秒）', 'Before (s)')} rules={[{ required: true }]}>

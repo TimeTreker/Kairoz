@@ -89,9 +89,11 @@ function VehicleTable({ vehicles, extra, workspaceId = '' }: { vehicles: Resourc
       (env === 'ALL' || r.env === env) &&
       (!q || [r.id, r.displayName, r.vin, r.uvid, r.licensePlate].some((x) => x?.toLowerCase().includes(q))),
   );
+  // The controls stay while a filter is set, even when the list has shrunk since.
+  const filtering = !!q || type !== 'ALL' || env !== 'ALL';
   return (
     <Space orientation="vertical" size={8} style={{ width: '100%' }}>
-      {vehicles.length > 5 && (
+      {(vehicles.length > 5 || filtering) && (
         <Space wrap>
           <Input.Search allowClear style={{ width: 240 }} placeholder={L('车辆编号、VIN、UVID 或车牌', 'Vehicle id, VIN, UVID or plate')} value={query} onChange={(e) => setQuery(e.target.value)} />
           <Select
@@ -190,7 +192,7 @@ function VehicleTable({ vehicles, extra, workspaceId = '' }: { vehicles: Resourc
 function WorkspaceVehicles() {
   const state = useEngineState();
   const { workspace } = useWorkspace();
-  const { L } = useI18n();
+  const { L, B } = useI18n();
   const can = useCan();
   const run = useRun();
   const [adding, setAdding] = useState(false);
@@ -362,7 +364,8 @@ function WorkspaceVehicles() {
           })
         }
       >
-        <Form form={form} name="sim" layout="vertical" initialValues={{ env: 'development', pool: workspace.scopes[0] }}>
+        {/* An integration workspace tests: its simulations are testing ones by default. */}
+        <Form form={form} name="sim" layout="vertical" initialValues={{ env: workspace.kind === 'INTEGRATION' ? 'testing' : 'development', pool: workspace.scopes[0] }}>
           <Form.Item name="id" label="ID" rules={[{ required: true, pattern: /^[A-Z][A-Z0-9-]{2,40}$/ }]}>
             <Input placeholder="SIM-022" />
           </Form.Item>
@@ -374,7 +377,7 @@ function WorkspaceVehicles() {
           </Form.Item>
           <Space>
             <Form.Item name="env" label={L('环境', 'Environment')}>
-              <Select style={{ width: 140 }} options={['development', 'testing'].map((e) => ({ value: e, label: e }))} />
+              <Select style={{ width: 140 }} options={['development', 'testing'].map((e) => ({ value: e, label: B(ENV_LABELS[e], e) }))} />
             </Form.Item>
             <Form.Item name="pool" label={L('资源池', 'Pool')}>
               <Select style={{ width: 140 }} options={workspace.scopes.map((p) => ({ value: p, label: p }))} />
@@ -757,6 +760,7 @@ function TestRequests({ workspaceId }: { workspaceId: string }) {
 function Registry() {
   const state = useEngineState();
   const actor = useActor()!;
+  const { workspace } = useWorkspace();
   const { L, B } = useI18n();
   const run = useRun();
   const [registering, setRegistering] = useState(false);
@@ -920,7 +924,7 @@ function Registry() {
           })
         }
       >
-        <Form form={form} name="register" layout="vertical" initialValues={{ vehicleModelId: Object.keys(state.vehicleModels)[0], env: 'development', pool: 'Chassis' }}>
+        <Form form={form} name="register" layout="vertical" initialValues={{ vehicleModelId: workspace?.vehicleModelId ?? Object.keys(state.vehicleModels)[0], env: 'development', pool: 'Chassis' }}>
           <Space>
             <Form.Item name="id" label="ID" rules={[{ required: true }]}>
               <Input placeholder="VEH-003" />
@@ -1082,6 +1086,7 @@ function parseManifest(signals?: string, sources?: string) {
 
 function Catalogs() {
   const state = useEngineState();
+  const { workspace } = useWorkspace();
   const { L } = useI18n();
   const can = useCan();
   const run = useRun();
@@ -1209,7 +1214,7 @@ function Catalogs() {
           })
         }
       >
-        <Form form={form} name="catalog" layout="vertical" initialValues={{ vehicleModelId: Object.keys(state.vehicleModels)[0], simulator: 'SimOne 3' }}>
+        <Form form={form} name="catalog" layout="vertical" initialValues={{ vehicleModelId: workspace?.vehicleModelId ?? Object.keys(state.vehicleModels)[0], simulator: 'SimOne 3' }}>
           <Form.Item name="vehicleModelId" label={L('车型', 'Model')} hidden={open === 'manifest'}>
             <Select options={Object.keys(state.vehicleModels).map((m) => ({ value: m, label: m }))} onChange={() => form.setFieldValue('integrationVersion', undefined)} />
           </Form.Item>

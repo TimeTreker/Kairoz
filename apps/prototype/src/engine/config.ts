@@ -42,7 +42,12 @@ const CHANGE_REQUESTS: readonly FeedbackKind[] = ['RETURNED', 'BINDING_CHANGED',
 
 /** Whether DCL or a data owner asked for changes to the Feature's head commit. */
 export function headChangesRequested(s: State, feature: Pick<Feature, 'id' | 'headCommitId'>): boolean {
-  return s.feedback.some((f) => f.featureId === feature.id && f.commitId === feature.headCommitId && CHANGE_REQUESTS.includes(f.kind));
+  return !!feature.headCommitId && changesRequested(s, feature.id, feature.headCommitId);
+}
+
+/** Whether DCL or a data owner asked for changes to this commit of the Feature. */
+export function changesRequested(s: State, featureId: string, commitId: string): boolean {
+  return s.feedback.some((f) => f.featureId === featureId && f.commitId === commitId && CHANGE_REQUESTS.includes(f.kind));
 }
 
 export function displayName(s: State, commitId: string): string {
