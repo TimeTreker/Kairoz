@@ -1,5 +1,5 @@
 import { PlusOutlined } from '@ant-design/icons';
-import { Button, Card, Checkbox, Col, Descriptions, Form, Input, Modal, Row, Select, Space, Table, Tabs, Tag, Tree, Typography } from 'antd';
+import { Button, Card, Checkbox, Col, Descriptions, Form, Input, Modal, Popconfirm, Row, Select, Space, Table, Tabs, Tag, Tree, Typography } from 'antd';
 import type { TreeDataNode } from 'antd';
 import { useState } from 'react';
 import type { Key } from 'react';
@@ -323,9 +323,17 @@ export function OrgPage() {
                       render: (_, r) =>
                         canAccounts &&
                         r.status === 'ACTIVE' && (
-                          <Button size="small" type="link" danger onClick={() => run((c) => archiveGrantRule(c, r.id), L('已停用；成员立即失去这条基础权限', 'Deactivated; members lose this base right at once'))}>
-                            {L('停用', 'Deactivate')}
-                          </Button>
+                          <Popconfirm
+                            title={L('停用这条授权规则？', 'Deactivate this grant rule?')}
+                            description={L('覆盖的成员立即失去这条基础权限。', 'Its members lose this base right at once.')}
+                            okText={L('停用', 'Deactivate')}
+                            okButtonProps={{ danger: true }}
+                            onConfirm={() => run((c) => archiveGrantRule(c, r.id), L('已停用；成员立即失去这条基础权限', 'Deactivated; members lose this base right at once'))}
+                          >
+                            <Button size="small" type="link" danger>
+                              {L('停用', 'Deactivate')}
+                            </Button>
+                          </Popconfirm>
                         ),
                     },
                   ]}

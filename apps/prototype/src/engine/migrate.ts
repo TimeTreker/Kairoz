@@ -259,6 +259,15 @@ function to22(s: Saved): void {
 
 const STEPS: Record<number, (s: Saved) => void> = { 6: to7, 7: to8, 8: to9, 9: to10, 10: to11, 11: to12, 12: to13, 13: to14, 14: to15, 15: to16, 16: to17, 17: to18, 18: to19, 19: to20, 20: to21, 21: to22 };
 
+/** Why `migrate` cannot read a save: not a platform state, older than the oldest readable schema, or from a newer version. */
+export function unreadableReason(raw: unknown): 'NOT_STATE' | 'TOO_OLD' | 'NEWER' | null {
+  const schema = raw && typeof raw === 'object' ? (raw as Saved).schema : undefined;
+  if (typeof schema !== 'number') return 'NOT_STATE';
+  if (schema < OLDEST_MIGRATABLE) return 'TOO_OLD';
+  if (schema > STATE_SCHEMA) return 'NEWER';
+  return null;
+}
+
 /** The state at the current schema, or null when it cannot be read or is too old. Mutates `raw`. */
 export function migrate(raw: unknown): State | null {
   if (!raw || typeof raw !== 'object') return null;

@@ -1,5 +1,5 @@
 import { PlusOutlined } from '@ant-design/icons';
-import { Alert, Button, Card, Form, Input, InputNumber, Modal, Popconfirm, Select, Space, Table, Tag, Typography } from 'antd';
+import { Alert, Button, Card, Form, Input, InputNumber, Modal, Popconfirm, Select, Space, Table, Tag, Tooltip, Typography } from 'antd';
 import { useState } from 'react';
 import { useCan, useRun } from '../../app/hooks.ts';
 import { useEngineState } from '../../app/store.ts';
@@ -43,9 +43,11 @@ export function PoliciesTab({ feature }: { feature: Feature }) {
       title={L('业务采集策略', 'Collection policies')}
       extra={
         canEdit && (
-          <Button icon={<PlusOutlined />} onClick={() => open('new')} disabled={Object.keys(files).length === 0}>
-            {L('添加策略', 'Add policy')}
-          </Button>
+          <Tooltip title={Object.keys(files).length === 0 ? L('策略只采集文件列表里的文件：先添加文件或引用。', 'A policy captures files from the file list: add a file or a reference first.') : undefined}>
+            <Button icon={<PlusOutlined />} onClick={() => open('new')} disabled={Object.keys(files).length === 0}>
+              {L('添加策略', 'Add policy')}
+            </Button>
+          </Tooltip>
         )
       }
     >

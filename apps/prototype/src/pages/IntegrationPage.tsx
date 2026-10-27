@@ -9,7 +9,8 @@ import { navigate } from '../app/router.ts';
 import { setSession, useEngineState } from '../app/store.ts';
 import { DiffView } from '../components/DiffView.tsx';
 import { ApplicabilityChecks } from '../components/applicability.tsx';
-import { FeatureName, Hint, LabelTag, Mono, PageHeader, ShortId, StageTag, when } from '../components/common.tsx';
+import { FeatureName, Hint, LabelTag, Mono, Numbered, PageHeader, ShortId, StageTag, when } from '../components/common.tsx';
+import { planNumber } from '../engine/labels.ts';
 import { ResourceCheck } from '../components/budget.tsx';
 import { PatchedTag, TargetSet, patchTargetLabel } from '../components/patch.tsx';
 import { TechnicalTag } from '../components/technical.tsx';
@@ -147,7 +148,9 @@ export function IntegrationPage({ target }: { target?: string }) {
               <Flex key={p.id} justify="space-between" align="center" style={{ padding: '8px 0', borderBottom: '1px solid #f0f0f0' }}>
                 <Space>
                   <Typography.Text>{state.workspaces[p.workspaceId]?.name}</Typography.Text>
-                  <Mono>{p.id}</Mono>
+                  <span>
+                    {L('合并预览', 'Merge preview')} <Numbered n={planNumber(state, p)} id={p.id} />
+                  </span>
                   <Typography.Text type="secondary">{when(p.createdAt)}</Typography.Text>
                 </Space>
                 {access.some((a) => a.workspaceId === p.workspaceId) && (
@@ -410,7 +413,7 @@ function MergeTab({ projectId, onCandidate }: { projectId: string; onCandidate: 
             pagination={{ pageSize: 5, hideOnSinglePage: true }}
             dataSource={plans.slice(0, -1).reverse()}
             columns={[
-              { title: L('预览', 'Preview'), render: (_, p) => <Mono>{p.id}</Mono> },
+              { title: L('预览', 'Preview'), render: (_, p) => <Numbered n={planNumber(state, p)} id={p.id} /> },
               { title: L('状态', 'Status'), render: (_, p) => <LabelTag map={PLAN_STATUS_LABELS} value={planStatus(state, p)} color={PLAN_STATUS_COLORS[planStatus(state, p)]} /> },
               { title: L('来源', 'Sources'), render: (_, p) => sourceNames(state, p).join(', ') },
               { title: L('冲突 / 问题', 'Conflicts / issues'), render: (_, p) => `${p.conflicts.length} / ${p.issues.length}` },
@@ -481,7 +484,7 @@ function PlanCard({ plan, onCandidate }: { plan: MergePlan; onCandidate: (id: st
       title={
         <Space>
           {L('合并预览', 'Merge preview')}
-          <Mono>{plan.id}</Mono>
+          <Numbered n={planNumber(state, plan)} id={plan.id} />
           <LabelTag map={PLAN_STATUS_LABELS} value={status} color={PLAN_STATUS_COLORS[status]} />
         </Space>
       }

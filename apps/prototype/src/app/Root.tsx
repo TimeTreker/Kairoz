@@ -5,6 +5,7 @@ import { I18nProvider, useI18n } from '../i18n/i18n.tsx';
 import { LoginPage } from '../pages/LoginPage.tsx';
 import { useActor } from './hooks.ts';
 import { Shell } from './Shell.tsx';
+import { StorageBanner } from './StorageBanner.tsx';
 
 function Themed() {
   const { lang } = useI18n();
@@ -14,7 +15,10 @@ function Themed() {
       locale={lang === 'zh' ? zhCN : enUS}
       theme={{ algorithm: theme.defaultAlgorithm, token: { colorPrimary: '#2865e8', borderRadius: 8 } }}
     >
-      <AntApp>{actor ? <Shell /> : <LoginPage />}</AntApp>
+      <AntApp>
+        <StorageBanner />
+        {actor ? <Shell /> : <LoginPage />}
+      </AntApp>
     </ConfigProvider>
   );
 }

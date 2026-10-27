@@ -1,5 +1,5 @@
 import { MinusCircleOutlined, PlusOutlined } from '@ant-design/icons';
-import { Button, Card, Checkbox, Form, Input, Modal, Select, Space, Switch, Table, Tag, Typography } from 'antd';
+import { Button, Card, Checkbox, Form, Input, Modal, Popconfirm, Select, Space, Switch, Table, Tag, Typography } from 'antd';
 import { useState } from 'react';
 import { useCan, useRun } from '../app/hooks.ts';
 import { useEngineState } from '../app/store.ts';
@@ -139,7 +139,17 @@ export function AccountsPage() {
             },
             {
               title: L('启用', 'Active'),
-              render: (_, a) => <Switch checked={a.status === 'ACTIVE'} disabled={!canManage} onChange={(on) => run((c) => updateAccount(c, a.username, { status: on ? 'ACTIVE' : 'DISABLED' }))} />,
+              render: (_, a) => (
+                <Popconfirm
+                  title={a.status === 'ACTIVE' ? L(`停用 ${a.displayName}？`, `Disable ${a.displayName}?`) : L(`启用 ${a.displayName}？`, `Enable ${a.displayName}?`)}
+                  description={a.status === 'ACTIVE' ? L('账号立即无法登录，所有授权随之失效。', 'The account can no longer sign in and its grants stop at once.') : undefined}
+                  disabled={!canManage}
+                  okButtonProps={{ danger: a.status === 'ACTIVE' }}
+                  onConfirm={() => run((c) => updateAccount(c, a.username, { status: a.status === 'ACTIVE' ? 'DISABLED' : 'ACTIVE' }), a.status === 'ACTIVE' ? L('已停用', 'Disabled') : L('已启用', 'Enabled'))}
+                >
+                  <Switch checked={a.status === 'ACTIVE'} disabled={!canManage} />
+                </Popconfirm>
+              ),
             },
             { title: '', render: (_, a) => canManage && <Button type="link" onClick={() => open(a.username)}>{L('编辑', 'Edit')}</Button> },
           ]}

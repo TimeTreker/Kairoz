@@ -200,9 +200,11 @@ export function FilesTab({ feature }: { feature: Feature }) {
         title={L('只读引用（其他分组的文件）', 'Read-only references (other groups’ files)')}
         extra={
           canEdit && (
-            <Button icon={<PlusOutlined />} onClick={() => setReferencing(true)} disabled={catalog.length === 0}>
-              {L('添加引用', 'Add reference')}
-            </Button>
+            <Tooltip title={catalog.length === 0 ? L('还没有获授权可引用的数据：先在“数据目录与引用”中申请。', 'No granted data to reference yet: request some under “Data & references” first.') : undefined}>
+              <Button icon={<PlusOutlined />} onClick={() => setReferencing(true)} disabled={catalog.length === 0}>
+                {L('添加引用', 'Add reference')}
+              </Button>
+            </Tooltip>
           )
         }
       >

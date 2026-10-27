@@ -92,6 +92,15 @@ export function ValidationTab({ feature }: { feature: Feature }) {
         </Hint>
         {feature.headCommitId && <Typography.Paragraph><Mono>{displayName(state, feature.headCommitId)}</Mono></Typography.Paragraph>}
         {!dispatchable && <Alert type="info" showIcon title={L('Feature 达到 DCL Ready 后才能下发。', 'Dispatch becomes available once the Feature is DCL Ready.')} />}
+        {dispatchable && vehicleGroups.length === 0 && (can('feature.dispatch', target('development')) || can('feature.dispatch', target('testing'))) && (
+          <Alert
+            type="warning"
+            showIcon
+            style={{ marginBottom: 12 }}
+            title={L(`本工作区没有服务 ${group.name} 的研发或测试车辆组，暂不能下发。`, `No development or testing vehicle group serves ${group.name} in this workspace, so nothing can be dispatched yet.`)}
+            description={L('请工作区管理员在“车辆与车辆组”中为本组建立车辆组并加入车辆。', 'Ask the workspace admin to create a vehicle group for the group under Vehicles & groups and add vehicles.')}
+          />
+        )}
         {feature.stage === 'TESTING' && blockers.length > 0 && (
           <Alert type="warning" showIcon style={{ marginBottom: 12 }} title={L('尚不能确认验证通过', 'Not verifiable yet')} description={blockers.map((x) => B(issueLabel(x), x)).join(L('；', '; '))} />
         )}

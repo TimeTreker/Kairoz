@@ -21,6 +21,7 @@ import { borrowedBy, lentBy, loansToAgree, loansToApprove, managedLoans } from '
 import { orphanedOrgObjects } from './org.ts';
 import { otaRollouts } from './ota.ts';
 import { setInEffect } from './release.ts';
+import { deploymentNumber, planNumber } from './labels.ts';
 import { referenceRequestsFor } from './references.ts';
 import { assessSoftwareChange, softwareChangesFor, unrecordedReports } from './software-change.ts';
 import type { State } from './types.ts';
@@ -231,7 +232,7 @@ export function notificationsFor(s: State, actor: Actor, workspaceId: string): N
       add('DCL_ENGINEER', 'OVERLAP_REVIEW', [item.dataKey, item.status], { severity: 'INFO', subject: item.dataCode, detail: s.groups[item.ownerGroupId]?.code ?? item.ownerGroupId, link: 'intake', at: item.createdAt });
     }
     for (const p of Object.values(s.mergePlans).filter((x) => x.workspaceId === workspaceId && x.status === 'READY' && !isConfirmed(s, x))) {
-      add('DCL_ENGINEER', 'PROCESSING_CONFIRM', [p.id, p.digest], { severity: 'INFO', subject: p.id, detail: null, link: 'integration/merge', at: p.createdAt });
+      add('DCL_ENGINEER', 'PROCESSING_CONFIRM', [p.id, p.digest], { severity: 'INFO', subject: `#${planNumber(s, p)}`, detail: null, link: 'integration/merge', at: p.createdAt });
     }
     for (const x of emergencyStopsOf(s, ws.vehicleModelId).filter((x) => x.requestedBy === actor.username && x.status !== 'REQUESTED' && fresh(x.decidedAt))) {
       add('DCL_ENGINEER', 'EMERGENCY_STOP', [x.id, x.status], { severity: 'INFO', subject: x.policyId, detail: x.status, link: 'release', at: x.decidedAt });
@@ -301,7 +302,7 @@ export function notificationsFor(s: State, actor: Actor, workspaceId: string): N
       add('CONFIG_INTEGRATOR', 'FEATURE_COLLECTIBLE', [f.id, f.verifiedCommitId], { severity: 'INFO', subject: f.name, detail: s.groups[f.groupId]?.code ?? f.groupId, link: 'integration/merge', at: f.updatedAt });
     }
     for (const p of Object.values(s.mergePlans).filter((x) => x.workspaceId === workspaceId && (x.status === 'CONFLICT' || x.status === 'BLOCKED'))) {
-      add('CONFIG_INTEGRATOR', 'MERGE_BLOCKED', [p.id, p.status, p.digest], { severity: 'WARNING', subject: p.id, detail: p.status, link: 'integration/merge', at: p.createdAt });
+      add('CONFIG_INTEGRATOR', 'MERGE_BLOCKED', [p.id, p.status, p.digest], { severity: 'WARNING', subject: `#${planNumber(s, p)}`, detail: p.status, link: 'integration/merge', at: p.createdAt });
     }
   }
   if (has('INTEGRATION_TEST')) {
@@ -325,7 +326,7 @@ export function notificationsFor(s: State, actor: Actor, workspaceId: string): N
         add('CONFIG_RELEASE', 'EMERGENCY_STOP', [x.id, x.status], { severity: 'WARNING', subject: x.policyId, detail: x.status, link: 'release', at: x.requestedAt });
       }
       for (const d of otaRollouts(s).filter((x) => s.workspaces[x.workspaceId]?.vehicleModelId === ws.vehicleModelId && x.status === 'PAUSED')) {
-        add('CONFIG_RELEASE', 'ROLLOUT_PAUSED', [d.id, d.status, d.pauseReason ?? null], { severity: 'WARNING', subject: d.id, detail: d.pauseReason ?? null, link: 'release/ota', at: d.updatedAt });
+        add('CONFIG_RELEASE', 'ROLLOUT_PAUSED', [d.id, d.status, d.pauseReason ?? null], { severity: 'WARNING', subject: `${s.releases[d.subjectId]?.dclVersion ?? ''} · #${deploymentNumber(s, d)}`, detail: d.pauseReason ?? null, link: 'release/ota', at: d.updatedAt });
       }
       for (const r of blockedProductionVehicles(s, ws.vehicleModelId)) {
         add('CONFIG_RELEASE', 'PRODUCTION_BLOCKED', [r.id, r.integrationVersion], { severity: 'WARNING', subject: r.id, detail: r.integrationVersion, link: 'release/applicability', at: r.updatedAt });

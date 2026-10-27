@@ -9,7 +9,8 @@ import { navigate } from '../app/router.ts';
 import { setSession, useEngineState } from '../app/store.ts';
 import { ApplicabilityChecks, ReleaseDiffDrawer, SoftwareVersionsCard } from '../components/applicability.tsx';
 import { EmergencyStopsCard, RequestStopModal } from '../components/emergency.tsx';
-import { EnvTag, Hint, LabelTag, Mono, PageHeader, ShortId, configName, when } from '../components/common.tsx';
+import { EnvTag, Hint, LabelTag, Mono, Numbered, PageHeader, ShortId, configName, when } from '../components/common.tsx';
+import { deploymentNumber } from '../engine/labels.ts';
 import { JsonExportModal, downloadJson } from '../components/JsonExport.tsx';
 import { LineTag, TargetSet } from '../components/patch.tsx';
 import { PromoteModal } from '../components/promote.tsx';
@@ -243,6 +244,7 @@ function ReleasesTab({ modelId, workspaceId }: { modelId: string; workspaceId: s
                     <Tooltip key={v} title={[r.vehicleIntegrationVersions.includes(v) ? null : L('经适用性确认追加', 'added by an applicability check'), effective ? null : L('已由更新的策略集生效', 'a newer set is in effect')].filter(Boolean).join(L('；', '; ')) || undefined}>
                       <Tag color={r.vehicleIntegrationVersions.includes(v) ? undefined : 'blue'} style={effective ? undefined : { textDecoration: 'line-through', opacity: 0.6 }}>
                         {`${r.vehicleModelId} ${v}`}
+                        {effective ? '' : L(' · 已被取代', ' · superseded')}
                       </Tag>
                     </Tooltip>
                   );
@@ -309,9 +311,19 @@ function OtaTab({ projectId }: { projectId: string }) {
         title={`${L('量产车辆', 'Production vehicles')} · ${project.name}`}
         extra={
           canManage && (
-            <Button type="primary" disabled={vehicles.length === 0 || releasesOf(state, project.vehicleModelId).length === 0} onClick={() => setCreating(true)}>
-              {L('新建配置 OTA', 'New rollout')}
-            </Button>
+            <Tooltip
+              title={
+                vehicles.length === 0
+                  ? L('本工作区还没有量产车辆。', 'This workspace has no production vehicles yet.')
+                  : releasesOf(state, project.vehicleModelId).length === 0
+                    ? L('还没有发布的策略集。', 'No policy set is released yet.')
+                    : undefined
+              }
+            >
+              <Button type="primary" disabled={vehicles.length === 0 || releasesOf(state, project.vehicleModelId).length === 0} onClick={() => setCreating(true)}>
+                {L('新建配置 OTA', 'New rollout')}
+              </Button>
+            </Tooltip>
           )
         }
       >
@@ -571,10 +583,10 @@ function RolloutCard({ deployment: d, canManage }: { deployment: Deployment; can
       }
     >
       <Descriptions size="small" column={{ xs: 1, md: 3 }}>
-        <Descriptions.Item label={L('下发', 'Rollout')}><Mono>{d.id}</Mono></Descriptions.Item>
+        <Descriptions.Item label={L('配置 OTA', 'Rollout')}><Numbered n={deploymentNumber(state, d)} id={d.id} /></Descriptions.Item>
         <Descriptions.Item label={L('发起', 'By')}>{`${state.accounts[d.dispatchedBy]?.displayName} · ${when(d.createdAt)}`}</Descriptions.Item>
         <Descriptions.Item label={L('车辆组', 'Groups')}>{d.vehicleGroupIds.map((g) => state.vehicleGroups[g]?.name).join(', ')}</Descriptions.Item>
-        {d.rollbackOf && <Descriptions.Item label={L('回滚自', 'Rolls back')}><Mono>{d.rollbackOf}</Mono></Descriptions.Item>}
+        {d.rollbackOf && state.deployments[d.rollbackOf] && <Descriptions.Item label={L('回滚自', 'Rolls back')}><Numbered n={deploymentNumber(state, state.deployments[d.rollbackOf]!)} id={d.rollbackOf} /></Descriptions.Item>}
         {(d.pauseReason || d.status === 'PAUSED') && (
           <Descriptions.Item label={L('原因', 'Reason')}>{d.pauseReason ?? L('车辆应用失败，已自动暂停', 'Paused automatically after a vehicle failed')}</Descriptions.Item>
         )}

@@ -11,7 +11,7 @@ Kairoz 是数据采集平台的**可运行产品原型**：全部业务状态和
 | 层 | 选择 |
 |---|---|
 | 界面 | React 19、Ant Design 6、Vite 8 |
-| 状态 | immer 事务；整份状态保存在 localStorage（`kairoz.state.v1`），会话单独保存 |
+| 状态 | immer 事务；整份状态保存在 localStorage（`kairoz.state.v1`），会话单独保存；保存失败时页面顶部提示，读不出的已保存状态另存（`kairoz.state.unreadable.v1`）后载入演示数据 |
 | 摘要 | `@noble/hashes` 的 SHA-256（内容寻址与配置摘要） |
 | 语言 | TypeScript 7，只用可擦除语法，Node 24 直接运行测试 |
 | 测试 | `node:test`，只测规则与引擎，不依赖浏览器 |

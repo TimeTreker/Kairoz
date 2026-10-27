@@ -1,5 +1,5 @@
 import { MinusCircleOutlined, PlusOutlined } from '@ant-design/icons';
-import { Button, Card, Col, Collapse, Empty, Form, Input, InputNumber, Modal, Row, Select, Space, Switch, Table, Tabs, Tag, Timeline, Tooltip, Typography } from 'antd';
+import { Button, Card, Col, Collapse, Empty, Form, Input, InputNumber, Modal, Popconfirm, Row, Select, Space, Switch, Table, Tabs, Tag, Timeline, Tooltip, Typography } from 'antd';
 import { useState } from 'react';
 import { useActor, useCan, useRun, useWorkspace } from '../app/hooks.ts';
 import { engine, useEngineState } from '../app/store.ts';
@@ -248,9 +248,17 @@ function WorkspaceVehicles() {
             )}
             <PauseButton resourceId={r.id} />
             {manages(r) && !activeLoanOf(state, r.id) && (
-              <Button type="link" size="small" danger onClick={() => run((c) => removeWorkspaceVehicle(c, workspace.id, r.id), L('已移出工作区', 'Removed from the workspace'))}>
-                {L('移出', 'Remove')}
-              </Button>
+              <Popconfirm
+                title={L(`把 ${r.id} 移出本工作区？`, `Remove ${r.id} from this workspace?`)}
+                description={L('车辆回到资源池；本工作区之后不能再向它下发。', 'It returns to the resource pool; this workspace can no longer dispatch to it.')}
+                okText={L('移出', 'Remove')}
+                okButtonProps={{ danger: true }}
+                onConfirm={() => run((c) => removeWorkspaceVehicle(c, workspace.id, r.id), L('已移出工作区', 'Removed from the workspace'))}
+              >
+                <Button type="link" size="small" danger>
+                  {L('移出', 'Remove')}
+                </Button>
+              </Popconfirm>
             )}
           </Space>
         )}
@@ -404,9 +412,17 @@ function VehicleGroups() {
                         </Tooltip>
                       )}
                       {members.length === 0 && (
-                        <Button size="small" danger onClick={() => run((c) => archiveVehicleGroup(c, g.id, L('不再使用', 'No longer used')), L('已归档', 'Archived'))}>
-                          {L('归档', 'Archive')}
-                        </Button>
+                        <Popconfirm
+                          title={L(`归档车辆组 ${g.name}？`, `Archive vehicle group ${g.name}?`)}
+                          description={L('归档后不能再向它加入车辆或下发；记录保留。', 'It takes no more vehicles or dispatches; its records stay.')}
+                          okText={L('归档', 'Archive')}
+                          okButtonProps={{ danger: true }}
+                          onConfirm={() => run((c) => archiveVehicleGroup(c, g.id, '不再使用 / No longer used'), L('已归档', 'Archived'))}
+                        >
+                          <Button size="small" danger>
+                            {L('归档', 'Archive')}
+                          </Button>
+                        </Popconfirm>
                       )}
                     </Space>
                   )

@@ -12,7 +12,8 @@ import type { TargetStatus } from '../engine/validation.ts';
 import { useI18n } from '../i18n/i18n.tsx';
 import { issueLabel } from '../i18n/issues.ts';
 import { DELIVERY_STATE_COLORS, DELIVERY_STATE_LABELS, DEPLOYMENT_STATUS_LABELS, DEPLOYMENT_TRIGGER_LABELS, RESOURCE_TYPE_LABELS } from '../i18n/vocab.ts';
-import { EnvTag, Hint, LabelTag, Mono, configName, when } from './common.tsx';
+import { EnvTag, Hint, LabelTag, Mono, Numbered, configName, when } from './common.tsx';
+import { deploymentNumber } from '../engine/labels.ts';
 
 /** Test targets of one version with their apply state and latest result. */
 export function TargetsTable({ status, action }: { status: TargetStatus[]; action: (t: TargetStatus) => ReactNode }) {
@@ -112,7 +113,7 @@ export function DeploymentsTable({
     <>
       <Modal
         open={!!cancelling}
-        title={`${L('取消下发', 'Cancel dispatch')} · ${cancelling?.id ?? ''}`}
+        title={`${L('取消下发', 'Cancel dispatch')}${cancelling ? ` · #${deploymentNumber(state, cancelling)}` : ''}`}
         okText={L('取消下发', 'Cancel dispatch')}
         okButtonProps={{ danger: true, disabled: !reason.trim() }}
         cancelText={L('返回', 'Back')}
@@ -162,7 +163,7 @@ export function DeploymentsTable({
           ),
         }}
         columns={[
-          { title: L('下发', 'Dispatch'), render: (_, d) => <Mono>{d.id}</Mono> },
+          { title: L('下发', 'Dispatch'), render: (_, d) => <Numbered n={deploymentNumber(state, d)} id={d.id} /> },
           { title: L('配置', 'Configuration'), render: (_, d) => <Mono>{B(configName(state, d.resolvedConfigId))}</Mono> },
           { title: L('环境', 'Env'), render: (_, d) => <EnvTag env={d.env} /> },
           { title: L('状态', 'Status'), render: (_, d) => <LabelTag map={DEPLOYMENT_STATUS_LABELS} value={d.status} /> },

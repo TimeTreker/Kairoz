@@ -151,7 +151,10 @@ export function SoftwareVersionsCard({ modelId }: { modelId: string }) {
                 <Space size={4} wrap>
                   {m ? (
                     <Tooltip title={L('刷这个版本的量产车随软件生效，不依赖网络', 'Production vehicles flashed with it run it with the software, no network needed')}>
-                      <Tag color={m.releaseId === set?.id ? 'green' : 'orange'}>{B(setName(state.releases[m.releaseId]!.dclVersion))}</Tag>
+                      <Tag color={m.releaseId === set?.id ? 'green' : 'orange'}>
+                        {B(setName(state.releases[m.releaseId]!.dclVersion))}
+                        {m.releaseId === set?.id ? '' : L(' · 非当前', ' · not current')}
+                      </Tag>
                     </Tooltip>
                   ) : (
                     '—'
@@ -169,7 +172,15 @@ export function SoftwareVersionsCard({ modelId }: { modelId: string }) {
             title: L('量产车', 'Production vehicles'),
             render: (_, v) => {
               const list = production(v.version);
-              return list.length ? <Typography.Text type={setInEffect(state, modelId, v.version) ? undefined : 'danger'}>{list.map((r) => r.id).join(', ')}</Typography.Text> : '—';
+              const blocked = !setInEffect(state, modelId, v.version);
+              return list.length ? (
+                <Typography.Text type={blocked ? 'danger' : undefined}>
+                  {list.map((r) => r.id).join(', ')}
+                  {blocked ? L('（无适用策略集，被阻止）', ' (no set applies: blocked)') : ''}
+                </Typography.Text>
+              ) : (
+                '—'
+              );
             },
           },
           {

@@ -122,7 +122,7 @@ export function useNotificationText() {
       case 'OVERLAP_REVIEW':
         return { title: L(`${s} 的来源与其他文件重叠`, `${s} overlaps another source`), body: L('判定为不同数据或重复。', 'Decide whether it is distinct data or a duplicate.') };
       case 'PROCESSING_CONFIRM':
-        return { title: L('合并预览等待确认最终处理集合', 'A merge preview waits for the processing confirmation'), body: s };
+        return { title: L('合并预览等待确认最终处理集合', 'A merge preview waits for the processing confirmation'), body: L(`合并预览 ${s}`, `Merge preview ${s}`) };
       case 'FEATURE_COLLECTIBLE':
         return { title: L(`${s} 可进入集成`, `${s} can be collected`), body: L(`分组 ${d} 的已验证提交。`, `Verified commit of group ${d}.`) };
       case 'MERGE_BLOCKED':
@@ -148,7 +148,7 @@ export function useNotificationText() {
           ? { title: L(`${s} 紧急停用待批准`, `Emergency stop of ${s} to decide`), body: L('由另一名配置发布批准或驳回。', 'Another config release person approves or rejects it.') }
           : { title: d === 'APPROVED' ? L(`${s} 紧急停用已批准`, `Emergency stop of ${s} approved`) : L(`${s} 紧急停用被驳回`, `Emergency stop of ${s} rejected`), body: '' };
       case 'ROLLOUT_PAUSED':
-        return { title: L(`OTA ${s} 已暂停`, `Rollout ${s} paused`), body: d };
+        return { title: L(`配置 OTA 策略集 ${s} 已暂停`, `Rollout of policy set ${s} paused`), body: d ?? L('车辆应用失败，已自动暂停', 'Paused automatically after a vehicle failed') };
       case 'PRODUCTION_BLOCKED':
         return { title: L(`量产车 ${s} 被阻止`, `Production vehicle ${s} is blocked`), body: L(`软件 ${d} 没有适用的策略集。`, `No policy set applies to software ${d}.`) };
       case 'MODULE_OUTDATED': {
@@ -284,6 +284,7 @@ function NotificationRow({ n, read, onOpen, onRead }: { n: Notification; read: b
         )}
         <div>
           <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+            {n.severity === 'WARNING' ? `${L('需处理', 'Action needed')} · ` : ''}
             {categories[NOTIFICATION_CATEGORY[n.kind]]}
             {n.at ? ` · ${when(n.at)}` : ''}
             {read ? ` · ${L('已读', 'read')}` : ''}

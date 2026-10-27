@@ -31,14 +31,28 @@ export function Mono({ children, copy = false }: { children: ReactNode; copy?: b
   );
 }
 
+/** A record known by its number (#3), its id on hover. */
+export function Numbered({ n, id }: { n: number; id: string }) {
+  return (
+    <Tooltip title={<span className="kz-mono">{id}</span>}>
+      <Typography.Text className="kz-mono">#{n}</Typography.Text>
+    </Tooltip>
+  );
+}
+
 /** A shortened id/digest with the full value on hover. */
-export function ShortId({ value, size = 14 }: { value: string | null | undefined; size?: number }) {
+export function ShortId({ value, size = 14, copy = false }: { value: string | null | undefined; size?: number; copy?: boolean }) {
   if (!value) return <Typography.Text type="secondary">—</Typography.Text>;
   const short = value.length > size ? `${value.slice(0, size)}…` : value;
   return (
-    <Tooltip title={<span className="kz-mono">{value}</span>}>
-      <Typography.Text className="kz-mono">{short}</Typography.Text>
-    </Tooltip>
+    // Copying inside a clickable row must not open the row.
+    <span onClick={copy ? (e) => e.stopPropagation() : undefined}>
+      <Tooltip title={<span className="kz-mono">{value}</span>}>
+        <Typography.Text className="kz-mono" copyable={copy ? { text: value } : false}>
+          {short}
+        </Typography.Text>
+      </Tooltip>
+    </span>
   );
 }
 

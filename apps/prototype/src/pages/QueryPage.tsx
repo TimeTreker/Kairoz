@@ -9,7 +9,7 @@ import { useEngineState } from '../app/store.ts';
 import { JsonExportModal, downloadJson } from '../components/JsonExport.tsx';
 import type { JsonFile } from '../components/JsonExport.tsx';
 import { AfterSalesRequests, CaptureSourceTag } from '../components/aftersales.tsx';
-import { EnvTag, Hint, LabelTag, Mono, PageHeader, when } from '../components/common.tsx';
+import { EnvTag, Hint, LabelTag, Mono, PageHeader, ShortId, when } from '../components/common.tsx';
 import { displayName } from '../engine/config.ts';
 import { aftersalesQuery, carriesData, eventTarget, exportManifest, reprocessEvent, trainingQuery } from '../engine/events.ts';
 import type { AftersalesFilter, TrainingFilter } from '../engine/events.ts';
@@ -109,7 +109,7 @@ function AftersalesTab({ workspaceId }: { workspaceId: string }) {
             render: (_, e) => (
               <Space orientation="vertical" size={0}>
                 <span>{e.policyName}</span>
-                <Mono>{e.id.slice(0, 16)}…</Mono>
+                <ShortId value={e.id} size={16} copy />
               </Space>
             ),
           },
@@ -301,7 +301,7 @@ function TrainingTab({ workspaceId }: { workspaceId: string }) {
         rowSelection={{ selectedRowKeys: chosen, onChange: (keys) => setSelected(keys as string[]), getCheckboxProps: (t) => ({ disabled: t.blockers.length > 0 }) }}
         locale={{ emptyText: L('没有授权范围内的可选用数据', 'No selectable data within your grants') }}
         columns={[
-          { title: L('事件', 'Event'), render: (_, t) => <Mono>{`${t.eventId.slice(0, 16)}…`}</Mono> },
+          { title: L('事件', 'Event'), render: (_, t) => <ShortId value={t.eventId} size={16} copy /> },
           { title: L('场景 / 策略', 'Scenario / policy'), render: (_, t) => <Space orientation="vertical" size={0}><span>{t.scenario}</span><Mono>{t.policyId}</Mono></Space> },
           { title: L('车型 / 环境', 'Model / env'), render: (_, t) => <Space size={4}>{t.vehicleModelId}<EnvTag env={t.env} /></Space> },
           { title: L('时间', 'When'), render: (_, t) => when(t.occurredAt) },

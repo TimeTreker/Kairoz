@@ -3,7 +3,7 @@
 
 import { useCallback, useSyncExternalStore } from 'react';
 import { Engine } from '../engine/engine.ts';
-import { migrate } from '../engine/migrate.ts';
+import { migrate, unreadableReason } from '../engine/migrate.ts';
 import { cleanState, demoState } from '../engine/seed.ts';
 import { STATE_SCHEMA } from '../engine/types.ts';
 import type { State } from '../engine/types.ts';
@@ -19,29 +19,63 @@ function safeGet(key: string): string | null {
   }
 }
 
-function safeSet(key: string, value: string | null): void {
+/** Writes to the browser's storage; false when it is unavailable or full (the prototype still works in this tab). */
+function safeSet(key: string, value: string | null): boolean {
   try {
     if (value === null) localStorage.removeItem(key);
     else localStorage.setItem(key, value);
+    return true;
   } catch {
-    // Storage may be unavailable (private mode); the prototype still works for this tab.
+    return false;
   }
 }
+
+/**
+ * What went wrong with this browser's saved platform, shown as a banner. SAVE_FAILED: storage is
+ * unavailable or full, so changes last only until the page is closed. UNREADABLE_SAVE: the saved
+ * state could not be read (a newer version, or damaged); it is kept aside and the demo was loaded.
+ */
+export type StorageProblem = { kind: 'SAVE_FAILED' } | { kind: 'UNREADABLE_SAVE'; reason: 'NOT_STATE' | 'TOO_OLD' | 'NEWER' | 'DAMAGED'; raw: string };
+let storageProblem: StorageProblem | null = null;
+const problemListeners = new Set<() => void>();
+function setStorageProblem(p: StorageProblem | null): void {
+  storageProblem = p;
+  for (const l of problemListeners) l();
+}
+export function useStorageProblem(): StorageProblem | null {
+  return useSyncExternalStore(
+    useCallback((l: () => void) => {
+      problemListeners.add(l);
+      return () => problemListeners.delete(l);
+    }, []),
+    () => storageProblem,
+  );
+}
+export function dismissStorageProblem(): void {
+  setStorageProblem(null);
+}
+
+const UNREADABLE_KEY = 'kairoz.state.unreadable.v1';
 
 function loadState(): State {
   const raw = safeGet(STATE_KEY);
   if (raw) {
+    let reason: 'NOT_STATE' | 'TOO_OLD' | 'NEWER' | 'DAMAGED' = 'DAMAGED';
     try {
       const parsed = JSON.parse(raw) as { schema?: unknown };
       const upgraded = parsed.schema !== STATE_SCHEMA;
+      reason = unreadableReason(parsed) ?? 'DAMAGED';
       const state = migrate(parsed);
       if (state) {
         if (upgraded) safeSet(STATE_KEY, JSON.stringify(state));
         return state;
       }
     } catch {
-      // Fall through to a fresh demo.
+      // Not JSON, or a migration failed: damaged.
     }
+    // Keep what could not be read, so nothing is lost by loading the demo instead.
+    safeSet(UNREADABLE_KEY, raw);
+    storageProblem = { kind: 'UNREADABLE_SAVE', reason, raw };
   }
   // Save a fresh demo at once, so its ids (and links to them) survive a reload.
   const fresh = demoState();
@@ -52,7 +86,11 @@ function loadState(): State {
 let saveTimer: ReturnType<typeof setTimeout> | undefined;
 function persist(state: State): void {
   clearTimeout(saveTimer);
-  saveTimer = setTimeout(() => safeSet(STATE_KEY, JSON.stringify(state)), 150);
+  saveTimer = setTimeout(() => {
+    const saved = safeSet(STATE_KEY, JSON.stringify(state));
+    if (!saved && storageProblem?.kind !== 'SAVE_FAILED') setStorageProblem({ kind: 'SAVE_FAILED' });
+    if (saved && storageProblem?.kind === 'SAVE_FAILED') setStorageProblem(null);
+  }, 150);
 }
 
 export const engine = new Engine(loadState(), persist);
@@ -136,10 +174,25 @@ export function exportState(): string {
   return JSON.stringify(engine.getState(), null, 2);
 }
 
-export function importState(json: string): void {
-  const parsed = JSON.parse(json) as { schema?: unknown };
+export type StateText = { state: State } | { problem: 'JSON' | 'NOT_STATE' | 'TOO_OLD' | 'NEWER' };
+
+/** Reads an exported state (as text), at the current schema. */
+export function readStateText(json: string): StateText {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(json);
+  } catch {
+    return { problem: 'JSON' };
+  }
+  const reason = unreadableReason(parsed);
+  if (reason) return { problem: reason };
   const state = migrate(parsed);
-  if (!state) throw new Error(`unsupported state schema ${String(parsed.schema)}`);
+  return state ? { state } : { problem: 'NOT_STATE' };
+}
+
+/** Replaces this browser's platform with an imported one; everyone signs in again. */
+export function importState(state: State): void {
   engine.replace(state);
+  safeSet(LAST_WORKSPACE_KEY, null);
   setSession({ username: null, workspaceId: null });
 }
