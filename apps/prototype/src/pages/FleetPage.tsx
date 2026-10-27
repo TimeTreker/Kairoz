@@ -874,14 +874,22 @@ function Registry() {
           })
         }
       >
-        <Hint>{L('确认软件版本不等于刷写或配置生效。', 'Confirming software is neither flashing nor applying a configuration.')}</Hint>
+        <Hint>
+          {confirming?.env === 'production'
+            ? L('确认软件版本不等于刷写。该版本的 OTA 包若带 DCL 配置模块，量产车的配置随软件一起生效，不必等云端推送；规划中的版本不能用于量产车。', 'Confirming software is not flashing it. If the version’s OTA package carries a DCL module, a production vehicle runs that set with the software, without a cloud push; planned versions are not for production vehicles.')
+            : L('确认软件版本不等于刷写或配置生效。规划中的版本是集成征集测试用的预发布软件。', 'Confirming software is neither flashing nor applying a configuration. Planned versions are pre-release builds tested for an integration call.')}
+        </Hint>
         <Form form={vf} name="software" layout="vertical">
           <Form.Item name="version" label={L('整车版本（留空 = 未知）', 'Software version (blank = unknown)')}>
             <Select
               allowClear
               options={Object.values(state.softwareVersions)
                 .filter((v) => v.vehicleModelId === confirming?.vehicleModelId)
-                .map((v) => ({ value: v.version, label: `${v.vehicleModelId} ${v.version}` }))}
+                .map((v) => ({
+                  value: v.version,
+                  disabled: v.status === 'PLANNED' && confirming?.env === 'production',
+                  label: `${v.vehicleModelId} ${v.version}${v.status === 'PLANNED' ? L('（规划中）', ' (planned)') : ''}${v.dclModule ? L(` · 包内 ${state.releases[v.dclModule.releaseId]?.dclVersion}`, ` · bundles ${state.releases[v.dclModule.releaseId]?.dclVersion}`) : ''}`,
+                }))}
             />
           </Form.Item>
           <Form.Item name="source" label={L('可信来源', 'Trusted source')} rules={[{ required: true }]}>
@@ -1141,7 +1149,7 @@ function Catalogs() {
                   allowClear
                   options={Object.values(state.softwareVersions)
                     .filter((v) => v.vehicleModelId === model)
-                    .map((v) => ({ value: v.version, label: `${v.vehicleModelId} ${v.version}` }))}
+                    .map((v) => ({ value: v.version, label: `${v.vehicleModelId} ${v.version}${v.status === 'PLANNED' ? L('（规划中，预发布软件）', ' (planned, pre-release)') : ''}` }))}
                 />
               </Form.Item>
               <Form.Item name="build" label="Build" rules={[{ required: true }]}>

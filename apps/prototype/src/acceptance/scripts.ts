@@ -3731,6 +3731,206 @@ export const SCRIPTS: Script[] = [
         "fail": "拒绝不改变任何状态。"
       }
     ]
+  },
+  {
+    "id": "integration-call",
+    "name": "集成征集与发布记录 · 整车集成版本的发布管理",
+    "start": "demo",
+    "scenes": [
+      {
+        "id": "IC01",
+        "title": "集成管理员为 X89 1.2 发起集成征集",
+        "actor": "integration_admin / 郑书杰 · 工作区管理员",
+        "accounts": [
+          "integration_admin",
+          "integration_tester",
+          "release",
+          "resource"
+        ],
+        "workspace": "x89-project",
+        "page": "集成版本 → 集成征集",
+        "pre": "演示数据：X89 已有策略集 1.0.0（软件 1.0），软件 1.1 已登记、尚无策略集。",
+        "steps": [
+          "integration_tester、release 不能发起集成征集；为已发布过策略集的 1.0 发起被拒绝。",
+          "integration_admin 发起：目标版本 1.2，基线 1.1，四个模块都参加。",
+          "模块清单：制动、转向（叶子 · 业务组）与 ADC、CDC（上层 · 域集成），都待提交；平台建了规划版本 X89 1.2。",
+          "量产车 VEH-201 不能确认到规划版本 1.2；规划版本不能另开适用性确认。",
+          "integration_admin 能打开“集成版本”页面。"
+        ],
+        "done": "目标整车集成版本与模块清单建立，各模块收到待提交通知。",
+        "fail": "没有授权不能发起；规划版本不进入量产。"
+      },
+      {
+        "id": "IC02",
+        "title": "叶子模块由本组研发提交",
+        "actor": "steering；business；integrator；integration_admin",
+        "accounts": [
+          "steering",
+          "business",
+          "workspace_manager",
+          "integrator",
+          "integration_admin"
+        ],
+        "workspace": "team-steering",
+        "page": "研发 Feature → 提交到集成征集",
+        "pre": "IC01 完成。",
+        "steps": [
+          "business（制动组）不能替转向组提交；workspace_manager（团队工作区管理员）不能提交叶子模块。",
+          "steering 打开已验证的 steering_return_rate，点“提交到 X89 1.2”；business 提交 brake_monitor。",
+          "没收齐时 integrator 生成集成预览被拒绝（还没收齐）。",
+          "integration_admin 催办：ADC、CDC 两个模块收到新的提醒。"
+        ],
+        "done": "叶子模块各自提交了已验证的固定提交。",
+        "fail": "只能由本组研发提交本组版本。"
+      },
+      {
+        "id": "IC03",
+        "title": "上层模块：ADC 开子征集，CDC 直接答复",
+        "actor": "adc_integrator；adc_parking；adc_system；cdc_integrator",
+        "accounts": [
+          "adc_integrator",
+          "adc_parking",
+          "adc_system",
+          "cdc_integrator"
+        ],
+        "workspace": "x89-adc-integration",
+        "page": "集成版本 → 集成征集",
+        "pre": "IC02 完成。",
+        "steps": [
+          "cdc_integrator 不能替 ADC 提交。",
+          "adc_integrator 在 ADC 模块上“开子征集”：模块为泊车组、系统应用组。",
+          "两组研发都提交“本次无变更”；adc_integrator 按“无变更”结束子征集。",
+          "整车征集的 ADC 模块自动变为“本次无变更”；cdc_integrator 在 CDC 模块提交“本次无变更”。",
+          "整车征集阶段变为“已收齐”。"
+        ],
+        "done": "上层模块由域工作区的管理员或配置集成答复，可先在本域征集。",
+        "fail": "子征集的结果自动交回整车征集。"
+      },
+      {
+        "id": "IC04",
+        "title": "收齐后合并、DCL 确认，送测第一轮",
+        "actor": "integrator；dcl；integration_admin；resource",
+        "accounts": [
+          "integrator",
+          "dcl",
+          "integration_admin",
+          "resource"
+        ],
+        "workspace": "x89-project",
+        "page": "集成版本 → 收齐，生成集成预览；配置集成",
+        "pre": "IC03 完成。",
+        "steps": [
+          "integration_admin 不能生成集成预览（要读并合并各组配置，是配置集成的事）。",
+          "integrator 点“收齐，生成集成预览”，dcl 确认处理集合，integrator 送测：测试集成版本 X89 1.2-T1，标注“集成征集 X89 1.2 第 1 轮”。",
+          "dcl 登记规划版本 1.2 的仿真镜像 x89-1.2-sim；integration_admin 建测试仿真 SIM-112；resource 登记测试车 VEH-032 并确认为 1.2，加入 X89 集成测试。"
+        ],
+        "done": "第一轮测试集成版本冻结，测试车运行 1.2 的预发布软件。",
+        "fail": "未收齐不能合并；送测只走现有的合并、DCL 确认和冻结门禁。"
+      },
+      {
+        "id": "IC05",
+        "title": "第一轮不通过：退回转向组",
+        "actor": "integration_tester；integration_admin；steering；steering_tester",
+        "accounts": [
+          "integration_tester",
+          "integration_admin",
+          "steering",
+          "steering_tester"
+        ],
+        "workspace": "x89-integration",
+        "page": "配置集成 → 集成候选；集成版本 → 退回",
+        "pre": "IC04 完成。",
+        "steps": [
+          "integration_tester 下发 X89 1.2-T1：SIM-112 PASS，VEH-032 FAIL（回正误触发偏多），不能判定通过。",
+          "integration_tester 不能退回模块；integration_admin 退回转向模块并写明原因。",
+          "T1 取消，第 1 轮记为已取消；制动的提交保留。",
+          "steering 收紧回正阈值，steering_tester 重新验证后，steering 重新提交；征集再次收齐。"
+        ],
+        "done": "不通过的一轮退回对应模块，下一轮合并新的提交。",
+        "fail": "退回必须写原因；其他模块不受影响。"
+      },
+      {
+        "id": "IC06",
+        "title": "第二轮通过",
+        "actor": "integrator；dcl；integration_tester",
+        "accounts": [
+          "integrator",
+          "dcl",
+          "integration_tester",
+          "integration_admin"
+        ],
+        "workspace": "x89-integration",
+        "page": "配置集成 → 集成候选",
+        "pre": "IC05 完成。",
+        "steps": [
+          "integrator 生成预览、dcl 确认、integrator 送测：X89 1.2-T2。",
+          "送测后不能再改目标版本（测试证据绑定版本号）。",
+          "integration_tester 在两辆 1.2 测试车上都 PASS，判定通过；征集阶段为“测试通过，待发布”。"
+        ],
+        "done": "最后一轮测试集成版本通过，成为 OTA 候选。",
+        "fail": "测试只认运行目标版本的车辆结果。"
+      },
+      {
+        "id": "IC07",
+        "title": "发布：生成整车集成版本、对应关系和 OTA 包内配置模块",
+        "actor": "release / 孙立；resource",
+        "accounts": [
+          "release",
+          "integrator",
+          "resource"
+        ],
+        "workspace": "x89-project",
+        "page": "集成版本 → 发布",
+        "pre": "IC06 完成。",
+        "steps": [
+          "integrator 不能发布；不列入目标版本 1.2 的发布被拒绝。",
+          "release 发布策略集 1.1.0：规划版本 X89 1.2 转为已登记，记录 1.1.0 ↔ 1.2，并把 1.1.0 导出为 1.2 OTA 包内的配置模块；征集为“已发布”。",
+          "resource 按整车 OTA 回执把量产车 VEH-201 确认为 1.2：它立即运行 1.1.0，不需要配置 OTA 推送；VEH-202 仍在 1.0，用 1.0.0。"
+        ],
+        "done": "整车集成版本与策略集一起发布；配置随系统 OTA 包到车，弱网也能按正确策略采集。",
+        "fail": "发布仍复核测试、DCL 确认和版本规则。"
+      },
+      {
+        "id": "IC08",
+        "title": "发布记录",
+        "actor": "integration_admin / 郑书杰",
+        "accounts": [
+          "integration_admin"
+        ],
+        "workspace": "x89-project",
+        "page": "集成版本 → 发布记录",
+        "pre": "IC07 完成。",
+        "steps": [
+          "integration_admin 打开“发布记录”，选 X89 1.2。",
+          "时间线从发起征集开始：各模块提交、T1 送测、转向被退回、T1 取消、T2 送测、通过、生成版本、发布 1.1.0、导出配置模块、VEH-201 随包生效。",
+          "1.2 先后生效的策略集只有 1.1.0。"
+        ],
+        "done": "集成管理员能看到每个整车集成版本的完整发布过程。",
+        "fail": "每一步都有人和时间，来自平台保存的记录。"
+      },
+      {
+        "id": "N01",
+        "title": "反向：越权与已结束的征集",
+        "actor": "cdc_integrator；steering；integration_tester；release；integration_admin",
+        "accounts": [
+          "cdc_integrator",
+          "steering",
+          "integration_tester",
+          "release",
+          "integration_admin"
+        ],
+        "workspace": "x89-project",
+        "page": "集成版本",
+        "pre": "IC01 完成（支线）。",
+        "steps": [
+          "cdc_integrator 不能提交 ADC；steering 不能提交制动；integration_tester 不能设模块不参加；release 不能取消征集。",
+          "integration_admin 仍不能打开“发布与配置 OTA”。",
+          "integration_admin 取消征集后，再提交被拒绝（征集已结束）。"
+        ],
+        "done": "每一步都按一条完整授权执行。",
+        "fail": "越权操作不改变任何记录。"
+      }
+    ]
   }
 ];
 

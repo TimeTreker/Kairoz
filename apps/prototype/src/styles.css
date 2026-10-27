@@ -93,3 +93,7 @@ body {
 .ant-descriptions-item-content .ant-tag {
   white-space: normal;
 }
+/* The row whose details are shown beside a list. */
+.kz-row-selected > td {
+  background: #eef4ff !important;
+}

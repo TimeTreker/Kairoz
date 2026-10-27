@@ -15,6 +15,7 @@ import { WILDCARD } from '../domain/vocabulary.ts';
 import type { Domain, Scope } from '../domain/vocabulary.ts';
 import { reviewItems } from './approvals.ts';
 import { resourceBlockers } from './budget.ts';
+import { callRoundProblem, onCandidateClosed, onRoundFrozen, onSubsystemPublished, roundLabel } from './calls.ts';
 import type { ReviewItem } from './approvals.ts';
 import { addFeedback, baseConfig, fileSpecVersion, getFeature, headChangesRequested, mainlineRelease, manifestVersion, policyVersion, reviewRequiredBefore } from './config.ts';
 
@@ -270,6 +271,7 @@ export function previewMerge(ctx: Ctx, input: { workspaceId: string; featureIds:
     patch,
     sources,
     subsystems: refs,
+    callId: null,
     status: conflicts.length ? 'CONFLICT' : issues.length ? 'BLOCKED' : 'READY',
     merged,
     conflicts,
@@ -431,11 +433,16 @@ function mergeCommit(ctx: Ctx, plan: MergePlan, groupId: string, config: GroupCo
   return id;
 }
 
-/** Freezes the complete set as a candidate. Its tests start from zero. */
+/**
+ * Freezes the complete set as a candidate. Its tests start from zero. A call's preview becomes the
+ * call's test integration version for the round, named after the target unless named otherwise.
+ */
 export function freezeCandidate(ctx: Ctx, planId: string, input: { label: string }): string {
   const plan = getPlan(ctx.s, planId);
   ctx.allow('merge.manage', { type: 'mergePlan', id: plan.id, workspaceId: plan.workspaceId, scope: plan.scope });
   if (plan.status !== 'READY') throw rule('PLAN_NOT_READY', 'only a conflict-free, unblocked preview can be frozen');
+  const roundProblem = callRoundProblem(ctx.s, plan);
+  if (roundProblem) throw rule('CALL_ROUND_STALE', roundProblem);
   if (!isConfirmed(ctx.s, plan)) throw rule('PROCESSING_NOT_CONFIRMED', 'DCL engineering must confirm the final processing set first');
   if (targetMoved(ctx.s, plan)) {
     throw rule('TARGET_CHANGED', plan.patch ? 'the set this patch targets was replaced for its software; preview the merge again' : 'a newer release was published; preview the merge again');
@@ -460,7 +467,7 @@ export function freezeCandidate(ctx: Ctx, planId: string, input: { label: string
       ? ws
       : Object.values(ctx.s.workspaces).find((w) => w.kind === 'INTEGRATION' && w.status === 'ACTIVE' && w.sourceWorkspaceIds.includes(plan.workspaceId) && w.scopes.includes(plan.scope));
   if (!testWs) throw rule('NO_INTEGRATION_WORKSPACE', 'no integration workspace takes this project workspace as its source');
-  const label = input.label.trim();
+  const label = input.label.trim() || (plan.callId ? roundLabel(ctx.s, ctx.s.integrationCalls[plan.callId]!, plan.id) : '');
   if (!label) throw rule('LABEL_REQUIRED', 'name the candidate');
 
   const groups: Record<string, string> = plan.targetReleaseId ? { ...ctx.s.releases[plan.targetReleaseId]!.groups } : {};
@@ -480,6 +487,7 @@ export function freezeCandidate(ctx: Ctx, planId: string, input: { label: string
     scope: plan.scope,
     sources: plan.sources.map((x) => ({ ...x })),
     subsystems: plan.subsystems.map((x) => ({ ...x, groups: { ...x.groups } })),
+    callId: plan.callId,
     resolvedConfigId,
     status: 'CANDIDATE',
     createdBy: ctx.user().username,
@@ -496,6 +504,7 @@ export function freezeCandidate(ctx: Ctx, planId: string, input: { label: string
   }
   // A whole-vehicle candidate takes its subsystem releases out of collection while it is open.
   if (plan.scope === 'Vehicle') for (const ref of plan.subsystems) ctx.s.subsystemReleases[ref.subsystemReleaseId]!.status = 'INTEGRATING';
+  if (plan.callId) onRoundFrozen(ctx, plan, id);
   return id;
 }
 
@@ -506,6 +515,16 @@ export function cancelCandidate(ctx: Ctx, candidateId: string, input: { reason: 
   ctx.allow('merge.manage', { type: 'candidate', id: c.id, workspaceId: c.workspaceId, scope: c.scope });
   if (!['CANDIDATE', 'TESTING', 'VERIFIED'].includes(c.status)) throw rule('CANDIDATE_CLOSED', 'the candidate is already closed');
   if (!input.reason.trim()) throw rule('REASON_REQUIRED', 'give a reason');
+  onCandidateClosed(ctx, c, input.reason.trim());
+  closeCandidate(ctx, c);
+}
+
+/**
+ * Closes an open candidate, once the caller was authorized for it (cancelling it, or a call
+ * sending its modules back): its Features and subsystem releases can be collected again.
+ */
+export function closeCandidate(ctx: Ctx, candidate: Candidate): void {
+  const c = ctx.s.candidates[candidate.id]!;
   c.status = 'CANCELLED';
   for (const src of c.sources) {
     const f = ctx.s.features[src.featureId]!;
@@ -572,6 +591,7 @@ export function publishSubsystem(ctx: Ctx, candidateId: string, input: { notes?:
   };
   for (const r of line) if (r.status === 'ACTIVE') r.status = 'SUPERSEDED';
   ctx.s.candidates[c.id]!.status = 'RELEASED';
+  if (c.callId) onSubsystemPublished(ctx, c, id);
   return id;
 }
 

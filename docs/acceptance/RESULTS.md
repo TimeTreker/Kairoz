@@ -1,10 +1,10 @@
 # 验收结果（引擎层逐幕回放）
 
-运行时间：2026-10-26T14:18:00.011Z。由 `npm run acceptance` 生成；每次重新执行，不沿用历史结果。
+运行时间：2026-10-27T02:23:30.871Z。由 `npm run acceptance` 生成；每次重新执行，不沿用历史结果。
 
 状态：PASS 通过；FAIL 失败；GAP 设计要求尚未实现；BLOCKED 前置幕未通过；NOT_APPLICABLE 浏览器原型不适用（如服务端部署）。
 
-合计：PASS 205 · FAIL 0 · GAP 0 · BLOCKED 0 · NOT_APPLICABLE 3 · NOT_WRITTEN 0
+合计：PASS 214 · FAIL 0 · GAP 0 · BLOCKED 0 · NOT_APPLICABLE 3 · NOT_WRITTEN 0
 
 ## 从零启动 · 角色协作
 
@@ -284,6 +284,20 @@
 | AS03 车辆执行售后采集，数据回到业务 | 车辆模拟器；business | PASS |  |
 | AS04 撤回尚未执行的请求 | brake_tester；车辆模拟器 | PASS |  |
 | N01 售后请求的越权 | business；dispatch_operator；resource | PASS |  |
+
+## 集成征集与发布记录 · 整车集成版本的发布管理
+
+| 幕 | 执行人 | 状态 | 说明 |
+|---|---|---|---|
+| IC01 集成管理员为 X89 1.2 发起集成征集 | integration_admin / 郑书杰 · 工作区管理员 | PASS |  |
+| IC02 叶子模块由本组研发提交 | steering；business；integrator；integration_admin | PASS |  |
+| IC03 上层模块：ADC 开子征集，CDC 直接答复 | adc_integrator；adc_parking；adc_system；cdc_integrator | PASS |  |
+| IC04 收齐后合并、DCL 确认，送测第一轮 | integrator；dcl；integration_admin；resource | PASS |  |
+| IC05 第一轮不通过：退回转向组 | integration_tester；integration_admin；steering；steering_tester | PASS |  |
+| IC06 第二轮通过 | integrator；dcl；integration_tester | PASS |  |
+| IC07 发布：生成整车集成版本、对应关系和 OTA 包内配置模块 | release / 孙立；resource | PASS |  |
+| IC08 发布记录 | integration_admin / 郑书杰 | PASS |  |
+| N01 反向：越权与已结束的征集 | cdc_integrator；steering；integration_tester；release；integration_admin | PASS |  |
 
 ## 反向用例 T-N01–T-N24
 

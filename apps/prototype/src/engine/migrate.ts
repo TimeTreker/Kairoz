@@ -200,7 +200,39 @@ function to20(s: Saved): void {
   s.schema = 20;
 }
 
-const STEPS: Record<number, (s: Saved) => void> = { 6: to7, 7: to8, 8: to9, 9: to10, 10: to11, 11: to12, 12: to13, 13: to14, 14: to15, 15: to16, 16: to17, 17: to18, 18: to19, 19: to20 };
+/**
+ * Schema 21: integration calls, planned software versions, and OTA rollouts that keep a log of
+ * their steps and each vehicle's software when it was sent. Every earlier version was recorded
+ * from outside; earlier merges and candidates belong to no call; earlier rollouts get what their
+ * records still show: the start and how they ended.
+ */
+function to21(s: Saved): void {
+  s.integrationCalls ??= {};
+  for (const v of Object.values((s.softwareVersions ?? {}) as Rows)) {
+    v.status ??= 'RECORDED';
+    v.callId ??= null;
+    v.dclModule ??= null;
+  }
+  for (const p of Object.values((s.mergePlans ?? {}) as Rows)) p.callId ??= null;
+  for (const c of Object.values((s.candidates ?? {}) as Rows)) c.callId ??= null;
+  const resources = (s.resources ?? {}) as Rows;
+  for (const d of Object.values((s.deployments ?? {}) as Rows)) {
+    if (d.kind !== 'OTA') continue;
+    const targets = (d.targets ?? []) as Record<string, unknown>[];
+    for (const t of targets) t.software ??= resources[t.resourceId as string]?.integrationVersion ?? null;
+    if (d.log) continue;
+    const log: Record<string, unknown>[] = [{ kind: 'STARTED', by: d.dispatchedBy, at: d.createdAt, reason: null, resourceIds: targets.filter((t) => t.status !== 'QUEUED').map((t) => t.resourceId) }];
+    const end = { by: null, at: d.updatedAt, resourceIds: [] };
+    if (d.status === 'COMPLETED') log.push({ kind: 'COMPLETED', reason: null, ...end });
+    if (d.status === 'CANCELLED') log.push({ kind: 'CANCELLED', reason: targets.find((t) => t.status === 'CANCELLED')?.error ?? null, ...end });
+    if (d.status === 'ROLLED_BACK') log.push({ kind: 'ROLLED_BACK', reason: d.pauseReason ?? null, ...end });
+    if (d.status === 'PAUSED') log.push({ kind: d.pauseReason ? 'PAUSED' : 'AUTO_PAUSED', reason: d.pauseReason ?? null, ...end });
+    d.log = log;
+  }
+  s.schema = 21;
+}
+
+const STEPS: Record<number, (s: Saved) => void> = { 6: to7, 7: to8, 8: to9, 9: to10, 10: to11, 11: to12, 12: to13, 13: to14, 14: to15, 15: to16, 16: to17, 17: to18, 18: to19, 19: to20, 20: to21 };
 
 /** The state at the current schema, or null when it cannot be read or is too old. Mutates `raw`. */
 export function migrate(raw: unknown): State | null {

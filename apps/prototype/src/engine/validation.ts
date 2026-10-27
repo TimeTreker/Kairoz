@@ -313,9 +313,12 @@ function settle(d: Draft<Deployment>, now: string): void {
   if (d.kind === 'OTA' && d.status === 'PENDING' && d.targets.some((t) => t.status === 'FAILED')) {
     d.status = 'PAUSED';
     d.pauseReason = null; // paused by the failure itself, not by a person
+    const failed = d.targets.filter((t) => t.status === 'FAILED').map((t) => t.resourceId);
+    (d.log ??= []).push({ kind: 'AUTO_PAUSED', by: null, at: now, reason: null, resourceIds: failed });
   }
   if (d.status === 'PENDING' && d.targets.every((t) => t.status !== 'PENDING' && t.status !== 'QUEUED')) {
     d.status = 'COMPLETED';
+    if (d.kind === 'OTA') (d.log ??= []).push({ kind: 'COMPLETED', by: null, at: now, reason: null, resourceIds: [] });
   }
   d.updatedAt = now;
 }

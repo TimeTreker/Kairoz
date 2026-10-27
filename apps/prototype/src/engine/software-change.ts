@@ -11,7 +11,7 @@ import { covered, policyCompatibility } from '../domain/compatibility.ts';
 import { conflict, notFound, rule } from '../domain/errors.ts';
 import { newId } from '../domain/ids.ts';
 import type { Actor, Ctx } from './engine.ts';
-import { recordSoftwareChange, softwareKey } from './fleet.ts';
+import { applyBundledModule, recordSoftwareChange, softwareKey } from './fleet.ts';
 import { releaseDiff } from './release.ts';
 import { commitSnapshot, resolveFiles } from './snapshots.ts';
 import type { Resource, SoftwareChange, State, VehicleGroup } from './types.ts';
@@ -45,6 +45,7 @@ export function noteReportedSoftware(ctx: Ctx, resourceId: string, reported: str
     r.softwareStatus = 'CONSISTENT';
     r.controllers = [];
     r.updatedAt = ctx.now;
+    applyBundledModule(ctx, r, changeId);
     return;
   }
   if (Object.values(ctx.s.softwareChanges).some((c) => c.resourceId === r.id && c.status === 'UNRECORDED' && c.toVersion === reported)) return;

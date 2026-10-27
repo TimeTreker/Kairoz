@@ -6,6 +6,7 @@
 import { authorize } from '../domain/authz.ts';
 import type { Role } from '../domain/vocabulary.ts';
 import { blockedProductionVehicles } from './applicability.ts';
+import { callPhase, callProblems, callsFor, isOverdueCall, moduleName, waitingModules } from './calls.ts';
 import { usageOf } from './budget.ts';
 import { DAY_MS, nowOf } from './clock.ts';
 import { mismatchesFor } from './delivery.ts';
@@ -61,7 +62,11 @@ export type NotificationKind =
   | 'ORPHANED_UNIT'
   | 'BUDGET_DROPS'
   | 'COLLECTION_PAUSED'
-  | 'AFTERSALES_READY';
+  | 'AFTERSALES_READY'
+  | 'CALL_SUBMIT'
+  | 'CALL_RETURNED'
+  | 'CALL_COMPLETE'
+  | 'CALL_WAITING';
 
 export interface Notification {
   /** Role, kind, object and state: stable while nothing changes, new when the state does. */
@@ -259,6 +264,34 @@ export function notificationsFor(s: State, actor: Actor, workspaceId: string): N
       if (!h || h.state === 'ACTIVE') continue;
       const last = h.history.at(-1)!;
       add(holdRole, 'COLLECTION_PAUSED', [r.id, h.history.length, h.state], { severity: 'WARNING', subject: r.id, detail: `${h.state} · ${last.reason}`, link: 'fleet/workspace', at: last.at });
+    }
+  }
+  // Integration calls (集成征集): the module's submitters are asked, the call's admin and integration follow it.
+  for (const { call, module: m } of waitingModules(s, workspaceId)) {
+    const allowed = m.kind === 'GROUP'
+      ? has('BUSINESS_DEV') && authorize(actor.grants, 'call.submitGroup', { workspaceId, groupId: m.groupId! }).ok && 'BUSINESS_DEV'
+      : (['CONFIG_INTEGRATOR', 'WORKSPACE_ADMIN'] as const).find((r) => has(r) && authorize(actor.grants, 'call.submitDomain', { workspaceId, scope: m.domain! }).ok);
+    if (!allowed) continue;
+    const returned = m.status === 'RETURNED';
+    add(allowed, returned ? 'CALL_RETURNED' : 'CALL_SUBMIT', [call.id, m.key, m.status, m.at, m.remindedAt], {
+      severity: returned || isOverdueCall(s, call) ? 'WARNING' : 'INFO',
+      subject: call.title,
+      detail: returned ? m.note : moduleName(s, m),
+      link: `versions/calls/${call.id}`,
+      at: m.remindedAt ?? m.at ?? call.createdAt,
+    });
+  }
+  for (const call of callsFor(s, workspaceId).filter((c) => c.workspaceId === workspaceId && c.status === 'OPEN')) {
+    const phase = callPhase(s, call);
+    if (phase === 'COMPLETE' && has('CONFIG_INTEGRATOR')) {
+      add('CONFIG_INTEGRATOR', 'CALL_COMPLETE', [call.id, call.rounds.length], { severity: 'INFO', subject: call.title, detail: null, link: `versions/calls/${call.id}`, at: call.modules.map((m) => m.at ?? '').sort().at(-1) || call.createdAt });
+    }
+    const manager = (['WORKSPACE_ADMIN', 'CONFIG_INTEGRATOR'] as const).find(has);
+    if (phase === 'COLLECTING' && manager) {
+      const missing = call.modules.filter((m) => m.status === 'WAITING' || m.status === 'RETURNED').map((m) => moduleName(s, m));
+      if (missing.length || callProblems(s, call).length) {
+        add(manager, 'CALL_WAITING', [call.id, missing.join(','), isOverdueCall(s, call)], { severity: isOverdueCall(s, call) ? 'WARNING' : 'INFO', subject: call.title, detail: missing.join(', ') || null, link: `versions/calls/${call.id}`, at: call.createdAt });
+      }
     }
   }
   if (has('CONFIG_INTEGRATOR') && isMergeWorkspace(s, workspaceId)) {

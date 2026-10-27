@@ -12,6 +12,7 @@ import { diffConfig, emptyConfig, sameConfig } from '../domain/config.ts';
 import type { ConfigDiff, GroupConfig } from '../domain/config.ts';
 import { conflict, notFound, rule } from '../domain/errors.ts';
 import { newId } from '../domain/ids.ts';
+import { onCallReleased, plannedVersionProblems } from './calls.ts';
 import { mainlineRelease } from './config.ts';
 import type { Ctx } from './engine.ts';
 import { isConfirmed } from './integration.ts';
@@ -246,6 +247,9 @@ export function promoteCandidate(ctx: Ctx, candidateId: string, input: { dclVers
   if (versions.length === 0) throw rule('NO_VEHICLE_VERSIONS', 'list the whole-vehicle software versions this release applies to');
   const unknown = versions.filter((v) => !ctx.s.softwareVersions[`${c.vehicleModelId}::${v}`]);
   if (unknown.length) throw rule('UNKNOWN_SOFTWARE_VERSION', 'these software versions are not recorded', { issues: unknown });
+  // A planned version (the target of an integration call) is listed only by that call's release.
+  const planned = plannedVersionProblems(ctx.s, c, versions);
+  if (planned) throw rule(planned.code, planned.message, { issues: planned.issues });
   if (target) {
     // Same software only: a patch replaces its target where the target is in effect, nowhere else.
     const serving = new Set(versionsInEffect(ctx.s, target));
@@ -287,6 +291,7 @@ export function promoteCandidate(ctx: Ctx, candidateId: string, input: { dclVers
     publishedAt: ctx.now,
   };
   ctx.s.candidates[c.id]!.status = 'RELEASED';
+  onCallReleased(ctx, c, id);
   // Open applicability checks for versions the new set lists are answered by it.
   for (const check of Object.values(ctx.s.applicabilityChecks)) {
     if (check.vehicleModelId === c.vehicleModelId && versions.includes(check.version) && ['OPEN', 'TESTING', 'VERIFIED'].includes(check.status)) {

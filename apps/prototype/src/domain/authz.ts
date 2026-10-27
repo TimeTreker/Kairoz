@@ -97,6 +97,12 @@ export const ACTIONS = {
   // Integration (配置集成) and release (配置发布)
   'merge.manage': { roles: ['CONFIG_INTEGRATOR'], env: 'testing' },
   'release.promote': { roles: ['CONFIG_RELEASE'], env: 'production' },
+  /** Integration calls (集成征集): opening, reminding, sending back, leaving out and cancelling, by the merge workspace's admin or integration. */
+  'call.manage': { roles: ['CONFIG_INTEGRATOR', 'WORKSPACE_ADMIN'], env: 'testing' },
+  /** A leaf module's submission: the group's own developers. */
+  'call.submitGroup': { roles: ['BUSINESS_DEV'], env: 'development' },
+  /** An upper module's submission: the domain integration workspace's admin or integration. */
+  'call.submitDomain': { roles: ['WORKSPACE_ADMIN', 'CONFIG_INTEGRATOR'], env: 'testing' },
   /** Opening, confirming and withdrawing a set's applicability to software versions. */
   'applicability.confirm': { roles: ['CONFIG_RELEASE'], env: 'production' },
   /** Emergency stop of one policy (紧急停用): asked by DCL or release, decided by another release person. */
@@ -239,6 +245,7 @@ export const PAGE_ACCESS: Readonly<Record<string, PageAccess>> = {
   fleet: { roles: ['VEHICLE_RESOURCE', 'WORKSPACE_ADMIN', 'BUSINESS_DEV', 'BUSINESS_TEST', 'INTEGRATION_TEST', 'CONFIG_RELEASE', 'DCL_ENGINEER'] },
   integration: { roles: ['CONFIG_INTEGRATOR', 'INTEGRATION_TEST', 'DCL_ENGINEER', 'CONFIG_RELEASE'] },
   release: { roles: ['CONFIG_RELEASE', 'DCL_ENGINEER'] },
+  versions: { roles: ['BUSINESS_DEV', 'BUSINESS_TEST', 'WORKSPACE_ADMIN', 'CONFIG_INTEGRATOR', 'INTEGRATION_TEST', 'CONFIG_RELEASE', 'DCL_ENGINEER', 'VEHICLE_RESOURCE'] },
   query: { roles: ['BUSINESS_DEV', 'BUSINESS_TEST', 'DCL_ENGINEER', 'CONFIG_INTEGRATOR', 'INTEGRATION_TEST', 'CONFIG_RELEASE'] },
   org: { actions: ['org.manage', 'workspace.manage'] },
   accounts: { actions: ['account.manage'] },

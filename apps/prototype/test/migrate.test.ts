@@ -4,6 +4,17 @@ import { migrate } from '../src/engine/migrate.ts';
 import { demoState } from '../src/engine/seed.ts';
 import { STATE_SCHEMA } from '../src/engine/types.ts';
 
+/** A schema 20 save: a copy of a demo (today's by default) without the rollout logs schema 21 added. */
+function schema20(demo: unknown = demoState()): Record<string, any> {
+  const s = JSON.parse(JSON.stringify(demo)) as Record<string, any>;
+  s.schema = 20;
+  for (const d of Object.values(s.deployments) as any[]) {
+    delete d.log;
+    for (const t of d.targets) delete t.software;
+  }
+  return s;
+}
+
 /** A schema 16 save: a copy of a demo (today's by default) without the fields schema 17 added. */
 function schema16(demo: unknown = demoState()): Record<string, any> {
   const s = JSON.parse(JSON.stringify(demo)) as Record<string, any>;
@@ -177,6 +188,17 @@ describe('saved state migration', () => {
     assert.deepEqual(migrated.applicability, []);
     assert.equal(migrated.directory, null);
     assert.deepEqual(migrated.releases, current.releases);
+  });
+
+  test('a schema 20 save gives each rollout the start and end its records show, and each vehicle its current software', () => {
+    const current = JSON.parse(JSON.stringify(demoState()));
+    const migrated = migrate(schema20(current))!;
+    assert.equal(migrated.schema, STATE_SCHEMA);
+    const rollouts = Object.values(migrated.deployments).filter((d) => d.kind === 'OTA');
+    assert.ok(rollouts.length > 0);
+    for (const d of rollouts) assert.deepEqual(d.log!.map((x) => x.kind), ['STARTED', 'COMPLETED'], d.id);
+    for (const d of Object.values(migrated.deployments).filter((x) => x.kind !== 'OTA')) assert.equal(d.log, undefined, d.id);
+    assert.deepEqual(migrated, current);
   });
 
   test('a schema 16 save gains empty budgets and pauses; its events cost nothing and keep their policy’s priority', () => {

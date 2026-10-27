@@ -112,6 +112,9 @@ export function openApplicabilityCheck(ctx: Ctx, input: { releaseId: string; ver
   if (!ctx.s.softwareVersions[softwareKey(release.vehicleModelId, version)]) {
     throw rule('UNKNOWN_SOFTWARE_VERSION', `${release.vehicleModelId} ${version} is not a recorded software version`);
   }
+  if (ctx.s.softwareVersions[softwareKey(release.vehicleModelId, version)]!.status === 'PLANNED') {
+    throw rule('VERSION_PLANNED', `${release.vehicleModelId} ${version} is planned by an integration call; its policy set comes from that call`);
+  }
   if (appliesTo(ctx.s, release, version)) throw rule('ALREADY_APPLIES', `policy set ${release.dclVersion} already applies to ${version}`);
   const problem = takeOverProblem(ctx.s, release, version);
   if (problem) throw rule(problem.code, problem.message);
@@ -317,6 +320,7 @@ export function confirmApplicability(ctx: Ctx, checkId: string, input: { note: s
   for (const other of Object.values(ctx.s.applicabilityChecks)) {
     if (other.id !== check.id && other.vehicleModelId === check.vehicleModelId && other.version === check.version && isOpenCheck(other)) {
       other.status = 'SUPERSEDED';
+      other.decidedAt = ctx.now;
       other.note = `policy set ${release.dclVersion} was confirmed for ${check.version}`;
     }
   }

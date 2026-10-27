@@ -24,6 +24,9 @@ type ManifestInput = { signals: string[]; sources: { unit: string; directory: st
 
 export const softwareKey = (vehicleModelId: string, version: string) => `${vehicleModelId}::${version}`;
 
+/** Whether a version is an integration call's planned target, not released yet. */
+export const isPlanned = (s: State, vehicleModelId: string, version: string) => s.softwareVersions[softwareKey(vehicleModelId, version)]?.status === 'PLANNED';
+
 export function getResource(s: State, id: string): Resource {
   const r = s.resources[id];
   if (!r) throw notFound('vehicle', id);
@@ -115,6 +118,7 @@ function assertRemovable(s: State, resourceId: string): void {
 /**
  * Records a whole-vehicle software version from a trusted source, with what it provides when known.
  * A version no policy set applies to opens an applicability check as a to-do for configuration release.
+ * A planned version (an integration call's target) released outside the call becomes recorded.
  */
 export function recordSoftwareVersion(ctx: Ctx, input: { vehicleModelId: string; version: string; source: string; manifest?: ManifestInput | null }): string {
   ctx.allow('softwareVersion.record', { type: 'softwareVersion', id: input.version, scope: 'Vehicle' });
@@ -122,9 +126,20 @@ export function recordSoftwareVersion(ctx: Ctx, input: { vehicleModelId: string;
   if (!VERSION.test(input.version)) throw rule('INVALID_VERSION', 'versions look like 1.0 or 1.2.3');
   if (!input.source.trim()) throw rule('SOURCE_REQUIRED', 'name the trusted source of this version');
   const key = softwareKey(input.vehicleModelId, input.version);
-  if (ctx.s.softwareVersions[key]) throw conflict('VERSION_EXISTS', `version ${input.version} is already recorded`);
-  const manifest = input.manifest ? normalizeManifest(input.manifest) : null;
-  ctx.s.softwareVersions[key] = { vehicleModelId: input.vehicleModelId, version: input.version, source: input.source.trim(), manifest, recordedBy: ctx.user().username, createdAt: ctx.now };
+  const planned = ctx.s.softwareVersions[key];
+  if (planned && planned.status !== 'PLANNED') throw conflict('VERSION_EXISTS', `version ${input.version} is already recorded`);
+  const manifest = input.manifest ? normalizeManifest(input.manifest) : (planned?.manifest ?? null);
+  ctx.s.softwareVersions[key] = {
+    vehicleModelId: input.vehicleModelId,
+    version: input.version,
+    source: input.source.trim(),
+    manifest,
+    status: 'RECORDED',
+    callId: planned?.callId ?? null,
+    dclModule: planned?.dclModule ?? null,
+    recordedBy: ctx.user().username,
+    createdAt: ctx.now,
+  };
   openCheckForNewSoftware(ctx, input.vehicleModelId, input.version);
   return key;
 }
@@ -251,13 +266,30 @@ export function confirmIntegration(ctx: Ctx, resourceId: string, input: { versio
   if (input.version !== null && !ctx.s.softwareVersions[softwareKey(r.vehicleModelId, input.version)]) {
     throw rule('UNKNOWN_SOFTWARE_VERSION', `${r.vehicleModelId} ${input.version} is not a recorded software version`);
   }
+  if (input.version !== null && r.env === 'production' && isPlanned(ctx.s, r.vehicleModelId, input.version)) {
+    throw rule('PLANNED_VERSION_IN_PRODUCTION', `${r.vehicleModelId} ${input.version} is planned, not released; production vehicles run released software only`);
+  }
   if (!input.source.trim()) throw rule('SOURCE_REQUIRED', 'name the trusted source (e.g. DIP report, OTA confirmation)');
-  recordSoftwareChange(ctx, r, input.version, 'CONFIRMED');
+  const changeId = recordSoftwareChange(ctx, r, input.version, 'CONFIRMED');
   r.integrationVersion = input.version;
   r.integrationSource = input.source.trim();
   r.softwareStatus = input.version ? 'CONSISTENT' : 'UNKNOWN';
   r.controllers = [];
   r.updatedAt = ctx.now;
+  applyBundledModule(ctx, r, changeId);
+}
+
+/**
+ * The DCL configuration module bundled into the vehicle OTA package: a production vehicle now
+ * running a version that carries one runs its set from now on, without waiting for a cloud push
+ * (weak or no signal included). Changes after that still come by configuration OTA.
+ */
+export function applyBundledModule(ctx: Ctx, r: Draft<Resource>, changeId: string | null): void {
+  if (r.type !== 'PHYSICAL' || r.env !== 'production' || !r.integrationVersion || r.softwareStatus !== 'CONSISTENT') return;
+  const m = ctx.s.softwareVersions[softwareKey(r.vehicleModelId, r.integrationVersion)]?.dclModule;
+  if (!m || r.appliedConfigId === m.resolvedConfigId) return;
+  r.appliedConfigId = m.resolvedConfigId;
+  if (changeId) ctx.s.softwareChanges[changeId]!.configId = m.resolvedConfigId;
 }
 
 /**
@@ -284,6 +316,7 @@ export function recordSoftwareChange(ctx: Ctx, r: Resource, toVersion: string | 
     acknowledgedBy: null,
     acknowledgedAt: null,
     requestId: null,
+    configId: null,
   };
   return id;
 }
@@ -303,14 +336,18 @@ export function reportControllers(ctx: Ctx, resourceId: string, input: { target:
   if (input.controllers.length === 0 || input.controllers.some((c) => !c.name.trim() || !c.version.trim())) {
     throw rule('CONTROLLERS_REQUIRED', 'report every domain controller with its version and result');
   }
+  if (r.env === 'production' && isPlanned(ctx.s, r.vehicleModelId, input.target)) {
+    throw rule('PLANNED_VERSION_IN_PRODUCTION', `${r.vehicleModelId} ${input.target} is planned, not released; production vehicles run released software only`);
+  }
   const consistent = input.controllers.every((c) => c.status === 'PASS' && c.version === input.target);
-  if (consistent) recordSoftwareChange(ctx, r, input.target, 'CONTROLLERS');
+  const changeId = consistent ? recordSoftwareChange(ctx, r, input.target, 'CONTROLLERS') : null;
   r.controllers = input.controllers.map((c) => ({ name: c.name.trim(), version: c.version.trim(), status: c.status }));
   r.softwareStatus = consistent ? 'CONSISTENT' : 'PARTIAL_FAILURE';
   // Never write the expected version as the actual one.
   r.integrationVersion = consistent ? input.target : null;
   r.integrationSource = input.source.trim();
   r.updatedAt = ctx.now;
+  applyBundledModule(ctx, r, changeId);
 }
 
 /** Only the owner acts on a personal simulation, and only within a grant for its workspace and group. */

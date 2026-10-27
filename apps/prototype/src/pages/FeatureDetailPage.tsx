@@ -10,7 +10,9 @@ import { TechnicalTag } from '../components/technical.tsx';
 import { draftSelfTest } from '../components/personal-sim.tsx';
 import { canReadFeature, displayName, draftReviewRequired, EDITABLE_STAGES, featureChanges, submitFeature } from '../engine/config.ts';
 import { returnFeature } from '../engine/intake.ts';
+import { submitGroup } from '../engine/calls.ts';
 import { isCollectible } from '../engine/integration.ts';
+import type { Feature } from '../engine/types.ts';
 import { useI18n } from '../i18n/i18n.tsx';
 import { CANDIDATE_STATUS_LABELS, FEEDBACK_LABELS, STAGE_LABELS, setName } from '../i18n/vocab.ts';
 import { FilesTab } from './feature/FilesTab.tsx';
@@ -127,6 +129,7 @@ export function FeatureDetailPage({ featureId }: { featureId: string }) {
             />
           )}
           {feature.stage === 'SUBMITTED' && <Alert type="warning" showIcon title={L('等待 DCL 工程审核敏感文件。', 'Waiting for DCL engineering to review sensitive files.')} />}
+          <CallSubmitBanner feature={feature} />
         </Space>
       </Card>
       <Tabs
@@ -187,3 +190,33 @@ export function FeatureDetailPage({ featureId }: { featureId: string }) {
   );
 }
 
+
+/** Open integration calls waiting for this Feature's group: its developers submit the verified commit. */
+function CallSubmitBanner({ feature }: { feature: Feature }) {
+  const state = useEngineState();
+  const { L } = useI18n();
+  const can = useCan();
+  const run = useRun();
+  if (!isCollectible(state, feature) || !can('call.submitGroup', { workspaceId: feature.workspaceId, groupId: feature.groupId })) return null;
+  const calls = Object.values(state.integrationCalls).filter((c) =>
+    c.status === 'OPEN' && c.modules.some((m) => m.kind === 'GROUP' && m.groupId === feature.groupId && m.workspaceId === feature.workspaceId && m.status !== 'EXCLUDED' && !(m.featureId === feature.id && m.commitId === feature.headCommitId)),
+  );
+  if (calls.length === 0) return null;
+  return (
+    <Alert
+      type="info"
+      showIcon
+      title={L('有集成征集在等本组的版本', 'An integration call is waiting for the group’s version')}
+      description={L(`可以把已验证的 ${displayName(state, feature.headCommitId!)} 提交上去。`, `You can submit the verified ${displayName(state, feature.headCommitId!)}.`)}
+      action={
+        <Space orientation="vertical" size={4}>
+          {calls.map((c) => (
+            <Button key={c.id} size="small" type="primary" onClick={() => run((ctx) => submitGroup(ctx, c.id, feature.groupId, { featureId: feature.id }), L(`已提交到 ${c.title}`, `Submitted to ${c.title}`))}>
+              {L(`提交到 ${c.title}`, `Submit to ${c.title}`)}
+            </Button>
+          ))}
+        </Space>
+      }
+    />
+  );
+}

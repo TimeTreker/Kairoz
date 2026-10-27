@@ -5,7 +5,9 @@
 import { Alert, Button, Card, Descriptions, Drawer, Empty, Input, Modal, Select, Space, Table, Tag, Tooltip, Typography } from 'antd';
 import { useState } from 'react';
 import { useCan, useRun } from '../app/hooks.ts';
+import { navigate } from '../app/router.ts';
 import { useEngineState } from '../app/store.ts';
+import { exportDclModule } from '../engine/calls.ts';
 import {
   blockedProductionVehicles,
   cancelApplicabilityCheck,
@@ -22,13 +24,14 @@ import {
   withdrawApplicability,
 } from '../engine/applicability.ts';
 import { ungroupedVehicles, vehicleGroupsOf } from '../engine/fleet.ts';
-import { appliesTo, applicableVersions, compareVersions, releaseDiff, releasesOf, setInEffect, takeOverProblem } from '../engine/release.ts';
+import { appliesTo, applicableVersions, compareVersions, releaseConfiguration, releaseDiff, releasesOf, setInEffect, takeOverProblem } from '../engine/release.ts';
 import type { ApplicabilityCheck, Release } from '../engine/types.ts';
 import { cancelDeployment } from '../engine/validation.ts';
 import { useI18n } from '../i18n/i18n.tsx';
 import { issueLabel } from '../i18n/issues.ts';
-import { CHECK_STATUS_COLORS, CHECK_STATUS_LABELS, COMPATIBILITY_LABELS, setName } from '../i18n/vocab.ts';
+import { CHECK_STATUS_COLORS, CHECK_STATUS_LABELS, COMPATIBILITY_LABELS, SOFTWARE_STATUS_LABELS, setName } from '../i18n/vocab.ts';
 import { Hint, Mono, when } from './common.tsx';
+import { downloadJson } from './JsonExport.tsx';
 import { DiffView } from './DiffView.tsx';
 import { DeploymentsTable, DispatchModal, RecordTestModal, TargetsTable } from './testing.tsx';
 
@@ -49,6 +52,13 @@ export function SoftwareVersionsCard({ modelId }: { modelId: string }) {
     releases.filter((r) => !appliesTo(state, r, version) && !takeOverProblem(state, r, version)).sort((a, b) => (a.patchOf === null ? 0 : 1) - (b.patchOf === null ? 0 : 1) || b.sequence - a.sequence);
   const testWs = Object.values(state.workspaces).find((w) => w.kind === 'INTEGRATION' && w.vehicleModelId === modelId && w.scopes.includes('Vehicle'));
   const canConfirm = can('applicability.confirm', { workspaceId: testWs?.id ?? '*', scope: 'Vehicle' });
+  const projectWs = Object.values(state.workspaces).find((w) => w.kind === 'PROJECT' && w.vehicleModelId === modelId && w.scopes.includes('Vehicle'));
+  const canExport = can('release.promote', { workspaceId: projectWs?.id ?? '*', scope: 'Vehicle' });
+  // The module goes to the vehicle OTA program: its set and complete configuration, by digest.
+  const exportModule = (version: string) => {
+    const m = run((c) => exportDclModule(c, { vehicleModelId: modelId, version }), L('已导出为 OTA 包内的配置模块', 'Exported as the OTA package’s DCL module'));
+    if (m !== undefined) downloadJson({ name: `DCL_${modelId}_${version}_ota_module.json`, json: JSON.stringify({ module: { vehicleModelId: modelId, softwareVersion: version, ...m }, configuration: releaseConfiguration(state, m.releaseId) }, null, 2) });
+  };
   const versions = Object.values(state.softwareVersions)
     .filter((v) => v.vehicleModelId === modelId)
     .sort((a, b) => compareVersions(b.version, a.version));
@@ -78,7 +88,19 @@ export function SoftwareVersionsCard({ modelId }: { modelId: string }) {
         pagination={false}
         dataSource={versions}
         columns={[
-          { title: L('软件版本', 'Software'), render: (_, v) => <Mono>{`${modelId} ${v.version}`}</Mono> },
+          {
+            title: L('软件版本', 'Software'),
+            render: (_, v) => (
+              <Space size={4} wrap>
+                <Mono>{`${modelId} ${v.version}`}</Mono>
+                {v.status === 'PLANNED' && (
+                  <Tooltip title={L('集成征集的目标版本，软件尚未发布；只能由该征集的发布列入。', 'An integration call’s target, not released yet; only that call’s release lists it.')}>
+                    <Tag color="gold">{B(SOFTWARE_STATUS_LABELS.PLANNED)}</Tag>
+                  </Tooltip>
+                )}
+              </Space>
+            ),
+          },
           {
             title: L('软件清单', 'Manifest'),
             render: (_, v) =>
@@ -121,6 +143,29 @@ export function SoftwareVersionsCard({ modelId }: { modelId: string }) {
             ),
           },
           {
+            title: L('OTA 包内配置模块', 'DCL module in OTA package'),
+            render: (_, v) => {
+              const set = setInEffect(state, modelId, v.version);
+              const m = v.dclModule;
+              return (
+                <Space size={4} wrap>
+                  {m ? (
+                    <Tooltip title={L('刷这个版本的量产车随软件生效，不依赖网络', 'Production vehicles flashed with it run it with the software, no network needed')}>
+                      <Tag color={m.releaseId === set?.id ? 'green' : 'orange'}>{B(setName(state.releases[m.releaseId]!.dclVersion))}</Tag>
+                    </Tooltip>
+                  ) : (
+                    '—'
+                  )}
+                  {canExport && v.status === 'RECORDED' && set && m?.releaseId !== set.id && (
+                    <Button type="link" size="small" onClick={() => exportModule(v.version)}>
+                      {m ? L(`更新为 ${set.dclVersion}`, `Update to ${set.dclVersion}`) : L('导出到 OTA 包', 'Export to OTA package')}
+                    </Button>
+                  )}
+                </Space>
+              );
+            },
+          },
+          {
             title: L('量产车', 'Production vehicles'),
             render: (_, v) => {
               const list = production(v.version);
@@ -132,16 +177,22 @@ export function SoftwareVersionsCard({ modelId }: { modelId: string }) {
             render: (_, v) => {
               const set = setInEffect(state, modelId, v.version);
               return (
-                canConfirm && (
+                <Space size={0} wrap>
+                  <Button type="link" size="small" onClick={() => navigate(`versions/history/version/${v.version}`)}>
+                    {L('发布记录', 'History')}
+                  </Button>
+                  {canConfirm && (
                   <Space size={0}>
                     <Tooltip
                       title={
-                        eligible(v.version).length === 0
+                        v.status === 'PLANNED'
+                          ? L('规划版本的策略集来自它的集成征集，不做适用性确认。', 'A planned version’s set comes from its integration call; it takes no applicability check.')
+                          : eligible(v.version).length === 0
                           ? L('没有可以接管这个软件版本的策略集：补丁只服务本线的软件；主线只有在补丁的修复合入（或写明不合入）后才能接管补丁服务的软件。', 'No policy set may take this software over: a patch only serves its own line’s software, and the mainline takes over from a patch only once the patch’s fixes reached it (or were closed for it).')
                           : undefined
                       }
                     >
-                      <Button type="link" size="small" disabled={eligible(v.version).length === 0} onClick={() => (setReleaseId(eligible(v.version)[0]?.id), setOpening(v.version))}>
+                      <Button type="link" size="small" disabled={eligible(v.version).length === 0 || v.status === 'PLANNED'} onClick={() => (setReleaseId(eligible(v.version)[0]?.id), setOpening(v.version))}>
                         {L('开启适用性确认', 'Open a check')}
                       </Button>
                     </Tooltip>
@@ -151,7 +202,8 @@ export function SoftwareVersionsCard({ modelId }: { modelId: string }) {
                       </Button>
                     )}
                   </Space>
-                )
+                  )}
+                </Space>
               );
             },
           },

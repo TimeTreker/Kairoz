@@ -56,6 +56,10 @@ export const NOTIFICATION_CATEGORY: Record<NotificationKind, string> = {
   BUDGET_DROPS: 'VEHICLE',
   COLLECTION_PAUSED: 'VEHICLE',
   AFTERSALES_READY: 'FEATURE',
+  CALL_SUBMIT: 'INTEGRATION',
+  CALL_RETURNED: 'INTEGRATION',
+  CALL_COMPLETE: 'INTEGRATION',
+  CALL_WAITING: 'INTEGRATION',
 };
 
 export function useCategoryLabels(): Record<string, string> {
@@ -122,6 +126,14 @@ export function useNotificationText() {
         return { title: L(`${s} 可进入集成`, `${s} can be collected`), body: L(`分组 ${d} 的已验证提交。`, `Verified commit of group ${d}.`) };
       case 'MERGE_BLOCKED':
         return { title: L('合并预览存在阻塞', 'A merge preview is blocked'), body: L('冻结候选前需由所属团队修复、提交并重新验证。', 'The owning teams fix, commit and re-verify before a candidate can be frozen.') };
+      case 'CALL_SUBMIT':
+        return { title: L(`集成征集 ${s}：请提交 ${d} 的版本`, `Integration call ${s}: submit ${d}’s version`), body: L('提交已验证的 Feature（或子系统发布），没有改动就选"本次无变更"。', 'Submit a Verified Feature (or subsystem release), or say nothing changed.') };
+      case 'CALL_RETURNED':
+        return { title: L(`集成征集 ${s} 退回了你的提交`, `Integration call ${s} sent your submission back`), body: d ?? '' };
+      case 'CALL_COMPLETE':
+        return { title: L(`集成征集 ${s} 已收齐`, `Integration call ${s} is complete`), body: L('可以生成集成预览，确认后送测。', 'Preview the merge, then send it to testing.') };
+      case 'CALL_WAITING':
+        return { title: L(`集成征集 ${s} 还没收齐`, `Integration call ${s} is not complete`), body: d ? L(`未提交：${d}`, `Waiting for: ${d}`) : L('有提交已失效，需要重新提交。', 'Some submissions changed and must be submitted again.') };
       case 'CANDIDATE_TO_TEST':
         return { title: L(`集成候选 ${s} 等待验证`, `Candidate ${s} waits for testing`), body: L('只使用测试环境的集成车辆。', 'Testing-environment integration vehicles only.') };
       case 'CHECK_TO_TEST':

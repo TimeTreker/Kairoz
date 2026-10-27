@@ -10,6 +10,7 @@ import type { State } from '../src/engine/types.ts';
 import * as clientReport from './client-report.ts';
 import * as dataUsage from './data-usage.ts';
 import * as domainIntegration from './domain-integration.ts';
+import * as integrationCall from './integration-call.ts';
 import * as firstOta from './first-ota.ts';
 import * as negative from './negative.ts';
 import * as orgDirectory from './org-directory.ts';
@@ -74,6 +75,7 @@ const suites = [
   { id: 'quota', mod: quota },
   { id: 'technical', mod: technical },
   { id: 'aftersales', mod: aftersales },
+  { id: 'integration-call', mod: integrationCall },
 ] as const;
 
 const report: { script: string; name: string; rows: Row[] }[] = [];

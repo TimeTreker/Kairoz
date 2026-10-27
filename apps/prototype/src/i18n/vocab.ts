@@ -903,3 +903,74 @@ export const LIFECYCLE_KIND_LABELS: Record<string, Bilingual> = {
   ARCHIVED: b('归档', 'Archived'),
   RESTORED: b('恢复', 'Restored'),
 };
+
+// Integration calls (集成征集) and the release history (发布记录)
+Object.assign(ERROR_LABELS, {
+  VERSION_PLANNED: b('这是集成征集的规划版本：只能由该征集的发布列入，不能另做适用性确认', 'A planned version of an integration call: only that call’s release lists it, and it takes no applicability check'),
+  PLANNED_VERSION_IN_PRODUCTION: b('规划版本还没有发布，量产车只能运行已发布的软件', 'The planned version is not released; production vehicles run released software only'),
+  CALL_CLOSED: b('该集成征集已经结束', 'The integration call is closed'),
+  PARENT_CALL_REQUIRED: b('域子征集要响应一个整车征集，目标版本跟随整车征集', 'A domain call answers a whole-vehicle call and follows its target'),
+  NOT_A_CALL_MODULE: b('该模块不在这个征集的清单里', 'That module is not on this call’s list'),
+  CALL_EXISTS: b('这个目标版本已经有一个进行中的征集', 'A call for this target is already open'),
+  VERSION_RELEASED: b('这个整车集成版本已经发布过策略集；同软件的修改请走补丁', 'A policy set is already published for this version; change it with a patch'),
+  NO_MODULES: b('至少要有一个模块参加', 'At least one module must take part'),
+  MODULE_EXCLUDED: b('该模块本次不参加', 'That module does not take part this time'),
+  FEATURE_NOT_COLLECTIBLE: b('只能提交本组已验证、可收集的 Feature', 'Submit a Verified Feature of the group that can be collected'),
+  NOTHING_TO_REMIND: b('所有模块都已答复，没有要催办的', 'Every module has answered; there is no one to remind'),
+  NOTHING_SUBMITTED: b('该模块还没有提交，无需退回', 'That module has submitted nothing to send back'),
+  TARGET_FIXED: b('已经送测，测试证据绑定了目标版本，不能再改', 'A round was sent to testing; its evidence is bound to the target, which can no longer change'),
+  CALL_CHANGED: b('有模块提交了变更或还没答复，不能按"无变更"结束', 'Some modules submitted changes or have not answered; the call cannot close as unchanged'),
+  CALL_ROUND_OPEN: b('本征集的测试集成版本还在进行；请先退回模块或取消', 'This call’s test integration version is still open; send modules back or cancel it first'),
+  CALL_INCOMPLETE: b('还没收齐：下列模块未提交、被退回或提交已失效', 'Not complete yet: these modules have not submitted, were sent back, or their submission changed'),
+  CALL_ROUND_STALE: b('这个预览已不是征集当前的一轮，请重新生成', 'This preview is no longer the call’s current round; preview again'),
+  CALL_TARGET_MISSING: b('征集的测试集成版本必须列入它的目标版本', 'A call’s test integration version must list its target version'),
+});
+export const CALL_PHASE_LABELS: Record<string, Bilingual> = {
+  COLLECTING: b('征集中', 'Collecting'),
+  COMPLETE: b('已收齐', 'Complete'),
+  MERGING: b('集成预览', 'Merging'),
+  TESTING: b('集成测试中', 'In integration testing'),
+  PASSED: b('测试通过，待发布', 'Passed, to release'),
+  RELEASED: b('已发布', 'Released'),
+  CANCELLED: b('已取消', 'Cancelled'),
+  NO_CHANGE: b('本次无变更', 'No change'),
+};
+export const CALL_PHASE_COLORS: Record<string, string> = {
+  COLLECTING: 'processing',
+  COMPLETE: 'cyan',
+  MERGING: 'blue',
+  TESTING: 'gold',
+  PASSED: 'green',
+  RELEASED: 'success',
+  CANCELLED: 'default',
+  NO_CHANGE: 'default',
+};
+export const CALL_MODULE_STATUS_LABELS: Record<string, Bilingual> = {
+  WAITING: b('待提交', 'Waiting'),
+  SUBMITTED: b('已提交', 'Submitted'),
+  NO_CHANGE: b('本次无变更', 'No change'),
+  RETURNED: b('已退回', 'Sent back'),
+  EXCLUDED: b('不参加', 'Left out'),
+  REMINDED: b('已催办', 'Reminded'),
+};
+export const CALL_MODULE_STATUS_COLORS: Record<string, string> = {
+  WAITING: 'processing',
+  SUBMITTED: 'green',
+  NO_CHANGE: 'cyan',
+  RETURNED: 'red',
+  EXCLUDED: 'default',
+  REMINDED: 'orange',
+};
+export const ROUND_OUTCOME_LABELS: Record<string, Bilingual> = {
+  OPEN: b('进行中', 'Open'),
+  CANCELLED: b('已取消', 'Cancelled'),
+  RELEASED: b('已发布', 'Released'),
+};
+export const SOFTWARE_STATUS_LABELS: Record<string, Bilingual> = {
+  PLANNED: b('规划中', 'Planned'),
+  RECORDED: b('已登记', 'Recorded'),
+};
+Object.assign(ERROR_LABELS, {
+  NO_SET_FOR_VERSION: b('没有适用这个软件版本的策略集，无法导出配置模块', 'No policy set applies to this software version; there is no module to export'),
+  MODULE_CURRENT: b('配置模块已经是当前生效的策略集', 'The module already carries the set in effect'),
+});

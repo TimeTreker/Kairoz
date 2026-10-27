@@ -11,7 +11,7 @@ import type { FileType, Privacy } from '../domain/file-types.ts';
 import type { ReviewControls } from '../domain/intake.ts';
 import type { Domain, Env, GroupPurpose, Role, Scope, WorkspaceKind } from '../domain/vocabulary.ts';
 
-export const STATE_SCHEMA = 20;
+export const STATE_SCHEMA = 21;
 
 export interface Account {
   username: string;
@@ -357,8 +357,32 @@ export interface SoftwareVersion {
   source: string;
   /** The signals and data sources the software provides (mock); null when not known. */
   manifest: SoftwareManifest | null;
+  /**
+   * PLANNED: the target of an integration call (规划版本), not released yet. Development and testing
+   * vehicles may run its pre-release builds; production vehicles never do, and only that call's
+   * release may list it. RECORDED: a released version from a trusted source or a call's release.
+   */
+  status: 'PLANNED' | 'RECORDED';
+  /** The integration call that planned (and, once released, produced) it; null when recorded from outside. */
+  callId: string | null;
+  /** The DCL configuration module bundled into this version's vehicle OTA package; null when none. */
+  dclModule: DclModule | null;
   recordedBy: string;
   createdAt: string;
+}
+
+/**
+ * A DCL configuration module (DCL 配置模块): a published policy set exported into a whole-vehicle
+ * integration version's OTA package, so a production vehicle flashed with that software runs the
+ * set at once, without waiting for a cloud push (weak or no signal included). Later changes still
+ * reach it by configuration OTA once it is connected.
+ */
+export interface DclModule {
+  releaseId: string;
+  resolvedConfigId: string;
+  digest: string;
+  exportedBy: string;
+  exportedAt: string;
 }
 
 /** Immutable simulator runtime image. A NULL integration version is a development image. */
@@ -638,6 +662,19 @@ export interface DeploymentTarget {
   pushedAt: string | null;
   /** Finished earlier attempts, kept as evidence. */
   history: TargetAttempt[];
+  /** OTA only: the vehicle's whole-vehicle software when the rollout was sent to it. */
+  software?: string | null;
+}
+
+/** One step of an OTA rollout (下发记录), kept for the release history. */
+export interface RolloutEvent {
+  kind: 'STARTED' | 'EXPANDED' | 'PAUSED' | 'AUTO_PAUSED' | 'RESUMED' | 'COMPLETED' | 'CANCELLED' | 'ROLLED_BACK';
+  /** null: the platform itself (a failed or the last receipt). */
+  by: string | null;
+  at: string;
+  reason: string | null;
+  /** The vehicles the step concerned: sent, retried or failed. */
+  resourceIds: string[];
 }
 
 /**
@@ -659,6 +696,8 @@ export interface Deployment {
   /** OTA only: the rollout this one rolls back, and why things paused. */
   rollbackOf?: string | null;
   pauseReason?: string | null;
+  /** OTA only: every step of the rollout, oldest first. */
+  log?: RolloutEvent[];
   /**
    * DISPATCH: someone dispatched it. GROUP_FOLLOW: a vehicle that joined a vehicle group (or had its
    * software updated on request) was pushed what was already dispatched to the group.
@@ -791,6 +830,8 @@ export interface MergePlan {
   patch: MergePatch | null;
   sources: { featureId: string; commitId: string }[];
   subsystems: SubsystemRef[];
+  /** The integration call whose submissions it merges (one round of it); null for a free merge. */
+  callId: string | null;
   status: 'READY' | 'CONFLICT' | 'BLOCKED' | 'FROZEN' | 'SUPERSEDED';
   /** Merged configuration of every group a source changed. */
   merged: Record<string, GroupConfig>;
@@ -834,12 +875,102 @@ export interface Candidate {
   scope: Scope;
   sources: { featureId: string; commitId: string }[];
   subsystems: SubsystemRef[];
+  /** The integration call it is a test integration version of (测试集成版本); null otherwise. */
+  callId: string | null;
   resolvedConfigId: string;
   status: CandidateStatus;
   createdBy: string;
   createdAt: string;
   verifiedBy: string | null;
   verifiedAt: string | null;
+}
+
+// ---------------------------------------------------------------------------
+// Integration calls (集成征集)
+// ---------------------------------------------------------------------------
+
+export type CallModuleStatus = 'WAITING' | 'SUBMITTED' | 'NO_CHANGE' | 'RETURNED' | 'EXCLUDED';
+
+/** One step of a module in a call: a submission, a return, an exclusion or a reminder. */
+export interface CallModuleEvent {
+  kind: 'SUBMITTED' | 'NO_CHANGE' | 'RETURNED' | 'EXCLUDED' | 'REMINDED';
+  by: string;
+  at: string;
+  note: string | null;
+  featureId: string | null;
+  commitId: string | null;
+  subsystemReleaseId: string | null;
+}
+
+/**
+ * A module of an integration call (征集模块): a leaf business group, submitted by its developers,
+ * or an upper node, a domain integration workspace that integrates several groups first, submitted
+ * by that workspace's admin or configuration integration.
+ */
+export interface CallModule {
+  /** The group id, or `domain:<Domain>`. */
+  key: string;
+  kind: 'GROUP' | 'DOMAIN';
+  groupId: string | null;
+  domain: Domain | null;
+  /** Where the module submits from: the group's team workspace, or the domain integration workspace. */
+  workspaceId: string;
+  status: CallModuleStatus;
+  /** A Verified Feature commit (a group), or a subsystem release (a domain); null for no change. */
+  featureId: string | null;
+  commitId: string | null;
+  subsystemReleaseId: string | null;
+  by: string | null;
+  at: string | null;
+  note: string | null;
+  remindedAt: string | null;
+  history: CallModuleEvent[];
+}
+
+/** One round of a call: a merge preview of its submissions and, once frozen, its test integration version. */
+export interface CallRound {
+  planId: string;
+  candidateId: string | null;
+  /** RELEASED: published; CANCELLED: returned, previewed again or the call closed. Passing is the candidate's. */
+  outcome: 'OPEN' | 'CANCELLED' | 'RELEASED';
+  reason: string | null;
+  by: string;
+  at: string;
+  closedBy: string | null;
+  closedAt: string | null;
+}
+
+/**
+ * An integration call (集成征集) for a target whole-vehicle integration version: every module submits
+ * its DCL policy version, integration checks the list is complete, freezes a test integration
+ * version and integration testing tests it, round after round; configuration release publishes
+ * the passing round as a policy set listed for the target version. A domain call (子征集) collects
+ * the groups of one domain for the same target and hands its subsystem release to the parent call.
+ */
+export interface IntegrationCall {
+  id: string;
+  vehicleModelId: string;
+  /** The merge workspace that runs it. */
+  workspaceId: string;
+  scope: Scope;
+  parentCallId: string | null;
+  /** The target whole-vehicle integration version; fixed once a round was frozen. */
+  targetVersion: string;
+  title: string;
+  /** The recorded version the planned target's manifest was copied from. */
+  baseVersion: string | null;
+  dueDate: string | null;
+  modules: CallModule[];
+  rounds: CallRound[];
+  status: 'OPEN' | 'RELEASED' | 'CANCELLED' | 'NO_CHANGE';
+  releaseId: string | null;
+  subsystemReleaseId: string | null;
+  /** Why it was cancelled or closed without change. */
+  note: string | null;
+  createdBy: string;
+  createdAt: string;
+  closedBy: string | null;
+  closedAt: string | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -1078,6 +1209,8 @@ export interface SoftwareChange {
   acknowledgedAt: string | null;
   /** The software update request (整车软件更新) this change carried out, if any. */
   requestId: string | null;
+  /** The bundled DCL configuration module the vehicle started running with the software, if any. */
+  configId?: string | null;
 }
 
 /**
@@ -1320,6 +1453,7 @@ export interface State {
   /** How many simulations a workspace may run at once (team and personal together); none means no limit. */
   simulationQuotas: Record<string, number>;
   captureRequests: Record<string, CaptureRequest>;
+  integrationCalls: Record<string, IntegrationCall>;
   audit: AuditEvent[];
 }
 
@@ -1389,6 +1523,7 @@ export function emptyState(): State {
     collectionHolds: {},
     simulationQuotas: {},
     captureRequests: {},
+    integrationCalls: {},
     audit: [],
   };
 }

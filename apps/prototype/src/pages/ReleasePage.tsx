@@ -2,7 +2,7 @@
 // versions, decide which software versions each set applies to, see which set each production
 // vehicle should run, and roll sets out in waves.
 
-import { Alert, Badge, Button, Card, Checkbox, Descriptions, Empty, Flex, Form, Input, Modal, Select, Space, Table, Tabs, Tag, Tooltip, Typography } from 'antd';
+import { Alert, Badge, Button, Card, Checkbox, Descriptions, Empty, Flex, Input, Modal, Select, Space, Table, Tabs, Tag, Tooltip, Typography } from 'antd';
 import { useState } from 'react';
 import { useCan, useRun, useWorkspace } from '../app/hooks.ts';
 import { navigate } from '../app/router.ts';
@@ -12,6 +12,7 @@ import { EmergencyStopsCard, RequestStopModal } from '../components/emergency.ts
 import { EnvTag, Hint, LabelTag, Mono, PageHeader, ShortId, configName, when } from '../components/common.tsx';
 import { JsonExportModal, downloadJson } from '../components/JsonExport.tsx';
 import { LineTag, TargetSet } from '../components/patch.tsx';
+import { PromoteModal } from '../components/promote.tsx';
 import { DeliveryTag } from '../components/testing.tsx';
 import type { JsonFile } from '../components/JsonExport.tsx';
 import { displayName, mainlineRelease } from '../engine/config.ts';
@@ -19,7 +20,7 @@ import { membersOf, ungroupedVehicles, vehicleGroupsOf } from '../engine/fleet.t
 import { answerConfigRequest, cancelOta, createOta, expandOta, otaProblems, otaRollouts, outsideRollout, pauseOta, resumeOta, rollbackOta, rollbackProblems } from '../engine/ota.ts';
 import { isOpenCheck } from '../engine/applicability.ts';
 import { releaseWorkspace } from '../engine/emergency.ts';
-import { applicableVersions, compareVersions, nextDclVersion, previousRelease, promoteCandidate, promoteVersionProblem, releaseConfiguration, releaseFor, releasesOf, setInEffect, targetMoved, testedVersions, versionLine, versionsInEffect } from '../engine/release.ts';
+import { applicableVersions, previousRelease, releaseConfiguration, releaseFor, releasesOf, setInEffect, targetMoved, testedVersions, versionsInEffect } from '../engine/release.ts';
 import type { Candidate, Deployment, Release, State, VehicleGroup } from '../engine/types.ts';
 import { useI18n } from '../i18n/i18n.tsx';
 import { issueLabel } from '../i18n/issues.ts';
@@ -237,6 +238,9 @@ function ReleasesTab({ modelId, workspaceId }: { modelId: string; workspaceId: s
                   <Button type="link" size="small" onClick={() => setComparing(r)}>
                     {r.patchOf ? L('与所补的版本比较', 'Compare with the set it patches') : L('与上一版比较', 'Compare with previous')}
                   </Button>
+                  <Button type="link" size="small" onClick={() => navigate(`versions/history/set/${r.id}`)}>
+                    {L('发布记录', 'History')}
+                  </Button>
                   {canExport(r) && (
                     <Button size="small" onClick={() => exportConfiguration(r.id)}>
                       {L('导出配置集合', 'Export configuration')}
@@ -254,89 +258,6 @@ function ReleasesTab({ modelId, workspaceId }: { modelId: string; workspaceId: s
       <RequestStopModal target={stopping} onClose={() => setStopping(null)} />
       <JsonExportModal title={L('导出配置集合', 'Export configuration')} file={exported} onClose={() => setExported(null)} />
     </Space>
-  );
-}
-
-function PromoteModal({ candidate, onClose }: { candidate: Candidate; onClose: () => void }) {
-  const state = useEngineState();
-  const { L, B } = useI18n();
-  const run = useRun();
-  const tested = new Set(testedVersions(state, candidate));
-  // A patch replaces its target only where the target is in effect.
-  const target = candidate.patch && candidate.targetReleaseId ? state.releases[candidate.targetReleaseId] : undefined;
-  const serving = target ? new Set(versionsInEffect(state, target)) : null;
-  const versions = Object.values(state.softwareVersions)
-    .filter((v) => v.vehicleModelId === candidate.vehicleModelId && (!serving || serving.has(v.version)))
-    .map((v) => v.version)
-    .sort(compareVersions);
-  const [form] = Form.useForm<{ dclVersion: string; versions: string[]; notes: string }>();
-  const moved = targetMoved(state, candidate);
-  // Software a patch serves: listing it here would drop the patch's fixes unless this set carries them.
-  const blocked = (v: string) => promoteVersionProblem(state, candidate, v)?.code === 'PATCH_FIX_MISSING';
-  return (
-    <Modal
-      open
-      title={`${L('发布候选', 'Promote candidate')} · ${candidate.label}`}
-      okText={L('发布', 'Promote')}
-      okButtonProps={{ disabled: moved }}
-      onCancel={onClose}
-      onOk={() =>
-        form.validateFields().then((v) => {
-          const id = run((c) => promoteCandidate(c, candidate.id, { dclVersion: v.dclVersion, vehicleIntegrationVersions: v.versions ?? [], notes: v.notes }), L('已发布；车辆在 OTA 回执成功后才会运行新策略集', 'Released; vehicles run the set only after an OTA receipt'));
-          if (id !== undefined) onClose();
-        })
-      }
-    >
-      {moved && (
-        <Alert
-          type="warning"
-          showIcon
-          style={{ marginBottom: 12 }}
-          title={candidate.patch ? L('它所补的策略集已被更新的策略集替换，这个候选不能再发布；请在新的策略集上重新集成。', 'The set it patches was replaced by a newer one for its software, so this candidate can no longer be released; integrate again on the new set.') : L('主线在冻结后又发布了新的策略集，这个候选不能再发布；请重新集成。', 'A newer mainline set was published after it was frozen, so this candidate can no longer be released; integrate again.')}
-        />
-      )}
-      {target && !moved && (
-        <Alert
-          type="info"
-          showIcon
-          style={{ marginBottom: 12 }}
-          title={L(`同软件版本补丁：基于策略集 ${target.dclVersion}，版本号沿 ${versionLine(target.dclVersion)}.x 递增，只能适用它正在服务的软件版本。主线不变。`, `Same-software patch of policy set ${target.dclVersion}: numbered ${versionLine(target.dclVersion)}.x, for the software versions that set serves only. The mainline stays as it is.`)}
-        />
-      )}
-      <Form form={form} name="promote" layout="vertical" initialValues={{ dclVersion: nextDclVersion(state, candidate.vehicleModelId, target?.id ?? null), versions: versions.filter((v) => tested.has(v) && !blocked(v)), notes: '' }}>
-        <Form.Item name="dclVersion" label={L('DCL 策略集版本', 'DCL policy set version')} rules={[{ required: true }]} extra={L('独立于整车软件版本，major.minor.patch', 'Independent of vehicle software, major.minor.patch')}>
-          <Input />
-        </Form.Item>
-        <Form.Item name="versions" label={L('适用的整车软件版本', 'Applies to vehicle software')}>
-          <Checkbox.Group>
-            <Space orientation="vertical">
-              {versions.map((v) => (
-                <Checkbox key={v} value={v}>
-                  {`${candidate.vehicleModelId} ${v}`}{' '}
-                  {blocked(v) && (
-                    <Tooltip title={B(issueLabel(promoteVersionProblem(state, candidate, v)!.message), promoteVersionProblem(state, candidate, v)!.message)}>
-                      <Tag color="red">{L(`运行补丁 ${setInEffect(state, candidate.vehicleModelId, v)?.dclVersion}，其修复未合入`, `runs patch ${setInEffect(state, candidate.vehicleModelId, v)?.dclVersion}; its fixes are missing`)}</Tag>
-                    </Tooltip>
-                  )}
-                  {tested.has(v) ? (
-                    <Tag color="green">{L('已通过集成测试', 'integration tested')}</Tag>
-                  ) : candidate.targetReleaseId === null ? (
-                    <Tooltip title={L('首版候选在未定版本的测试车辆上验证，按设计不要求逐软件版本测试。', 'The initial candidate is tested on vehicles without a fixed software version, so per-version tests are not required by design.')}>
-                      <Tag color="blue">{L('首版免逐版本测试', 'initial: no per-version test')}</Tag>
-                    </Tooltip>
-                  ) : (
-                    <Tag>{L('无集成测试', 'not tested')}</Tag>
-                  )}
-                </Checkbox>
-              ))}
-            </Space>
-          </Checkbox.Group>
-        </Form.Item>
-        <Form.Item name="notes" label={L('发布说明', 'Release notes')}>
-          <Input.TextArea rows={2} />
-        </Form.Item>
-      </Form>
-    </Modal>
   );
 }
 

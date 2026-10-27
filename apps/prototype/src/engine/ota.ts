@@ -11,7 +11,7 @@ import { directTargetProblems, livePublication, membersOf, openOtaOf, pendingDep
 
 export { openOtaOf };
 import { appliesTo, getRelease, releaseFor } from './release.ts';
-import type { Deployment, DeploymentTarget, Release, Resource, State } from './types.ts';
+import type { Deployment, DeploymentTarget, Release, Resource, RolloutEvent, State } from './types.ts';
 import { featureTarget, featureTargetDigest } from './validation.ts';
 
 /**
@@ -60,7 +60,13 @@ function target(ctx: Ctx, resourceId: string, vehicleGroupId: string | null, sta
     updatedAt: ctx.now,
     pushedAt: null,
     history: [],
+    software: ctx.s.resources[resourceId]!.integrationVersion,
   };
+}
+
+/** Appends a step to a rollout's log (下发记录). */
+function logStep(ctx: Ctx, d: Draft<Deployment>, kind: RolloutEvent['kind'], reason: string | null, resourceIds: string[] = []): void {
+  (d.log ??= []).push({ kind, by: ctx.user().username, at: ctx.now, reason, resourceIds });
 }
 
 /**
@@ -135,6 +141,7 @@ export function createOta(
     targets: members.map((m) => target(ctx, m.resourceId, m.vehicleGroupId, wave.includes(m.resourceId) ? 'PENDING' : 'QUEUED')),
     rollbackOf: null,
     pauseReason: null,
+    log: [{ kind: 'STARTED', by: ctx.user().username, at: ctx.now, reason: null, resourceIds: [...wave] }],
     trigger: 'DISPATCH',
     dispatchedBy: ctx.user().username,
     createdAt: ctx.now,
@@ -164,10 +171,12 @@ export function expandOta(ctx: Ctx, deploymentId: string, resourceIds: string[] 
     if (chosen.some((c) => c.resourceId === t.resourceId)) {
       t.status = 'PENDING';
       t.previousConfigId = ctx.s.resources[t.resourceId]!.appliedConfigId;
+      t.software = ctx.s.resources[t.resourceId]!.integrationVersion;
       t.updatedAt = ctx.now;
       t.pushedAt = null;
     }
   }
+  logStep(ctx, draft, 'EXPANDED', null, chosen.map((t) => t.resourceId));
   draft.updatedAt = ctx.now;
 }
 
@@ -179,6 +188,7 @@ export function pauseOta(ctx: Ctx, deploymentId: string, reason: string): void {
   const draft = ctx.s.deployments[d.id]!;
   draft.status = 'PAUSED';
   draft.pauseReason = reason.trim();
+  logStep(ctx, draft, 'PAUSED', reason.trim());
   draft.updatedAt = ctx.now;
 }
 
@@ -203,7 +213,11 @@ export function resumeOta(ctx: Ctx, deploymentId: string): void {
   }
   draft.status = 'PENDING';
   draft.pauseReason = null;
-  if (draft.targets.every((t) => t.status !== 'PENDING' && t.status !== 'QUEUED')) draft.status = 'COMPLETED';
+  logStep(ctx, draft, 'RESUMED', null, failed.map((t) => t.resourceId));
+  if (draft.targets.every((t) => t.status !== 'PENDING' && t.status !== 'QUEUED')) {
+    draft.status = 'COMPLETED';
+    logStep(ctx, draft, 'COMPLETED', null);
+  }
   draft.updatedAt = ctx.now;
 }
 
@@ -222,6 +236,7 @@ export function cancelOta(ctx: Ctx, deploymentId: string, reason: string): void 
     }
   }
   draft.status = 'CANCELLED';
+  logStep(ctx, draft, 'CANCELLED', reason.trim());
   draft.updatedAt = ctx.now;
 }
 
@@ -267,6 +282,7 @@ export function rollbackOta(ctx: Ctx, deploymentId: string, reason: string): str
   }
   draft.status = 'ROLLED_BACK';
   draft.pauseReason = reason.trim();
+  logStep(ctx, draft, 'ROLLED_BACK', reason.trim(), applied.map((t) => t.resourceId));
   draft.updatedAt = ctx.now;
 
   const byConfig = new Map<string, DeploymentTarget[]>();
@@ -291,6 +307,7 @@ export function rollbackOta(ctx: Ctx, deploymentId: string, reason: string): str
       targets: targets.map((t) => target(ctx, t.resourceId, t.vehicleGroupId!, 'PENDING')),
       rollbackOf: d.id,
       pauseReason: null,
+      log: [{ kind: 'STARTED', by: ctx.user().username, at: ctx.now, reason: reason.trim(), resourceIds: targets.map((t) => t.resourceId) }],
       trigger: 'DISPATCH',
       dispatchedBy: ctx.user().username,
       createdAt: ctx.now,

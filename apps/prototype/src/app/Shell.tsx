@@ -8,6 +8,7 @@ import {
   DatabaseOutlined,
   DeploymentUnitOutlined,
   FileSearchOutlined,
+  FlagOutlined,
   ReadOutlined,
   RocketOutlined,
   SafetyCertificateOutlined,
@@ -79,6 +80,7 @@ const ProcessingPage = lazyPage(() => import('../pages/ProcessingPage.tsx').then
 const FleetPage = lazyPage(() => import('../pages/FleetPage.tsx').then((m) => m.FleetPage));
 const IntegrationPage = lazyPage(() => import('../pages/IntegrationPage.tsx').then((m) => m.IntegrationPage));
 const ReleasePage = lazyPage(() => import('../pages/ReleasePage.tsx').then((m) => m.ReleasePage));
+const VersionsPage = lazyPage(() => import('../pages/VersionsPage.tsx').then((m) => m.VersionsPage));
 const QueryPage = lazyPage(() => import('../pages/QueryPage.tsx').then((m) => m.QueryPage));
 const SimulatorPage = lazyPage(() => import('../pages/SimulatorPage.tsx').then((m) => m.SimulatorPage));
 const OrgPage = lazyPage(() => import('../pages/OrgPage.tsx').then((m) => m.OrgPage));
@@ -91,7 +93,7 @@ const AcceptancePage = lazyPage(() => import('../pages/AcceptancePage.tsx').then
 /** Fetched once the shell is up, so switching pages during a demo never waits on the network. */
 const PAGES = [
   WorkbenchPage, FeaturesPage, FeatureDetailPage, DataCatalogPage, IntakePage, ProcessingPage, FleetPage, IntegrationPage,
-  ReleasePage, QueryPage, SimulatorPage, OrgPage, AccountsPage, AuditPage, GuidePage, NotificationsPage, AcceptancePage,
+  ReleasePage, VersionsPage, QueryPage, SimulatorPage, OrgPage, AccountsPage, AuditPage, GuidePage, NotificationsPage, AcceptancePage,
 ];
 
 interface NavItem {
@@ -110,6 +112,7 @@ const NAV: NavItem[] = [
   { key: 'processing', icon: <DeploymentUnitOutlined />, zh: '处理目录', en: 'Processing catalog' },
   { key: 'fleet', icon: <CarOutlined />, zh: '车辆与车辆组', en: 'Vehicles & groups' },
   { key: 'integration', icon: <ClusterOutlined />, zh: '配置集成', en: 'Integration' },
+  { key: 'versions', icon: <FlagOutlined />, zh: '集成版本', en: 'Integration versions' },
   { key: 'release', icon: <RocketOutlined />, zh: '发布与配置 OTA', en: 'Release & OTA' },
   { key: 'query', icon: <FileSearchOutlined />, zh: '数据查询', en: 'Data query' },
   { key: 'org', icon: <ApartmentOutlined />, zh: '组织与工作区', en: 'Organization' },
@@ -189,6 +192,7 @@ export function Shell() {
       processing: <ProcessingPage tab={route[1]} />,
       fleet: <FleetPage key={workspace?.id} tab={route[1]} />,
       release: <ReleasePage key={workspace?.id} tab={route[1]} />,
+      versions: <VersionsPage key={workspace?.id} tab={route[1]} id={route[2]} sub={route[3]} />,
       query: <QueryPage key={workspace?.id} tab={route[1]} />,
       simulator: <SimulatorPage />,
       org: <OrgPage />,

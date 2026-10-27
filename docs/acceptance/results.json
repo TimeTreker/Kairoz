@@ -1,8 +1,8 @@
 {
-  "runAt": "2026-10-26T14:18:00.011Z",
+  "runAt": "2026-10-27T02:23:30.871Z",
   "layer": "engine",
   "counts": {
-    "PASS": 205,
+    "PASS": 214,
     "FAIL": 0,
     "GAP": 0,
     "BLOCKED": 0,
@@ -1773,6 +1773,93 @@
           "id": "N01",
           "title": "售后请求的越权",
           "actor": "business；dispatch_operator；resource",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        }
+      ]
+    },
+    {
+      "script": "integration-call",
+      "name": "集成征集与发布记录 · 整车集成版本的发布管理",
+      "rows": [
+        {
+          "id": "IC01",
+          "title": "集成管理员为 X89 1.2 发起集成征集",
+          "actor": "integration_admin / 郑书杰 · 工作区管理员",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "IC02",
+          "title": "叶子模块由本组研发提交",
+          "actor": "steering；business；integrator；integration_admin",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "IC03",
+          "title": "上层模块：ADC 开子征集，CDC 直接答复",
+          "actor": "adc_integrator；adc_parking；adc_system；cdc_integrator",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "IC04",
+          "title": "收齐后合并、DCL 确认，送测第一轮",
+          "actor": "integrator；dcl；integration_admin；resource",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "IC05",
+          "title": "第一轮不通过：退回转向组",
+          "actor": "integration_tester；integration_admin；steering；steering_tester",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "IC06",
+          "title": "第二轮通过",
+          "actor": "integrator；dcl；integration_tester",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "IC07",
+          "title": "发布：生成整车集成版本、对应关系和 OTA 包内配置模块",
+          "actor": "release / 孙立；resource",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "IC08",
+          "title": "发布记录",
+          "actor": "integration_admin / 郑书杰",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "N01",
+          "title": "反向：越权与已结束的征集",
+          "actor": "cdc_integrator；steering；integration_tester；release；integration_admin",
           "adaptation": null,
           "status": "PASS",
           "detail": null,

@@ -17,6 +17,7 @@ import { DeploymentsTable, DispatchModal, RecordTestModal, TargetsTable } from '
 import { WILDCARD } from '../domain/vocabulary.ts';
 import type { Scope } from '../domain/vocabulary.ts';
 import { resourceBlockers } from '../engine/budget.ts';
+import { roundLabel } from '../engine/calls.ts';
 import { displayName } from '../engine/config.ts';
 import { ungroupedVehicles, vehicleGroupsOf } from '../engine/fleet.ts';
 import {
@@ -420,6 +421,21 @@ function MergeTab({ projectId, onCandidate }: { projectId: string; onCandidate: 
   );
 }
 
+/** The integration call a preview or candidate is a round of, with the round's number. */
+function CallLink({ callId, planId }: { callId: string; planId: string }) {
+  const state = useEngineState();
+  const { L } = useI18n();
+  const call = state.integrationCalls[callId];
+  if (!call) return null;
+  const n = call.rounds.findIndex((r) => r.planId === planId) + 1;
+  return (
+    <Space size={4} wrap>
+      <a onClick={() => navigate(`versions/calls/${call.id}`)}>{call.title}</a>
+      <Tag color="purple">{L(`第 ${n} 轮`, `round ${n}`)}</Tag>
+    </Space>
+  );
+}
+
 function PlanCard({ plan, onCandidate }: { plan: MergePlan; onCandidate: (id: string) => void }) {
   const state = useEngineState();
   const { L, B } = useI18n();
@@ -441,7 +457,14 @@ function PlanCard({ plan, onCandidate }: { plan: MergePlan; onCandidate: (id: st
   const unreviewed = lines.filter((l) => l.requiresReview && l.review?.status !== 'APPROVED');
   const overBudget = plan.status === 'READY' && !confirmed ? resourceBlockers(state, plan) : [];
   const sameKind = Object.values(state.candidates).filter((c) => c.workspaceId === plan.workspaceId && c.scope === plan.scope && (c.patch === null) === (plan.patch === null)).length + 1;
-  const nextLabel = plan.patch ? `${plan.vehicleModelId}-P${sameKind}` : plan.scope === 'Vehicle' ? `${plan.vehicleModelId}-C${sameKind}` : `${plan.vehicleModelId}-${plan.scope}-C${sameKind}`;
+  const call = plan.callId ? state.integrationCalls[plan.callId] : undefined;
+  const nextLabel = call
+    ? roundLabel(state, call, plan.id)
+    : plan.patch
+      ? `${plan.vehicleModelId}-P${sameKind}`
+      : plan.scope === 'Vehicle'
+        ? `${plan.vehicleModelId}-C${sameKind}`
+        : `${plan.vehicleModelId}-${plan.scope}-C${sameKind}`;
   // A preview is pinned to its source commits; a newer head (or a lost verification) makes it stale.
   const staleSources = ['READY', 'CONFLICT', 'BLOCKED'].includes(plan.status)
     ? plan.sources.filter((x) => {
@@ -489,6 +512,11 @@ function PlanCard({ plan, onCandidate }: { plan: MergePlan; onCandidate: (id: st
       />
       <Descriptions size="small" column={{ xs: 1, md: 2 }} style={{ marginBottom: 12 }}>
         <Descriptions.Item label={L('目标策略集', 'Target set')}><TargetSet targetReleaseId={plan.targetReleaseId} patch={plan.patch} /></Descriptions.Item>
+        {call && (
+          <Descriptions.Item label={L('集成征集', 'Integration call')}>
+            <CallLink callId={call.id} planId={plan.id} />
+          </Descriptions.Item>
+        )}
         <Descriptions.Item label={L('预览摘要', 'Digest')}><ShortId value={plan.digest} /></Descriptions.Item>
         <Descriptions.Item label={L('预览人', 'By')}>{`${state.accounts[plan.createdBy]?.displayName} · ${when(plan.createdAt)}`}</Descriptions.Item>
         <Descriptions.Item label={L('DCL 确认', 'DCL confirmation')}>
@@ -809,6 +837,11 @@ function CandidateDetail({ candidate: c }: { candidate: Candidate }) {
       >
         <Descriptions size="small" column={{ xs: 1, md: 2 }}>
           <Descriptions.Item label={L('目标策略集', 'Target set')}><TargetSet targetReleaseId={c.targetReleaseId} patch={c.patch} /></Descriptions.Item>
+          {c.callId && (
+            <Descriptions.Item label={L('集成征集', 'Integration call')}>
+              <CallLink callId={c.callId} planId={c.mergePlanId} />
+            </Descriptions.Item>
+          )}
           <Descriptions.Item label={L('集成测试工作区', 'Integration workspace')}>{state.workspaces[c.testWorkspaceId]?.name}</Descriptions.Item>
           <Descriptions.Item label={L('完整车辆配置', 'Vehicle configuration')}>
             <Space size={4}>
