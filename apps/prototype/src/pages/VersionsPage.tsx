@@ -15,7 +15,7 @@ import { PromoteModal } from '../components/promote.tsx';
 import { callPhase, callsOf, closeUnchanged, cancelCall, defaultModules, excludeModule, isOverdueCall, isStale, moduleName, openCall, openRound, previewCall, remindModules, retargetCall, returnModules, submitDomain, submitGroup, waitingModules } from '../engine/calls.ts';
 import type { CallPhase } from '../engine/calls.ts';
 import { displayName } from '../engine/config.ts';
-import { releaseHistory, setsOverTime, softwareVersionsOf, vehiclesOnVersion, vehiclesRunning, versionHistory } from '../engine/history.ts';
+import { productionDistribution, releaseHistory, setsOverTime, softwareVersionsOf, vehiclesOnVersion, vehiclesRunning, versionHistory } from '../engine/history.ts';
 import type { HistoryEntry } from '../engine/history.ts';
 import { collectibleSubsystems, defaultScope, isMergeWorkspace, verifiedSources } from '../engine/integration.ts';
 import { applicableVersions, releasesOf, setInEffect, versionsInEffect } from '../engine/release.ts';
@@ -667,8 +667,55 @@ function HistoryTab({ view, selected }: { view: 'version' | 'set'; selected?: st
           { value: 'set', label: L('按策略集', 'By policy set') },
         ]}
       />
+      <ProductionDistribution />
       {view === 'version' ? <VersionHistory selected={selected} /> : <SetHistory selected={selected} />}
     </Space>
+  );
+}
+
+/** Where the model's production vehicles are: counts per software version and running set, no vehicle ids. */
+function ProductionDistribution() {
+  const state = useEngineState();
+  const { L, B } = useI18n();
+  const { workspace } = useWorkspace();
+  if (!workspace) return null;
+  const rows = productionDistribution(state, workspace.vehicleModelId);
+  return (
+    <Card size="small" title={`${L('量产版本分布', 'Production versions')} · ${workspace.vehicleModelId}`}>
+      {rows.length === 0 ? (
+        <Typography.Text type="secondary">{L('还没有量产车。', 'No production vehicles yet.')}</Typography.Text>
+      ) : (
+        <Table
+          rowKey={(r) => r.version ?? '—'}
+          size="small"
+          pagination={false}
+          dataSource={rows}
+          columns={[
+            { title: L('整车软件版本', 'Software'), render: (_, r) => (r.version ? `${workspace.vehicleModelId} ${r.version}` : <Typography.Text type="warning">{L('未知或不一致', 'Unknown or inconsistent')}</Typography.Text>) },
+            { title: L('量产车', 'Vehicles'), dataIndex: 'vehicles' },
+            {
+              title: L('正在运行', 'Running'),
+              render: (_, r) => (
+                <Space size={4} wrap>
+                  {r.sets.map((x) => (
+                    <Tag key={x.dclVersion ?? '—'} color={x.dclVersion ? 'blue' : undefined}>
+                      {x.dclVersion ? B(setName(x.dclVersion)) : L('没有策略集', 'no policy set')} × {x.vehicles}
+                    </Tag>
+                  ))}
+                </Space>
+              ),
+            },
+            {
+              title: L('当前生效', 'In effect'),
+              render: (_, r) => {
+                const set = r.version ? setInEffect(state, workspace.vehicleModelId, r.version) : null;
+                return set ? B(setName(set.dclVersion)) : r.version ? L('无（被阻止）', 'none (blocked)') : '—';
+              },
+            },
+          ]}
+        />
+      )}
+    </Card>
   );
 }
 

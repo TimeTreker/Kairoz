@@ -247,10 +247,11 @@ export const PAGE_ACCESS: Readonly<Record<string, PageAccess>> = {
   release: { roles: ['CONFIG_RELEASE', 'DCL_ENGINEER'] },
   versions: { roles: ['BUSINESS_DEV', 'BUSINESS_TEST', 'WORKSPACE_ADMIN', 'CONFIG_INTEGRATOR', 'INTEGRATION_TEST', 'CONFIG_RELEASE', 'DCL_ENGINEER', 'VEHICLE_RESOURCE'] },
   query: { roles: ['BUSINESS_DEV', 'BUSINESS_TEST', 'DCL_ENGINEER', 'CONFIG_INTEGRATOR', 'INTEGRATION_TEST', 'CONFIG_RELEASE'] },
-  org: { actions: ['org.manage', 'workspace.manage'] },
   accounts: { actions: ['account.manage'] },
   audit: { actions: ['audit.read'] },
 };
+
+// The organization page is open to every account, read only: managing it is authorized per action.
 
 /** Whether the grants open `page` in the given workspace (null: no workspace chosen). */
 export function canOpenPage(grants: readonly Grant[], page: string, workspaceId: string | null): boolean {

@@ -222,6 +222,27 @@ export function workspaceAccess(state: State, actor: Actor): WorkspaceAccess[] {
     });
 }
 
+export interface WorkspaceMember {
+  username: string;
+  displayName: string;
+  /** The grants naming this workspace; platform-wide grants (every workspace) are listed apart. */
+  grants: Grant[];
+  everywhere: boolean;
+}
+
+/** Who works in a workspace (工作区成员): active accounts with a grant naming it, then those with platform-wide grants. */
+export function workspaceMembers(s: State, workspaceId: string): WorkspaceMember[] {
+  const out: WorkspaceMember[] = [];
+  for (const a of Object.values(s.accounts)) {
+    if (a.status !== 'ACTIVE') continue;
+    const all = grantsOf(s, a);
+    const named = all.filter((g) => g.workspaces.includes(workspaceId));
+    const wide = all.filter((g) => g.workspaces.includes(WILDCARD));
+    if (named.length || wide.length) out.push({ username: a.username, displayName: a.displayName, grants: named.length ? named : wide, everywhere: named.length === 0 });
+  }
+  return out.sort((x, y) => Number(x.everywhere) - Number(y.everywhere) || x.username.localeCompare(y.username));
+}
+
 export function hasRole(actor: Actor, role: Role): boolean {
   return actor.grants.some((g) => g.role === role);
 }

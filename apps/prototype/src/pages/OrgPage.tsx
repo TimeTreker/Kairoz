@@ -1,5 +1,5 @@
 import { PlusOutlined } from '@ant-design/icons';
-import { Button, Card, Checkbox, Col, Descriptions, Form, Input, Modal, Popconfirm, Row, Select, Space, Table, Tabs, Tag, Tree, Typography } from 'antd';
+import { Alert, Button, Card, Checkbox, Col, Descriptions, Form, Input, Modal, Popconfirm, Row, Select, Space, Table, Tabs, Tag, Tree, Typography } from 'antd';
 import type { TreeDataNode } from 'antd';
 import { useState } from 'react';
 import type { Key } from 'react';
@@ -135,6 +135,7 @@ export function OrgPage() {
   return (
     <div className="kz-page">
       <PageHeader title={L('组织与工作区', 'Organization & workspaces')} subtitle={L('团队组织与项目组织是两棵独立的树；工作区类型决定它属于哪一棵。', 'The team and project organizations are separate trees; a workspace’s kind decides which one it belongs to.')} />
+      {!canOrg && !canWorkspaces && <Alert type="info" showIcon style={{ marginBottom: 12 }} title={L('只读：查看组织树不授予任何管理权限。', 'Read only: seeing the organization grants no right to manage it.')} />}
       <Tabs
         items={[
           {
@@ -382,7 +383,8 @@ export function OrgPage() {
               </Card>
             ),
           },
-        ]}
+          // Grant rules list people; directory sync is platform operations' tool.
+        ].filter((t) => (t.key !== 'rules' || canAccounts) && (t.key !== 'sync' || canOrg))}
       />
       <Modal open={modal !== null} title={modalTitle} onCancel={close} onOk={save} destroyOnHidden>
         <Form form={form} name="org" layout="vertical" preserve={false} initialValues={{ kind: 'TEAM', purpose: 'DEV', domain: 'Chassis' }}>

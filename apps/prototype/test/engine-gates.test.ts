@@ -8,6 +8,7 @@ import { Engine } from '../src/engine/engine.ts';
 import * as integ from '../src/engine/integration.ts';
 import * as org from '../src/engine/org.ts';
 import { demoState } from '../src/engine/seed.ts';
+import { sendReceipt } from '../src/engine/simulator.ts';
 import * as v from '../src/engine/validation.ts';
 
 function fails(fn: () => unknown, code: string): DomainError {
@@ -67,5 +68,24 @@ describe('gates the design asks for', () => {
     e.run('resource', (c) => v.releaseVehicle(c, 'VEH-001', '转测试环境'));
     const dep = e.getState().deployments[d!]!;
     assert.deepEqual([dep.status, dep.targets.map((t) => [t.resourceId, t.status])], ['PENDING', [['SIM-021', 'PENDING'], ['VEH-001', 'CANCELLED']]]);
+  });
+
+  test('an earlier commit is dispatched and tested on its own; the head’s verification is untouched', () => {
+    const e = new Engine(demoState());
+    const f0 = Object.values(e.getState().features).find((x) => x.name === 'brake_monitor')!;
+    const r1 = f0.headCommitId!;
+    const policy = Object.keys(f0.draft.policies)[0]!;
+    e.run('business', (c) => config.putPolicy(c, f0.id, policy, { ...f0.draft.policies[policy]!, postSeconds: f0.draft.policies[policy]!.postSeconds + 5 }));
+    e.run('business', (c) => config.submitFeature(c, f0.id, { message: '延长录制' }));
+    const group = Object.values(e.getState().vehicleGroups).find((g) => g.name === '制动研发车组')!.id;
+    const [d] = e.run('brake_tester', (c) => v.dispatchFeature(c, f0.id, { commitId: r1, vehicleGroupIds: [group] }));
+    assert.equal(e.getState().features[f0.id]!.stage, 'DCL_READY', 'a regression dispatch does not move the Feature');
+    for (const r of ['SIM-021', 'VEH-001']) e.run(null, (c) => sendReceipt(c, d!, r, 'APPLIED'));
+    e.run('brake_tester', (c) => v.recordFeatureTest(c, f0.id, { commitId: r1, resourceId: 'SIM-021', result: 'PASS', summary: '回归 r001' }));
+    const s = e.getState();
+    assert.deepEqual(s.testRuns.filter((x) => x.subjectId === f0.id && x.versionId === r1 && x.summary === '回归 r001').map((x) => x.resourceId), ['SIM-021']);
+    assert.ok(v.verifyBlockers(s, s.features[f0.id]!).includes('no vehicles were dispatched for this commit'), 'the head still needs its own tests');
+    // Approvals cover the head only.
+    fails(() => e.run('brake_tester', (c) => v.requestTeamTest(c, f0.id, { commitId: r1, vehicleGroupIds: [group], goal: '回归' })), 'STALE_COMMIT');
   });
 });

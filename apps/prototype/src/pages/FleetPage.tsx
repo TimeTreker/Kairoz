@@ -78,10 +78,40 @@ function PendingDeliveryTag({ resourceId }: { resourceId: string }) {
 function VehicleTable({ vehicles, extra, workspaceId = '' }: { vehicles: Resource[]; extra?: (r: Resource) => React.ReactNode; workspaceId?: string }) {
   const state = useEngineState();
   const { L, B } = useI18n();
+  const [query, setQuery] = useState('');
+  const [type, setType] = useState<string>('ALL');
+  const [env, setEnv] = useState<string>('ALL');
+  // Find a vehicle by id, name, VIN, UVID or plate, and narrow by type and environment.
+  const q = query.trim().toLowerCase();
+  const shown = vehicles.filter(
+    (r) =>
+      (type === 'ALL' || r.type === type) &&
+      (env === 'ALL' || r.env === env) &&
+      (!q || [r.id, r.displayName, r.vin, r.uvid, r.licensePlate].some((x) => x?.toLowerCase().includes(q))),
+  );
   return (
+    <Space orientation="vertical" size={8} style={{ width: '100%' }}>
+      {vehicles.length > 5 && (
+        <Space wrap>
+          <Input.Search allowClear style={{ width: 240 }} placeholder={L('车辆编号、VIN、UVID 或车牌', 'Vehicle id, VIN, UVID or plate')} value={query} onChange={(e) => setQuery(e.target.value)} />
+          <Select
+            style={{ width: 120 }}
+            value={type}
+            onChange={setType}
+            options={[{ value: 'ALL', label: L('全部类型', 'All types') }, ...['PHYSICAL', 'SIMULATION'].map((t) => ({ value: t, label: B(RESOURCE_TYPE_LABELS[t], t) }))]}
+          />
+          <Select
+            style={{ width: 120 }}
+            value={env}
+            onChange={setEnv}
+            options={[{ value: 'ALL', label: L('全部环境', 'All environments') }, ...['development', 'testing', 'production'].map((e) => ({ value: e, label: B(ENV_LABELS[e], e) }))]}
+          />
+          {shown.length !== vehicles.length && <Typography.Text type="secondary">{L(`${shown.length} / ${vehicles.length} 辆`, `${shown.length} of ${vehicles.length}`)}</Typography.Text>}
+        </Space>
+      )}
     <Table
       rowKey="id"
-      dataSource={vehicles}
+      dataSource={shown}
       pagination={{ pageSize: 20, hideOnSinglePage: true }}
       scroll={{ x: 1000 }}
       locale={{ emptyText: L('没有车辆', 'No vehicles') }}
@@ -97,7 +127,15 @@ function VehicleTable({ vehicles, extra, workspaceId = '' }: { vehicles: Resourc
           ),
         },
         { title: L('类型', 'Type'), render: (_, r) => <LabelTag map={RESOURCE_TYPE_LABELS} value={r.type} color={r.type === 'PHYSICAL' ? 'blue' : 'cyan'} /> },
-        { title: 'VIN / UVID', render: (_, r) => <Mono>{r.vin ?? r.uvid ?? '—'}</Mono> },
+        {
+          title: L('VIN / UVID / 车牌', 'VIN / UVID / plate'),
+          render: (_, r) => (
+            <Space orientation="vertical" size={0}>
+              <Mono>{r.vin ?? r.uvid ?? '—'}</Mono>
+              {r.licensePlate && <Typography.Text type="secondary">{r.licensePlate}</Typography.Text>}
+            </Space>
+          ),
+        },
         { title: L('环境 / 资源池', 'Env / pool'), render: (_, r) => <Space size={4}><EnvTag env={r.env} /><span>{r.pool}</span></Space> },
         {
           title: L('实际整车版本', 'Actual software'),
@@ -145,6 +183,7 @@ function VehicleTable({ vehicles, extra, workspaceId = '' }: { vehicles: Resourc
         ...(extra ? [{ title: '', render: (_: unknown, r: Resource) => extra(r) }] : []),
       ]}
     />
+    </Space>
   );
 }
 

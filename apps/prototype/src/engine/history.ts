@@ -287,3 +287,35 @@ export function softwareVersionsOf(s: State, vehicleModelId: string): SoftwareVe
     .filter((v) => v.vehicleModelId === vehicleModelId)
     .sort((a, b) => compareVersions(b.version, a.version));
 }
+
+export interface DistributionRow {
+  /** null: the vehicle's software is unknown (or a partial update left it inconsistent). */
+  version: string | null;
+  vehicles: number;
+  /** What the vehicles run: a policy set's version, or null for anything else (none, a test configuration). */
+  sets: { dclVersion: string | null; vehicles: number }[];
+}
+
+/**
+ * How a model's production vehicles are spread over software versions and the sets they run (量产版本
+ * 分布): counts only, no VIN, plate or vehicle id; unknown software is a row of its own.
+ */
+export function productionDistribution(s: State, vehicleModelId: string): DistributionRow[] {
+  const rows = new Map<string | null, Map<string | null, number>>();
+  for (const r of Object.values(s.resources)) {
+    if (r.vehicleModelId !== vehicleModelId || r.env !== 'production' || r.status === 'RETIRED') continue;
+    const version = r.softwareStatus === 'CONSISTENT' ? r.integrationVersion : null;
+    const config = r.appliedConfigId ? s.resolvedConfigs[r.appliedConfigId] : undefined;
+    const set = config?.kind === 'RELEASE' ? (s.releases[config.sourceId]?.dclVersion ?? null) : null;
+    const sets = rows.get(version) ?? new Map<string | null, number>();
+    sets.set(set, (sets.get(set) ?? 0) + 1);
+    rows.set(version, sets);
+  }
+  return [...rows.entries()]
+    .map(([version, sets]) => ({
+      version,
+      vehicles: [...sets.values()].reduce((a, b) => a + b, 0),
+      sets: [...sets.entries()].map(([dclVersion, vehicles]) => ({ dclVersion, vehicles })).sort((a, b) => b.vehicles - a.vehicles),
+    }))
+    .sort((a, b) => (a.version === null ? 1 : b.version === null ? -1 : compareVersions(a.version, b.version)));
+}

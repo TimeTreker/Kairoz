@@ -1,4 +1,4 @@
-import { Alert, Button, Card, Space, Table, Tag, Tooltip, Typography } from 'antd';
+import { Alert, Button, Card, Select, Space, Table, Tag, Tooltip, Typography } from 'antd';
 import { useState } from 'react';
 import { useActor, useCan, useRun } from '../../app/hooks.ts';
 import { useEngineState } from '../../app/store.ts';
@@ -15,7 +15,9 @@ import {
   dispatchFeature,
   executeTestRequest,
   featureTestStatus,
+  historyCommitProblem,
   recordFeatureTest,
+  testStatusFor,
   requestTeamTest,
   verifyBlockers,
   verifyFeature,
@@ -34,15 +36,21 @@ export function ValidationTab({ feature }: { feature: Feature }) {
   const [dispatching, setDispatching] = useState(false);
   const [requesting, setRequesting] = useState(false);
   const [testing, setTesting] = useState<string | null>(null);
+  const [picked, setPicked] = useState<string | null>(null);
   const group = state.groups[feature.groupId]!;
+  // The head is what is verified; an earlier commit can be dispatched and tested on its own (regression).
+  const commits = Object.values(state.commits).filter((c) => c.featureId === feature.id).sort((a, b) => b.sequence - a.sequence);
+  const commitId = picked && state.commits[picked]?.featureId === feature.id ? picked : feature.headCommitId;
+  const historical = !!commitId && commitId !== feature.headCommitId;
+  const historyProblem = historical ? historyCommitProblem(state, feature, commitId!) : null;
   const target = (env: 'development' | 'testing') => ({ workspaceId: feature.workspaceId, groupId: group.id, scope: group.domain, env });
 
   const dispatchable = ['DCL_READY', 'TESTING', 'VERIFIED'].includes(feature.stage);
   const vehicleGroups = vehicleGroupsOf(state, feature.workspaceId).filter((g) => g.status === 'ACTIVE' && g.groupId === feature.groupId && g.purpose !== 'PRODUCTION');
   const directGroups = vehicleGroups.filter((g) => !g.requiresApproval);
   const approvalGroups = vehicleGroups.filter((g) => g.requiresApproval);
-  const canDispatch = dispatchable && directGroups.some((g) => can('feature.dispatch', target(g.env as 'development')));
-  const canRequest = dispatchable && approvalGroups.some((g) => can('feature.requestTest', target(g.env as 'development')));
+  const canDispatch = dispatchable && !historyProblem && directGroups.some((g) => can('feature.dispatch', target(g.env as 'development')));
+  const canRequest = dispatchable && !historical && approvalGroups.some((g) => can('feature.requestTest', target(g.env as 'development')));
   const requests = Object.values(state.testRequests)
     .filter((r) => r.featureId === feature.id)
     .sort((a, b) => b.id.localeCompare(a.id));
@@ -56,14 +64,29 @@ export function ValidationTab({ feature }: { feature: Feature }) {
       ),
     ).values(),
   ].sort((a, b) => a.policyId.localeCompare(b.policyId));
-  const status = featureTestStatus(state, feature);
+  const status = historical ? testStatusFor(state, feature.id, commitId!) : featureTestStatus(state, feature);
   const blockers = verifyBlockers(state, feature);
-  const canVerify = feature.stage === 'TESTING' && can('feature.verify', { workspaceId: feature.workspaceId, groupId: group.id });
+  const canVerify = !historical && feature.stage === 'TESTING' && can('feature.verify', { workspaceId: feature.workspaceId, groupId: group.id });
 
   return (
     <Space orientation="vertical" size={16} style={{ width: '100%' }}>
       <Card
-        title={L('验证目标（当前提交）', 'Test targets (head commit)')}
+        title={
+          commits.length > 1 ? (
+            <Space wrap>
+              <span>{L('验证目标', 'Test targets')}</span>
+              <Select
+                size="small"
+                style={{ minWidth: 260 }}
+                value={commitId ?? undefined}
+                onChange={setPicked}
+                options={commits.map((c) => ({ value: c.id, label: `${displayName(state, c.id)}${c.id === feature.headCommitId ? L('（当前）', ' (head)') : L('（历史）', ' (earlier)')}` }))}
+              />
+            </Space>
+          ) : (
+            L('验证目标（当前提交）', 'Test targets (head commit)')
+          )
+        }
         extra={
           <Space>
             {canRequest && (
@@ -90,7 +113,20 @@ export function ValidationTab({ feature }: { feature: Feature }) {
             'Tests pin to the head commit: simulation first, then physical; results are recorded only after the vehicle confirms applying it. A new commit needs a new dispatch; old results never verify new content.',
           )}
         </Hint>
-        {feature.headCommitId && <Typography.Paragraph><Mono>{displayName(state, feature.headCommitId)}</Mono></Typography.Paragraph>}
+        {commitId && <Typography.Paragraph><Mono>{displayName(state, commitId)}</Mono></Typography.Paragraph>}
+        {historical && (
+          <Alert
+            type="info"
+            showIcon
+            style={{ marginBottom: 12 }}
+            title={L('历史提交：可以单独下发和登记结果，做回归对比。', 'An earlier commit: it can be dispatched and tested on its own, for a regression comparison.')}
+            description={
+              historyProblem
+                ? L('这个提交有文件没有现行的 DCL 批准，不能下发。', 'A file of this commit lacks a current DCL approval, so it cannot be dispatched.')
+                : L('结果只属于这个提交；确认验证通过仍只看当前提交。下发后车辆组改为运行这个提交。', 'Results belong to this commit only; Verified still looks at the head. Once dispatched, the group runs this commit.')
+            }
+          />
+        )}
         {!dispatchable && <Alert type="info" showIcon title={L('Feature 达到 DCL Ready 后才能下发。', 'Dispatch becomes available once the Feature is DCL Ready.')} />}
         {dispatchable && vehicleGroups.length === 0 && (can('feature.dispatch', target('development')) || can('feature.dispatch', target('testing'))) && (
           <Alert
@@ -108,7 +144,7 @@ export function ValidationTab({ feature }: { feature: Feature }) {
         <TargetsTable
           status={status}
           action={(t) =>
-            feature.stage === 'TESTING' &&
+            (historical || feature.stage === 'TESTING') &&
             t.applied &&
             can('feature.recordTest', target(state.resources[t.resourceId]!.env as 'development')) && (
               <Button size="small" onClick={() => setTesting(t.resourceId)}>
@@ -189,13 +225,13 @@ export function ValidationTab({ feature }: { feature: Feature }) {
         emptyText={L('本工作区没有服务该分组的车辆组；请联系工作区管理员。', 'No vehicle group serves this group here; ask the workspace admin.')}
         onClose={() => setDispatching(false)}
         onDispatch={(ids, _goal, _direct, disabledPolicies) =>
-          run((c) => dispatchFeature(c, feature.id, { commitId: feature.headCommitId!, vehicleGroupIds: ids, disabledPolicies }), L('已下发：车辆上线时推送，回执后生效', 'Dispatched: pushed when each vehicle is on, applied after its receipt')) !== undefined
+          run((c) => dispatchFeature(c, feature.id, { commitId: commitId!, vehicleGroupIds: ids, disabledPolicies }), L('已下发：车辆上线时推送，回执后生效', 'Dispatched: pushed when each vehicle is on, applied after its receipt')) !== undefined
         }
       />
       <RecordTestModal
         resourceId={testing}
         onClose={() => setTesting(null)}
-        onRecord={(v) => run((c) => recordFeatureTest(c, feature.id, { commitId: feature.headCommitId!, resourceId: testing!, ...v }), L('已登记', 'Recorded')) !== undefined}
+        onRecord={(v) => run((c) => recordFeatureTest(c, feature.id, { commitId: commitId!, resourceId: testing!, ...v }), L('已登记', 'Recorded')) !== undefined}
       />
     </Space>
   );

@@ -13,6 +13,7 @@ import type { Ctx } from './engine.ts';
 import { authorizePersonal, directTargetProblems, getResource, livePublication, membersOf, occupancyProblems, pendingDeploymentOf, pendingImageChangeOf, recordGroupBinding, softwareKey } from './fleet.ts';
 import { getGroup } from './org.ts';
 import { commitSnapshot, resolveFiles } from './snapshots.ts';
+import { intakeStage, reviewItems } from './approvals.ts';
 import { setInEffect } from './release.ts';
 import type { Candidate, Deployment, DeploymentTarget, Feature, PersonalDraft, Release, ResolvedConfig, Resource, State, TestRequest, TestRun, VehicleGroup } from './types.ts';
 
@@ -190,7 +191,18 @@ export function dispatchFeature(ctx: Ctx, featureId: string, input: DispatchInpu
 }
 
 /** Authorization, stage and per-vehicle checks shared by dispatches and team test requests. */
-function checkDispatch(ctx: Ctx, featureId: string, input: DispatchInput, action: 'feature.dispatch' | 'feature.requestTest'): Feature {
+/**
+ * An earlier commit of the Feature that may be dispatched on its own (回归历史提交): submitted from
+ * this Feature, with every file it needs approved for its exact content. Its results stay its own.
+ */
+export function historyCommitProblem(s: State, feature: Feature, commitId: string): string | null {
+  const c = s.commits[commitId];
+  if (!c || c.featureId !== feature.id) return 'not a commit of this Feature';
+  const items = reviewItems(s, commitSnapshot(s, commitId), { groupId: feature.groupId, workspaceId: feature.workspaceId });
+  return intakeStage(items) === 'DCL_READY' ? null : 'a file of that commit lacks a current DCL approval';
+}
+
+function checkDispatch(ctx: Ctx, featureId: string, input: DispatchInput, action: 'feature.dispatch' | 'feature.requestTest', history = false): Feature {
   const groups = input.vehicleGroupIds.map((id) => ctx.s.vehicleGroups[id]).filter(Boolean);
   if (groups.length === 0) throw rule('NO_VEHICLE_GROUPS', 'choose at least one vehicle group');
   const env = groups[0]!.env;
@@ -199,7 +211,10 @@ function checkDispatch(ctx: Ctx, featureId: string, input: DispatchInput, action
   const group = getGroup(ctx.s, feature.groupId);
   ctx.allow(action, { type: 'feature', id: featureId, workspaceId: feature.workspaceId, groupId: group.id, scope: group.domain, env });
   if (!['DCL_READY', 'TESTING', 'VERIFIED'].includes(feature.stage)) throw rule('NOT_DCL_READY', 'only DCL Ready Features can be dispatched');
-  if (input.commitId !== feature.headCommitId) throw rule('STALE_COMMIT', 'the Feature has a newer commit; dispatch that one', { headCommitId: feature.headCommitId });
+  if (input.commitId !== feature.headCommitId) {
+    const problem = history ? historyCommitProblem(ctx.s, feature, input.commitId) : 'not the head commit';
+    if (problem) throw rule('STALE_COMMIT', `the Feature has a newer commit; dispatch that one (${problem})`, { headCommitId: feature.headCommitId });
+  }
   // Switches turn off other business groups' policies; a group's own policies change only by commit.
   const notSwitchable = (input.disabledPolicies ?? []).filter((p) => !ctx.s.policyOwners[p] || ctx.s.policyOwners[p] === feature.groupId);
   if (notSwitchable.length) throw rule('POLICY_NOT_SWITCHABLE', 'only policies of other business groups can be switched off', { issues: notSwitchable });
@@ -209,7 +224,8 @@ function checkDispatch(ctx: Ctx, featureId: string, input: DispatchInput, action
 }
 
 function dispatchChecked(ctx: Ctx, featureId: string, input: DispatchInput, action: 'feature.dispatch', approvedRequest: string | null): string[] {
-  const feature = checkDispatch(ctx, featureId, input, action);
+  // A direct dispatch may also send an earlier commit, for a regression test of it; approvals cover the head only.
+  const feature = checkDispatch(ctx, featureId, input, action, !approvedRequest);
   if (!approvedRequest) {
     const gated = input.vehicleGroupIds.map((id) => ctx.s.vehicleGroups[id]!).filter((g) => g.requiresApproval);
     if (gated.length) throw rule('APPROVAL_REQUIRED', 'these vehicle groups take approved team test requests', { issues: gated.map((g) => g.name) });
@@ -241,7 +257,8 @@ function dispatchChecked(ctx: Ctx, featureId: string, input: DispatchInput, acti
     ids.push(createFeatureDeployment(ctx, feature, input.commitId, configId, env, [...entry.vehicleGroupIds], entry.targets, 'DISPATCH', ctx.user().username));
   }
   const f = ctx.s.features[featureId]!;
-  if (f.stage === 'DCL_READY' || f.stage === 'VERIFIED') {
+  // Only the head commit's tests move the Feature; an earlier commit's dispatch is a regression test.
+  if (input.commitId === f.headCommitId && (f.stage === 'DCL_READY' || f.stage === 'VERIFIED')) {
     f.stage = 'TESTING';
     f.updatedAt = ctx.now;
   }
@@ -624,9 +641,11 @@ export function recordFeatureTest(
   const r = getResource(ctx.s, input.resourceId);
   const group = getGroup(ctx.s, feature.groupId);
   ctx.allow('feature.recordTest', { type: 'feature', id: featureId, workspaceId: feature.workspaceId, groupId: group.id, scope: group.domain, env: r.env });
-  if (feature.stage !== 'TESTING') throw rule('NOT_TESTING', 'the Feature is not in testing');
-  if (input.commitId !== feature.headCommitId) throw rule('STALE_COMMIT', 'results can only be recorded for the head commit');
-  const target = featureTestStatus(ctx.s, feature).find((t) => t.resourceId === r.id);
+  const head = input.commitId === feature.headCommitId;
+  // The head is tested while the Feature is in testing; an earlier commit's regression results may be recorded any time.
+  if (head && feature.stage !== 'TESTING') throw rule('NOT_TESTING', 'the Feature is not in testing');
+  if (!head && ctx.s.commits[input.commitId]?.featureId !== feature.id) throw rule('STALE_COMMIT', 'results are recorded for a commit of this Feature');
+  const target = testStatusFor(ctx.s, feature.id, input.commitId).find((t) => t.resourceId === r.id);
   if (!target) throw rule('NOT_A_TEST_TARGET', `vehicle ${r.id} was not dispatched this commit`);
   if (!target.applied) throw rule('NOT_APPLIED', `vehicle ${r.id} has not confirmed applying this configuration`);
   if (!input.summary.trim()) throw rule('SUMMARY_REQUIRED', 'describe what was tested');

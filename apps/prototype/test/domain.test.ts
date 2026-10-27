@@ -103,7 +103,8 @@ describe('page access', () => {
 
   test('platform pages need platform operations; a business grant only gets "no access"', () => {
     const dev = [grant({ role: 'BUSINESS_DEV', groups: ['brake'] })];
-    for (const page of ['accounts', 'audit', 'org']) assert.equal(canOpenPage(dev, page, 'team-brake'), false, page);
+    for (const page of ['accounts', 'audit']) assert.equal(canOpenPage(dev, page, 'team-brake'), false, page);
+    assert.equal(canOpenPage(dev, 'org', 'team-brake'), true, 'every account sees the organization, read only');
     assert.equal(canOpenPage(dev, 'features', 'team-brake'), true);
     const ops = [grant({ role: 'PLATFORM_OPS', workspaces: ['*'], envs: [...ALL] })];
     for (const page of ['accounts', 'audit', 'org']) assert.equal(canOpenPage(ops, page, null), true, page);

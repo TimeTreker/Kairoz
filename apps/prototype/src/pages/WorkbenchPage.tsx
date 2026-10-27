@@ -1,4 +1,4 @@
-import { Badge, Button, Card, Col, Flex, Row, Space, Statistic, Typography } from 'antd';
+import { Badge, Button, Card, Col, Flex, Modal, Row, Space, Statistic, Table, Typography } from 'antd';
 import { useState } from 'react';
 import type { ReactNode } from 'react';
 import { useActor, useCan, useCanOpen, useWorkspace } from '../app/hooks.ts';
@@ -7,7 +7,8 @@ import type { LifecycleTarget } from '../components/lifecycle.tsx';
 import { WorkspaceGroups } from '../components/workspace-groups.tsx';
 import { navigate } from '../app/router.ts';
 import { setSession, useEngineState } from '../app/store.ts';
-import { LabelTag, Mono, RoleTag, StageTag, day, when } from '../components/common.tsx';
+import { Hint, LabelTag, Mono, RoleTag, StageTag, day, when } from '../components/common.tsx';
+import { workspaceMembers } from '../engine/identity.ts';
 import { HoldTag } from '../components/budget.tsx';
 import { PatchedTag } from '../components/patch.tsx';
 import { authorize } from '../domain/authz.ts';
@@ -33,7 +34,7 @@ import { referenceRequestsFor } from '../engine/references.ts';
 import { candidateTestStatus, featureTestStatus, testRequestsOf } from '../engine/validation.ts';
 import type { Feature } from '../engine/types.ts';
 import { useI18n } from '../i18n/i18n.tsx';
-import { CANDIDATE_STATUS_COLORS, CANDIDATE_STATUS_LABELS, CHECK_STATUS_COLORS, CHECK_STATUS_LABELS, FEEDBACK_LABELS, setName } from '../i18n/vocab.ts';
+import { CANDIDATE_STATUS_COLORS, CANDIDATE_STATUS_LABELS, CHECK_STATUS_COLORS, CHECK_STATUS_LABELS, ENV_LABELS, FEEDBACK_LABELS, setName } from '../i18n/vocab.ts';
 
 function Row2({ onClick, children }: { onClick: () => void; children: ReactNode }) {
   return (
@@ -58,6 +59,7 @@ function FeatureList({ items, empty }: { items: Feature[]; empty: string }) {
 }
 
 export function WorkbenchPage() {
+  const [membersOpen, setMembersOpen] = useState(false);
   const state = useEngineState();
   const actor = useActor()!;
   const canOpen = useCanOpen();
@@ -189,7 +191,18 @@ export function WorkbenchPage() {
   if (roles.includes('WORKSPACE_ADMIN') && workspace) {
     const vehicles = workspaceVehicles(state, workspace.id);
     cards.push(
-      <Card key="wa" title={<RoleTag role="WORKSPACE_ADMIN" />} extra={<Button size="small" onClick={() => navigate('fleet')}>{L('车辆与车辆组', 'Vehicles & groups')}</Button>}>
+      <Card
+        key="wa"
+        title={<RoleTag role="WORKSPACE_ADMIN" />}
+        extra={
+          <Space size={4}>
+            <Button size="small" onClick={() => setMembersOpen(true)}>
+              {L(`成员 ${workspaceMembers(state, workspace.id).filter((m) => !m.everywhere).length}`, `Members ${workspaceMembers(state, workspace.id).filter((m) => !m.everywhere).length}`)}
+            </Button>
+            <Button size="small" onClick={() => navigate('fleet')}>{L('车辆与车辆组', 'Vehicles & groups')}</Button>
+          </Space>
+        }
+      >
         <Row gutter={16}>
           <Col span={8}><Statistic title={L('工作区车辆', 'Vehicles')} value={vehicles.length} /></Col>
           <Col span={8}><Statistic title={L('未分组', 'Ungrouped')} value={vehicles.filter((r) => !state.groupMembers[r.id]).length} /></Col>
@@ -506,6 +519,29 @@ export function WorkbenchPage() {
       )}
       <SoftwareChangeDrawer changeId={changeOf} onClose={() => setChangeOf(null)} />
       <GroupFitDrawer resourceId={fitOfId} onClose={() => setFitOf(null)} />
+      {workspace && (
+        <Modal open={membersOpen} width={760} footer={null} title={`${L('工作区成员', 'Workspace members')} · ${workspace.name}`} onCancel={() => setMembersOpen(false)}>
+          <Hint>{L('按授权列出：每行是这个人在本工作区的授权；“全部工作区”是平台级的授权。成员由平台运维授权或按组织规则得到，这里只查看。', 'Listed by grant: each row is what the person holds in this workspace; “every workspace” marks platform-wide grants. Platform operations grant them, or org rules do; this list only shows them.')}</Hint>
+          <Table
+            rowKey="username"
+            size="small"
+            pagination={false}
+            dataSource={workspaceMembers(state, workspace.id)}
+            columns={[
+              { title: L('人员', 'Person'), render: (_, m) => <Space orientation="vertical" size={0}><span>{m.displayName}</span><Typography.Text type="secondary" className="kz-mono">{m.username}</Typography.Text></Space> },
+              { title: L('角色', 'Roles'), render: (_, m) => <Space size={4} wrap>{[...new Set(m.grants.map((g) => g.role))].map((r) => <RoleTag key={r} role={r} />)}</Space> },
+              {
+                title: L('范围', 'Scope'),
+                render: (_, m) =>
+                  m.everywhere
+                    ? L('全部工作区', 'every workspace')
+                    : [...new Set(m.grants.map((g) => [...g.groups.map((x) => state.groups[x]?.name ?? x), ...g.scopes].join('、') || L('整个工作区', 'the whole workspace')))].join(L('；', '; ')),
+              },
+              { title: L('环境', 'Environments'), render: (_, m) => [...new Set(m.grants.flatMap((g) => g.envs))].map((e) => B(ENV_LABELS[e], e)).join('、') },
+            ]}
+          />
+        </Modal>
+      )}
       <LifecycleModal target={lifecycle} onClose={() => setLifecycle(null)} />
     </div>
   );
