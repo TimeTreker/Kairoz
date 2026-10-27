@@ -51,6 +51,8 @@ export function PrototypeMenu({ compact = false }: { compact?: boolean }) {
   return (
     <>
       <Dropdown
+        // Opened by click, like the account menu, so it is reachable from the keyboard too.
+        trigger={['click']}
         menu={{
           items: [
             ...(outdatedDemo

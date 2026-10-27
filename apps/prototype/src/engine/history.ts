@@ -215,8 +215,9 @@ export function versionHistory(s: State, vehicleModelId: string, version: string
     // A vehicle flashed with a bundled DCL module started on its set with the software.
     const bundled = c.configId ? s.resolvedConfigs[c.configId] : undefined;
     const releaseId = bundled?.kind === 'RELEASE' ? bundled.sourceId : null;
-    if (c.toVersion === version) drafts.push({ at: c.at, kind: 'VEHICLE_ARRIVED', resourceIds: [c.resourceId], version, releaseId, reason: c.fromVersion, order: c.seq });
-    else if (c.fromVersion === version) drafts.push({ at: c.at, kind: 'VEHICLE_LEFT', resourceIds: [c.resourceId], version, reason: c.toVersion, order: c.seq });
+    const by = c.by ?? null;
+    if (c.toVersion === version) drafts.push({ at: c.at, kind: 'VEHICLE_ARRIVED', by, resourceIds: [c.resourceId], version, releaseId, reason: c.fromVersion, order: c.seq });
+    else if (c.fromVersion === version) drafts.push({ at: c.at, kind: 'VEHICLE_LEFT', by, resourceIds: [c.resourceId], version, reason: c.toVersion, order: c.seq });
   }
 
   // Replay applicability: the set in effect is the newest one that applies (as `setInEffect`).

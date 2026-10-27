@@ -12,6 +12,7 @@ import * as em from '../src/engine/emergency.ts';
 import * as fleet from '../src/engine/fleet.ts';
 import * as intake from '../src/engine/intake.ts';
 import * as integ from '../src/engine/integration.ts';
+import { versionHistory } from '../src/engine/history.ts';
 import { landingWorkspace, notificationsFor } from '../src/engine/notifications.ts';
 import * as org from '../src/engine/org.ts';
 import * as ota from '../src/engine/ota.ts';
@@ -272,6 +273,13 @@ describe('planned versions and sign-in', () => {
     for (const ws of Object.keys(w.s.workspaces)) {
       assert.ok(!w.engine.read('resource', (s, a) => notificationsFor(s, a, ws)).some((n) => n.kind === 'UNRECORDED_SOFTWARE'), ws);
     }
+  });
+
+  test('the release history names who confirmed a vehicle’s software', () => {
+    const w = new World(demoState());
+    w.as('resource', (c) => fleet.confirmIntegration(c, 'VEH-201', { version: '1.1', source: '整车 OTA 回执' }));
+    const arrived = w.engine.read('release', (s) => versionHistory(s, 'X89', '1.1')).find((e) => e.kind === 'VEHICLE_ARRIVED')!;
+    assert.equal(arrived.by, 'resource');
   });
 
   test('a domain integrator starts in its integration workspace', () => {

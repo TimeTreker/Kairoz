@@ -370,6 +370,7 @@ export function recordSoftwareChange(ctx: Ctx, r: Resource, toVersion: string | 
     acknowledgedAt: null,
     requestId: null,
     configId: null,
+    by: ctx.actor?.username ?? null,
   };
   return id;
 }

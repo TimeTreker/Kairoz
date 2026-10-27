@@ -1218,6 +1218,8 @@ export interface SoftwareChange {
   requestId: string | null;
   /** The bundled DCL configuration module the vehicle started running with the software, if any. */
   configId?: string | null;
+  /** Who recorded it (vehicle resources confirming a trusted source); null when the vehicle reported it. */
+  by?: string | null;
 }
 
 /**
