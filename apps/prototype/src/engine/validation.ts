@@ -397,6 +397,10 @@ export function executeTestRequest(ctx: Ctx, requestId: string): string[] {
 
 export function withdrawTestRequest(ctx: Ctx, requestId: string): void {
   const req = getRequest(ctx.s, requestId);
+  const feature = ctx.s.features[req.featureId];
+  const group = feature ? ctx.s.groups[feature.groupId] : undefined;
+  const env = ctx.s.vehicleGroups[req.vehicleGroupIds[0] ?? '']?.env;
+  ctx.allow('feature.requestTest', { type: 'testRequest', id: req.id, workspaceId: req.workspaceId, groupId: group?.id, scope: group?.domain, env });
   if (req.requestedBy !== ctx.user().username) throw rule('NOT_YOUR_REQUEST', 'only the requester withdraws a request');
   if (req.status !== 'PENDING' && req.status !== 'APPROVED') throw rule('REQUEST_DECIDED', 'the request is closed');
   ctx.s.testRequests[req.id]!.status = 'WITHDRAWN';

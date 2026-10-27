@@ -216,10 +216,21 @@ function to21(s: Saved): void {
   for (const p of Object.values((s.mergePlans ?? {}) as Rows)) p.callId ??= null;
   for (const c of Object.values((s.candidates ?? {}) as Rows)) c.callId ??= null;
   const resources = (s.resources ?? {}) as Rows;
+  const changes = Object.values((s.softwareChanges ?? {}) as Rows)
+    .filter((c) => c.status === 'APPLIED')
+    .sort((a, b) => String(a.at).localeCompare(String(b.at)));
+  // The software a vehicle ran at a moment, from its recorded changes; its current one when none tells.
+  const softwareAt = (rid: string, at: string): unknown => {
+    const own = changes.filter((c) => c.resourceId === rid);
+    const before = own.filter((c) => String(c.at) <= at).at(-1);
+    if (before) return before.toVersion;
+    const after = own.find((c) => String(c.at) > at);
+    return after ? after.fromVersion : (resources[rid]?.integrationVersion ?? null);
+  };
   for (const d of Object.values((s.deployments ?? {}) as Rows)) {
     if (d.kind !== 'OTA') continue;
     const targets = (d.targets ?? []) as Record<string, unknown>[];
-    for (const t of targets) t.software ??= resources[t.resourceId as string]?.integrationVersion ?? null;
+    for (const t of targets) t.software ??= softwareAt(t.resourceId as string, String(t.updatedAt ?? d.createdAt));
     if (d.log) continue;
     const log: Record<string, unknown>[] = [{ kind: 'STARTED', by: d.dispatchedBy, at: d.createdAt, reason: null, resourceIds: targets.filter((t) => t.status !== 'QUEUED').map((t) => t.resourceId) }];
     const end = { by: null, at: d.updatedAt, resourceIds: [] };
@@ -232,7 +243,21 @@ function to21(s: Saved): void {
   s.schema = 21;
 }
 
-const STEPS: Record<number, (s: Saved) => void> = { 6: to7, 7: to8, 8: to9, 9: to10, 10: to11, 11: to12, 12: to13, 13: to14, 14: to15, 15: to16, 16: to17, 17: to18, 18: to19, 19: to20, 20: to21 };
+/**
+ * Schema 22: a software version keeps every module exported for it and when it was planned. Earlier
+ * saves only kept the last module, and a released call's version only its release time.
+ */
+function to22(s: Saved): void {
+  for (const v of Object.values((s.softwareVersions ?? {}) as Rows)) {
+    v.moduleLog ??= v.dclModule ? [{ ...(v.dclModule as Record<string, unknown>) }] : [];
+    const planned = v.status === 'PLANNED';
+    v.plannedBy ??= planned ? v.recordedBy : null;
+    v.plannedAt ??= planned ? v.createdAt : null;
+  }
+  s.schema = 22;
+}
+
+const STEPS: Record<number, (s: Saved) => void> = { 6: to7, 7: to8, 8: to9, 9: to10, 10: to11, 11: to12, 12: to13, 13: to14, 14: to15, 15: to16, 16: to17, 17: to18, 18: to19, 19: to20, 20: to21, 21: to22 };
 
 /** The state at the current schema, or null when it cannot be read or is too old. Mutates `raw`. */
 export function migrate(raw: unknown): State | null {

@@ -526,6 +526,18 @@ export function cancelCandidate(ctx: Ctx, candidateId: string, input: { reason: 
 export function closeCandidate(ctx: Ctx, candidate: Candidate): void {
   const c = ctx.s.candidates[candidate.id]!;
   c.status = 'CANCELLED';
+  // Its test dispatches stop: vehicles not yet confirmed are free again, applied ones keep what they run.
+  for (const d of Object.values(ctx.s.deployments)) {
+    if (d.kind !== 'CANDIDATE' || d.subjectId !== c.id || (d.status !== 'PENDING' && d.status !== 'PAUSED')) continue;
+    for (const t of d.targets) {
+      if (t.status !== 'PENDING' && t.status !== 'QUEUED') continue;
+      t.status = 'CANCELLED';
+      t.error = 'candidate cancelled';
+      t.updatedAt = ctx.now;
+    }
+    d.status = 'CANCELLED';
+    d.updatedAt = ctx.now;
+  }
   for (const src of c.sources) {
     const f = ctx.s.features[src.featureId]!;
     if (f.stage === 'INTEGRATED' && f.headCommitId === src.commitId) {

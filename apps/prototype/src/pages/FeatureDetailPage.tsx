@@ -10,7 +10,7 @@ import { TechnicalTag } from '../components/technical.tsx';
 import { draftSelfTest } from '../components/personal-sim.tsx';
 import { canReadFeature, displayName, draftReviewRequired, EDITABLE_STAGES, featureChanges, submitFeature } from '../engine/config.ts';
 import { returnFeature } from '../engine/intake.ts';
-import { submitGroup } from '../engine/calls.ts';
+import { openRound, submitGroup } from '../engine/calls.ts';
 import { isCollectible } from '../engine/integration.ts';
 import type { Feature } from '../engine/types.ts';
 import { useI18n } from '../i18n/i18n.tsx';
@@ -199,7 +199,8 @@ function CallSubmitBanner({ feature }: { feature: Feature }) {
   const run = useRun();
   if (!isCollectible(state, feature) || !can('call.submitGroup', { workspaceId: feature.workspaceId, groupId: feature.groupId })) return null;
   const calls = Object.values(state.integrationCalls).filter((c) =>
-    c.status === 'OPEN' && c.modules.some((m) => m.kind === 'GROUP' && m.groupId === feature.groupId && m.workspaceId === feature.workspaceId && m.status !== 'EXCLUDED' && !(m.featureId === feature.id && m.commitId === feature.headCommitId)),
+    // A round in test is locked for submitters; the integration admin sends modules back first.
+    c.status === 'OPEN' && !openRound(state, c)?.candidateId && c.modules.some((m) => m.kind === 'GROUP' && m.groupId === feature.groupId && m.workspaceId === feature.workspaceId && m.status !== 'EXCLUDED' && !(m.featureId === feature.id && m.commitId === feature.headCommitId)),
   );
   if (calls.length === 0) return null;
   return (

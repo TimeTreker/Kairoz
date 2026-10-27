@@ -1,6 +1,7 @@
 // Archiving and restoring (归档与恢复) workspaces, business groups and organization units. An
 // archive needs everything in flight finished first: Features, candidates, merge previews,
-// running instances, reservations, loans and dispatches. Nothing is deleted: vehicles, history,
+// running instances, reservations, loans, dispatches, integration calls, applicability checks,
+// team test requests and emergency stops; and no policy set integrated there may still be in effect. Nothing is deleted: vehicles, history,
 // published configurations and events keep pointing at what they referenced. An archived
 // workspace is closed to every action until platform operations restore it.
 
@@ -8,13 +9,16 @@ import { authorize } from '../domain/authz.ts';
 import { conflict, rule } from '../domain/errors.ts';
 import { newId } from '../domain/ids.ts';
 import type { Ctx } from './engine.ts';
+import { releaseWorkspace } from './emergency.ts';
 import { membersOf } from './fleet.ts';
 import { getGroup, getUnit, getWorkspace } from './org.ts';
+import { versionsInEffect } from './release.ts';
 import type { LifecycleEvent, State } from './types.ts';
 
 const OPEN_FEATURE = ['DRAFT', 'SUBMITTED', 'DCL_READY', 'TESTING', 'VERIFIED'];
 const OPEN_CANDIDATE = ['CANDIDATE', 'TESTING', 'VERIFIED'];
 const OPEN_PLAN = ['READY', 'CONFLICT', 'BLOCKED'];
+const OPEN_CHECK = ['OPEN', 'TESTING', 'VERIFIED'];
 
 function record(ctx: Ctx, kind: LifecycleEvent['kind'], object: LifecycleEvent['object'], objectId: string, reason: string): void {
   ctx.s.lifecycleEvents.push({ id: newId('lc'), seq: ctx.seq(), kind, object, objectId, reason, by: ctx.user().username, at: ctx.now });
@@ -62,6 +66,24 @@ export function workspaceArchiveProblems(s: State, workspaceId: string): string[
   }
   for (const d of Object.values(s.deployments)) {
     if (d.workspaceId === ws.id && (d.status === 'PENDING' || d.status === 'PAUSED')) problems.push(`dispatch ${d.id} is not finished`);
+  }
+  for (const c of Object.values(s.integrationCalls)) {
+    if (c.workspaceId === ws.id && c.status === 'OPEN') problems.push(`integration call ${c.title} is open`);
+  }
+  for (const c of Object.values(s.applicabilityChecks)) {
+    if (c.testWorkspaceId === ws.id && OPEN_CHECK.includes(c.status)) problems.push(`applicability check of ${c.vehicleModelId} ${c.version} is open`);
+  }
+  for (const q of Object.values(s.testRequests)) {
+    if (q.workspaceId === ws.id && (q.status === 'PENDING' || q.status === 'APPROVED')) problems.push(`team test request ${q.id} is open`);
+  }
+  // A set in effect is answered for (emergency stops, patches) in the workspace it was integrated in.
+  for (const r of Object.values(s.releases)) {
+    const versions = versionsInEffect(s, r);
+    if (versions.length && releaseWorkspace(s, r) === ws.id) problems.push(`policy set ${r.dclVersion} is in effect for ${versions.join(', ')}`);
+  }
+  for (const x of Object.values(s.emergencyStops)) {
+    const r = s.releases[x.releaseId];
+    if (x.status === 'REQUESTED' && r && releaseWorkspace(s, r) === ws.id) problems.push(`emergency stop of ${x.policyId} waits for a decision`);
   }
   return problems;
 }

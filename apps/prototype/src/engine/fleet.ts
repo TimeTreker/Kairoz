@@ -138,6 +138,9 @@ export function recordSoftwareVersion(ctx: Ctx, input: { vehicleModelId: string;
     status: 'RECORDED',
     callId: planned?.callId ?? null,
     dclModule: planned?.dclModule ?? null,
+    moduleLog: planned?.moduleLog ?? [],
+    plannedBy: planned?.plannedBy ?? null,
+    plannedAt: planned?.plannedAt ?? null,
     recordedBy: ctx.user().username,
     createdAt: ctx.now,
   };

@@ -12,6 +12,7 @@ import { newId } from '../domain/ids.ts';
 import { admitCapture, afterSalesOpen } from './budget.ts';
 import { isCollectionPaused } from './collection-hold.ts';
 import type { Actor, Ctx } from './engine.ts';
+import { releaseWorkspace } from './emergency.ts';
 import type { CollectionEvent, EventFile, Quality, State, TrainingUse } from './types.ts';
 
 /** Which business groups' policies a vehicle's applied configuration carries. */
@@ -41,8 +42,7 @@ function sourceWorkspace(s: State, resourceId: string, configId: string): string
   if (group && s.vehicleGroups[group]) return s.vehicleGroups[group].workspaceId;
   const config = s.resolvedConfigs[configId];
   const release = config?.kind === 'RELEASE' ? s.releases[config.sourceId] : undefined;
-  const source = release?.emergency ? s.releases[release.emergency.sourceReleaseId] : release;
-  return source?.candidateId ? s.candidates[source.candidateId]?.workspaceId : undefined;
+  return release ? releaseWorkspace(s, release) : undefined;
 }
 
 /** Deterministic pseudo size of a personal trial capture, so repeated runs of the demo look the same. */

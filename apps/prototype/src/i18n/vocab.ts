@@ -921,9 +921,9 @@ Object.assign(ERROR_LABELS, {
   NOTHING_SUBMITTED: b('该模块还没有提交，无需退回', 'That module has submitted nothing to send back'),
   TARGET_FIXED: b('已经送测，测试证据绑定了目标版本，不能再改', 'A round was sent to testing; its evidence is bound to the target, which can no longer change'),
   CALL_CHANGED: b('有模块提交了变更或还没答复，不能按"无变更"结束', 'Some modules submitted changes or have not answered; the call cannot close as unchanged'),
-  CALL_ROUND_OPEN: b('本征集的测试集成版本还在进行；请先退回模块或取消', 'This call’s test integration version is still open; send modules back or cancel it first'),
+  CALL_ROUND_OPEN: b('本征集的测试集成版本正在测试；要改动模块，请由集成管理员退回模块或取消这一轮', 'This call’s test integration version is being tested; to change a module, the integration admin sends it back or cancels the round'),
   CALL_INCOMPLETE: b('还没收齐：下列模块未提交、被退回或提交已失效', 'Not complete yet: these modules have not submitted, were sent back, or their submission changed'),
-  CALL_ROUND_STALE: b('这个预览已不是征集当前的一轮，请重新生成', 'This preview is no longer the call’s current round; preview again'),
+  CALL_ROUND_STALE: b('这个预览已不是征集当前的一轮，或征集的提交已变化；请重新生成', 'This preview is no longer the call’s current round, or the call’s submissions changed; preview again'),
   CALL_TARGET_MISSING: b('征集的测试集成版本必须列入它的目标版本', 'A call’s test integration version must list its target version'),
 });
 export const CALL_PHASE_LABELS: Record<string, Bilingual> = {

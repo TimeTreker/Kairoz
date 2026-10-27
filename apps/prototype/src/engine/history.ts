@@ -194,9 +194,10 @@ function callDrafts(s: State, vehicleModelId: string, version: string): Draft[] 
 export function versionHistory(s: State, vehicleModelId: string, version: string): HistoryEntry[] {
   const drafts: Draft[] = [];
   const sv = s.softwareVersions[softwareKey(vehicleModelId, version)];
-  if (sv) drafts.push({ at: sv.createdAt, kind: sv.status === 'PLANNED' ? 'SOFTWARE_PLANNED' : 'SOFTWARE_RECORDED', by: sv.recordedBy, version, callId: sv.callId, reason: sv.source || null, order: 0 });
+  if (sv?.plannedAt) drafts.push({ at: sv.plannedAt, kind: 'SOFTWARE_PLANNED', by: sv.plannedBy, version, callId: sv.callId, reason: null, order: 0 });
+  if (sv?.status === 'RECORDED') drafts.push({ at: sv.createdAt, kind: 'SOFTWARE_RECORDED', by: sv.recordedBy, version, callId: sv.callId, reason: sv.source || null, order: 0 });
   drafts.push(...callDrafts(s, vehicleModelId, version));
-  if (sv?.dclModule) drafts.push({ at: sv.dclModule.exportedAt, kind: 'MODULE_EXPORTED', by: sv.dclModule.exportedBy, version, releaseId: sv.dclModule.releaseId, order: 0 });
+  for (const m of sv?.moduleLog ?? []) drafts.push({ at: m.exportedAt, kind: 'MODULE_EXPORTED', by: m.exportedBy, version, releaseId: m.releaseId, order: 0 });
   const releases = releasesOf(s, vehicleModelId);
   for (const r of releases) {
     if (r.vehicleIntegrationVersions.includes(version)) drafts.push({ at: r.publishedAt, kind: 'PUBLISHED', by: r.publishedBy, releaseId: r.id, version, reason: r.notes || null, order: r.sequence });

@@ -275,6 +275,7 @@ function CallDetail({ callId }: { callId: string }) {
   const children = Object.values(state.integrationCalls).filter((c) => c.parentCallId === call.id);
   const waiting = call.modules.filter((m) => m.status === 'WAITING' || m.status === 'RETURNED');
   const allUnchanged = call.modules.every((m) => m.status === 'NO_CHANGE' || m.status === 'EXCLUDED');
+  const inTest = round?.candidateId ? (state.candidates[round.candidateId]?.label ?? null) : null;
   const canSubmit = (m: CallModule) =>
     open && m.status !== 'EXCLUDED' && (m.kind === 'GROUP' ? can('call.submitGroup', { workspaceId: m.workspaceId, groupId: m.groupId! }) : can('call.submitDomain', { workspaceId: m.workspaceId, scope: m.domain! }));
 
@@ -447,9 +448,11 @@ function CallDetail({ callId }: { callId: string }) {
                 return (
                   <Space size={0} wrap>
                     {canSubmit(m) && (
-                      <Button type="link" size="small" onClick={() => setSubmitting(m)}>
-                        {m.status === 'SUBMITTED' || m.status === 'NO_CHANGE' ? L('重新提交', 'Submit again') : L('提交', 'Submit')}
-                      </Button>
+                      <Tooltip title={inTest ? L(`${inTest} 正在测试，提交已锁定；要改动请集成管理员退回`, `${inTest} is being tested and submissions are locked; the integration admin sends modules back to change them`) : undefined}>
+                        <Button type="link" size="small" disabled={!!inTest} onClick={() => setSubmitting(m)}>
+                          {m.status === 'SUBMITTED' || m.status === 'NO_CHANGE' ? L('重新提交', 'Submit again') : L('提交', 'Submit')}
+                        </Button>
+                      </Tooltip>
                     )}
                     {m.kind === 'DOMAIN' && open && !child && can('call.manage', { workspaceId: m.workspaceId, scope: m.domain! }) && m.status !== 'EXCLUDED' && (
                       <Button type="link" size="small" onClick={() => setChildFor(m.workspaceId)}>
@@ -628,8 +631,8 @@ function AskModal({ call, ask, onClose }: { call: IntegrationCall; ask: { kind: 
   };
   return (
     <Modal open title={titles[ask.kind]} okButtonProps={{ danger: ask.kind !== 'retarget', disabled: !text.trim() }} onOk={submit} onCancel={onClose}>
-      {ask.kind === 'return' && openRound(state, call)?.candidateId && (
-        <Alert type="warning" showIcon style={{ marginBottom: 12 }} title={L('当前一轮的测试集成版本会被取消，下一轮合并新的提交。', 'The running test integration version is cancelled; the next round merges the new submissions.')} />
+      {(ask.kind === 'return' || ask.kind === 'exclude') && openRound(state, call)?.candidateId && (
+        <Alert type="warning" showIcon style={{ marginBottom: 12 }} title={L('当前一轮的测试集成版本会被取消，下一轮合并新的记录。', 'The running test integration version is cancelled; the next round merges what the call then records.')} />
       )}
       <Input.TextArea
         rows={ask.kind === 'retarget' ? 1 : 3}

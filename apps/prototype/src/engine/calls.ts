@@ -90,9 +90,11 @@ export function isStale(s: State, m: CallModule): boolean {
   if (m.status !== 'SUBMITTED') return false;
   if (m.featureId) {
     const f = s.features[m.featureId];
-    return !f || !isCollectible(s, f) || f.headCommitId !== m.commitId;
+    // Freezing a round integrates the Feature at that commit: it is still the submitted version.
+    return !f || f.headCommitId !== m.commitId || !(isCollectible(s, f) || f.stage === 'INTEGRATED');
   }
-  return !!m.subsystemReleaseId && s.subsystemReleases[m.subsystemReleaseId]?.status !== 'ACTIVE';
+  const r = m.subsystemReleaseId ? s.subsystemReleases[m.subsystemReleaseId] : undefined;
+  return !!m.subsystemReleaseId && r?.status !== 'ACTIVE' && r?.status !== 'INTEGRATING';
 }
 
 /** Why a call's submissions cannot be merged yet; empty when the list is complete and current. */
@@ -159,7 +161,10 @@ export function openCall(
     if (!input.parentCallId) throw rule('PARENT_CALL_REQUIRED', 'a domain call answers a whole-vehicle call');
     parent = getCall(ctx.s, input.parentCallId);
     assertOpen(parent);
-    if (!parent.modules.some((m) => m.kind === 'DOMAIN' && m.domain === scope && m.workspaceId === ws.id)) throw rule('NOT_A_CALL_MODULE', `the call for ${parent.targetVersion} does not collect ${scope} from this workspace`);
+    const module = parent.modules.find((m) => m.kind === 'DOMAIN' && m.domain === scope && m.workspaceId === ws.id);
+    if (!module) throw rule('NOT_A_CALL_MODULE', `the call for ${parent.targetVersion} does not collect ${scope} from this workspace`);
+    if (module.status === 'EXCLUDED') throw rule('MODULE_EXCLUDED', `${scope} does not take part in the call for ${parent.targetVersion}`);
+    assertNotInTest(ctx.s, parent);
     const child = Object.values(ctx.s.integrationCalls).find((c) => c.parentCallId === parent!.id && c.scope === scope && c.status === 'OPEN');
     if (child) throw conflict('CALL_EXISTS', `the ${scope} call for ${parent.targetVersion} is already open`);
   } else if (input.parentCallId) {
@@ -194,7 +199,7 @@ export function openCall(
       if (input.baseVersion && !base) throw rule('UNKNOWN_SOFTWARE_VERSION', `${ws.vehicleModelId} ${input.baseVersion} is not a recorded software version`);
       baseVersion = base?.version ?? null;
       const manifest = base?.manifest ? { signals: [...base.manifest.signals], sources: base.manifest.sources.map((x) => ({ ...x })) } : null;
-      ctx.s.softwareVersions[key] = { vehicleModelId: ws.vehicleModelId, version: target, source: '', manifest, status: 'PLANNED', callId: id, dclModule: null, recordedBy: ctx.user().username, createdAt: ctx.now };
+      ctx.s.softwareVersions[key] = { vehicleModelId: ws.vehicleModelId, version: target, source: '', manifest, status: 'PLANNED', callId: id, dclModule: null, moduleLog: [], plannedBy: ctx.user().username, plannedAt: ctx.now, recordedBy: ctx.user().username, createdAt: ctx.now };
     } else if (existing.status === 'PLANNED') {
       existing.callId = id; // a planned version left by a closed call is taken over
     }
@@ -221,6 +226,18 @@ export function openCall(
     closedAt: null,
   };
   return id;
+}
+
+/**
+ * A round in test is locked for submitters: what is tested is what the call records. To change a
+ * module then, the integration admin sends it back, which closes the round.
+ */
+function assertNotInTest(s: State, call: IntegrationCall): void {
+  const round = openRound(s, call);
+  if (round?.candidateId) {
+    const label = s.candidates[round.candidateId]?.label ?? round.candidateId;
+    throw rule('CALL_ROUND_OPEN', `the test integration version ${label} is being tested; the integration admin sends modules back to change them`);
+  }
 }
 
 function getModule(call: IntegrationCall, key: string): CallModule {
@@ -252,6 +269,7 @@ export function submitGroup(ctx: Ctx, callId: string, groupId: string, input: { 
   ctx.allow('call.submitGroup', { type: 'call', id: call.id, workspaceId: m.workspaceId, groupId });
   assertOpen(call);
   if (m.status === 'EXCLUDED') throw rule('MODULE_EXCLUDED', `${moduleName(ctx.s, m)} does not take part in this call`);
+  assertNotInTest(ctx.s, call);
   const note = input.note?.trim() || null;
   if (!input.featureId) return setSubmission(ctx, m, null, note);
   const f = ctx.s.features[input.featureId];
@@ -272,6 +290,7 @@ export function submitDomain(ctx: Ctx, callId: string, domain: Domain, input: { 
   ctx.allow('call.submitDomain', { type: 'call', id: call.id, workspaceId: m.workspaceId, scope: domain });
   assertOpen(call);
   if (m.status === 'EXCLUDED') throw rule('MODULE_EXCLUDED', `${domain} does not take part in this call`);
+  assertNotInTest(ctx.s, call);
   const note = input.note?.trim() || null;
   if (!input.subsystemReleaseId) return setSubmission(ctx, m, null, note);
   const r = ctx.s.subsystemReleases[input.subsystemReleaseId];
@@ -355,6 +374,8 @@ export function excludeModule(ctx: Ctx, callId: string, key: string, reason: str
   const m = getModule(ctx.s.integrationCalls[call.id]!, key);
   if (m.status === 'EXCLUDED') throw rule('MODULE_EXCLUDED', `${moduleName(ctx.s, m)} already does not take part`);
   if (call.modules.filter((x) => x.status !== 'EXCLUDED').length === 1) throw rule('NO_MODULES', 'a call needs at least one module taking part');
+  // The running round merged the module's submission: it no longer is what the call records.
+  closeRound(ctx, call, why);
   m.status = 'EXCLUDED';
   m.featureId = null;
   m.commitId = null;
@@ -378,17 +399,21 @@ export function retargetCall(ctx: Ctx, callId: string, version: string): void {
   if (Object.values(ctx.s.integrationCalls).some((c) => c.id !== call.id && c.vehicleModelId === call.vehicleModelId && c.scope === 'Vehicle' && c.status === 'OPEN' && c.targetVersion === target)) {
     throw conflict('CALL_EXISTS', `a call for ${call.vehicleModelId} ${target} is already open`);
   }
+  if (Object.values(ctx.s.releases).some((r) => r.vehicleModelId === call.vehicleModelId && r.vehicleIntegrationVersions.includes(target))) {
+    throw rule('VERSION_RELEASED', `${call.vehicleModelId} ${target} already has a policy set published for it`);
+  }
   const oldKey = softwareKey(call.vehicleModelId, call.targetVersion);
   const old = ctx.s.softwareVersions[oldKey];
   const newKey = softwareKey(call.vehicleModelId, target);
   if (!ctx.s.softwareVersions[newKey]) {
     ctx.s.softwareVersions[newKey] = old && old.status === 'PLANNED' && old.callId === call.id
       ? { ...old, version: target, manifest: old.manifest ? { signals: [...old.manifest.signals], sources: old.manifest.sources.map((x) => ({ ...x })) } : null, createdAt: ctx.now }
-      : { vehicleModelId: call.vehicleModelId, version: target, source: '', manifest: null, status: 'PLANNED', callId: call.id, dclModule: null, recordedBy: ctx.user().username, createdAt: ctx.now };
+      : { vehicleModelId: call.vehicleModelId, version: target, source: '', manifest: null, status: 'PLANNED', callId: call.id, dclModule: null, moduleLog: [], plannedBy: ctx.user().username, plannedAt: ctx.now, recordedBy: ctx.user().username, createdAt: ctx.now };
   }
   // A planned version nothing runs yet goes with its call; one already in use stays planned.
   const used = Object.values(ctx.s.resources).some((r) => r.vehicleModelId === call.vehicleModelId && r.integrationVersion === call.targetVersion)
-    || Object.values(ctx.s.images).some((i) => i.vehicleModelId === call.vehicleModelId && i.integrationVersion === call.targetVersion);
+    || Object.values(ctx.s.images).some((i) => i.vehicleModelId === call.vehicleModelId && i.integrationVersion === call.targetVersion)
+    || Object.values(ctx.s.vehicleSoftwareRequests).some((q) => q.toVersion === call.targetVersion && ctx.s.resources[q.resourceId]?.vehicleModelId === call.vehicleModelId);
   if (old && old.status === 'PLANNED' && old.callId === call.id && !used) delete ctx.s.softwareVersions[oldKey];
   for (const child of Object.values(ctx.s.integrationCalls)) if (child.parentCallId === call.id && child.status === 'OPEN') child.targetVersion = target;
   const draft = ctx.s.integrationCalls[call.id]!;
@@ -424,12 +449,26 @@ export function closeUnchanged(ctx: Ctx, callId: string, note?: string): void {
   assertOpen(call);
   const open = call.modules.filter((m) => m.status === 'WAITING' || m.status === 'RETURNED' || m.status === 'SUBMITTED');
   if (open.length) throw rule('CALL_CHANGED', 'some modules submitted changes or have not answered', { issues: open.map((m) => moduleName(ctx.s, m)) });
+  closeRound(ctx, call, 'no change');
   const draft = ctx.s.integrationCalls[call.id]!;
   draft.status = 'NO_CHANGE';
   draft.note = note?.trim() || null;
   draft.closedBy = ctx.user().username;
   draft.closedAt = ctx.now;
   if (call.parentCallId) answerParent(ctx, call, null);
+  else closeChildren(ctx, call, 'the whole-vehicle call closed with no change');
+}
+
+/** Open domain calls of a whole-vehicle call that closed have nothing left to answer. */
+function closeChildren(ctx: Ctx, call: IntegrationCall, why: string): void {
+  for (const child of Object.values(ctx.s.integrationCalls)) {
+    if (child.parentCallId !== call.id || child.status !== 'OPEN') continue;
+    closeRound(ctx, child, why);
+    child.status = 'CANCELLED';
+    child.note = why;
+    child.closedBy = ctx.user().username;
+    child.closedAt = ctx.now;
+  }
 }
 
 /** A domain call's result goes up to its whole-vehicle call's module for the domain. */
@@ -438,6 +477,7 @@ function answerParent(ctx: Ctx, call: IntegrationCall, subsystemReleaseId: strin
   if (!parent || parent.status !== 'OPEN') return;
   const m = parent.modules.find((x) => x.kind === 'DOMAIN' && x.domain === call.scope && x.workspaceId === call.workspaceId);
   if (!m || m.status === 'EXCLUDED') return;
+  assertNotInTest(ctx.s, parent);
   setSubmission(ctx, m, subsystemReleaseId ? { subsystemReleaseId } : null, `${call.title}`);
 }
 
@@ -480,6 +520,10 @@ export function callRoundProblem(s: State, plan: MergePlan): string | null {
   if (!call || call.status !== 'OPEN') return 'the call of this preview is closed';
   const round = openRound(s, call);
   if (!round || round.planId !== plan.id) return 'this preview is no longer the call’s current round';
+  const submitted = call.modules.filter((m) => m.status === 'SUBMITTED');
+  const want = [...submitted.filter((m) => m.featureId).map((m) => `${m.featureId}@${m.commitId}`), ...submitted.filter((m) => m.subsystemReleaseId).map((m) => m.subsystemReleaseId!)].sort();
+  const have = [...plan.sources.map((x) => `${x.featureId}@${x.commitId}`), ...plan.subsystems.map((x) => x.subsystemReleaseId)].sort();
+  if (want.join() !== have.join()) return 'the call’s submissions changed since this preview; preview it again';
   return null;
 }
 
@@ -526,9 +570,13 @@ export function onCallReleased(ctx: Ctx, c: Candidate, releaseId: string): void 
     sv.recordedBy = ctx.user().username;
     sv.createdAt = ctx.now;
   }
-  if (sv) sv.dclModule = moduleOf(ctx, releaseId);
+  if (sv) {
+    sv.dclModule = moduleOf(ctx, releaseId);
+    sv.moduleLog.push({ ...sv.dclModule });
+  }
   closeReleased(ctx, call, c.id);
   call.releaseId = releaseId;
+  closeChildren(ctx, call, `the whole-vehicle call was released`);
 }
 
 /** A domain call's passing round published as a subsystem release goes up to the whole-vehicle call. */
@@ -562,6 +610,7 @@ export function exportDclModule(ctx: Ctx, input: { vehicleModelId: string; versi
   if (sv.dclModule?.releaseId === set.id) throw rule('MODULE_CURRENT', `the module already carries policy set ${set.dclVersion}`);
   const draft = ctx.s.softwareVersions[softwareKey(input.vehicleModelId, input.version)]!;
   draft.dclModule = moduleOf(ctx, set.id);
+  draft.moduleLog.push({ ...draft.dclModule });
   return { ...draft.dclModule };
 }
 

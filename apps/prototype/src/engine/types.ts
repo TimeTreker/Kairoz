@@ -11,7 +11,7 @@ import type { FileType, Privacy } from '../domain/file-types.ts';
 import type { ReviewControls } from '../domain/intake.ts';
 import type { Domain, Env, GroupPurpose, Role, Scope, WorkspaceKind } from '../domain/vocabulary.ts';
 
-export const STATE_SCHEMA = 21;
+export const STATE_SCHEMA = 22;
 
 export interface Account {
   username: string;
@@ -367,6 +367,12 @@ export interface SoftwareVersion {
   callId: string | null;
   /** The DCL configuration module bundled into this version's vehicle OTA package; null when none. */
   dclModule: DclModule | null;
+  /** Every module exported for it, oldest first (the last one is `dclModule`). */
+  moduleLog: DclModule[];
+  /** Who planned it for an integration call, and when; null when it was recorded from outside. */
+  plannedBy: string | null;
+  plannedAt: string | null;
+  /** Who recorded it (or planned it, while planned), and when. */
   recordedBy: string;
   createdAt: string;
 }
