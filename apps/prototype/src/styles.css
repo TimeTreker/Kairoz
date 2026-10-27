@@ -67,6 +67,17 @@ body {
   .kz-header-name {
     display: none;
   }
+  /* Card headers: the title keeps its line and the actions wrap below it, inside the card. */
+  .kz-page .ant-card-head-wrapper {
+    flex-wrap: wrap;
+    row-gap: 8px;
+  }
+  .kz-page .ant-card-extra {
+    max-width: 100%;
+  }
+  .kz-page .ant-card-extra .ant-space {
+    flex-wrap: wrap;
+  }
 }
 .kz-page {
   padding: 20px 24px 40px;

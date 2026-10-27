@@ -178,7 +178,7 @@ function WorkspaceVehicles() {
   return (
     <Card
       extra={
-        <Space>
+        <Space wrap>
           <Tooltip title={L('团队仿真与成员的个人仿真共用工作区的运行配额；由车辆资源设置。', 'Team and personal simulations share the workspace’s run quota, set by vehicle resources.')}>
             <Tag color={quota !== undefined && simRunning >= quota ? 'gold' : undefined}>
               {quota === undefined ? L(`仿真运行 ${simRunning} · 不限`, `${simRunning} simulations running · no limit`) : L(`仿真运行 ${simRunning} / ${quota}`, `${simRunning} of ${quota} simulations running`)}
