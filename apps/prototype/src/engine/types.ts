@@ -1534,8 +1534,11 @@ export interface State {
   directorySync: DirectorySync;
   /** The simulated PLM (the simulator's, not the platform's). */
   plm: PlmCatalog;
-  /** The PLM revision last applied, and when. */
-  plmSync: { revision: number; syncedAt: string | null };
+  /**
+   * The PLM revision last applied, and when; and PLM versions the platform could not take because
+   * their number is a working name of other software.
+   */
+  plmSync: { revision: number; syncedAt: string | null; conflicts: { vehicleModelId: string; version: string; reason: string; at: string }[] };
   /** The simulated TSP (the simulator's, not the platform's). */
   tsp: TspCatalog;
   /** The TSP revision last applied, and when. */
@@ -1617,7 +1620,7 @@ export function emptyState(): State {
     directory: null,
     directorySync: { revision: 0, syncedAt: null, log: [] },
     plm: { revision: 0, versions: [] },
-    plmSync: { revision: 0, syncedAt: null },
+    plmSync: { revision: 0, syncedAt: null, conflicts: [] },
     tsp: { revision: 0, vehicles: [] },
     tspSync: { revision: 0, syncedAt: null },
     personalCaptures: {},

@@ -45,7 +45,7 @@ export const scenes: Record<string, SceneSpec> = {
       w.fails('TSP_REQUIRED', () => w.as('resource', (c) => fleet.registerPhysical(c, { id: 'VEH-009', vin: 'LSDEMX89000000900', env: 'development', pool: 'Chassis' })));
       w.as('resource', (c) => fleet.registerPhysical(c, { id: 'VEH-007', vin: 'LSDEM0X8900000007', env: 'development', pool: 'ADC', displayName: '泊车研发车 2' }));
       const r = w.s.resources['VEH-007']!;
-      w.eq([r.vehicleModelId, r.licensePlate, r.tsp?.tboxId], ['X89', '沪A·D0007', 'TBOX-000007'], 'model, plate and T-Box come from TSP');
+      w.eq([r.vehicleModelId, r.licensePlate, r.tsp?.tboxId], ['X89', '沪A·D0007', 'TBOX-8900000007'], 'model, plate and T-Box come from TSP');
       w.eq(r.tsp?.hardware, [{ item: '激光雷达', value: '有' }, { item: '座舱芯片', value: '8295' }], 'with its hardware configuration');
       w.eq(r.integrationVersion, null, 'its software is unknown until it reports');
       const key = w.sys((c) => (provisionDevice(c, 'VEH-007'), devicePublicKey(c.s, 'VEH-007')!));

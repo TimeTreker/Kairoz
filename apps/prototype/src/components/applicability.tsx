@@ -228,7 +228,7 @@ export function ApplicabilityChecks({ modelId, testWorkspaceId }: { modelId: str
   const checks = Object.values(state.applicabilityChecks)
     .filter((c) => c.vehicleModelId === modelId && (!testWorkspaceId || c.testWorkspaceId === testWorkspaceId))
     .sort((a, b) => Number(isOpenCheck(b)) - Number(isOpenCheck(a)) || b.openedAt.localeCompare(a.openedAt) || b.id.localeCompare(a.id));
-  if (checks.length === 0) return <Empty description={L('暂无适用性确认单。登记新的整车软件版本且没有策略集适用时会自动开启。', 'No applicability checks. One opens by itself when a software version no set applies to is recorded.')} />;
+  if (checks.length === 0) return <Empty description={L('暂无适用性确认单。PLM 发布的新整车版本没有策略集适用时会自动开启。', 'No applicability checks. One opens by itself when PLM publishes a version no set applies to.')} />;
   return (
     <Space orientation="vertical" size={12} style={{ width: '100%' }}>
       {checks.map((c) => (
@@ -273,7 +273,7 @@ function CheckCard({ check }: { check: ApplicabilityCheck }) {
           <span>←</span>
           <Mono>{B(setName(release.dclVersion))}</Mono>
           <Tag color={CHECK_STATUS_COLORS[check.status]}>{B(CHECK_STATUS_LABELS[check.status])}</Tag>
-          {check.auto && <Tag>{L('登记新软件时自动开启', 'opened when the software was recorded')}</Tag>}
+          {check.auto && <Tag>{L('PLM 发布新版本时自动开启', 'opened when PLM published the version')}</Tag>}
         </Space>
       }
       extra={

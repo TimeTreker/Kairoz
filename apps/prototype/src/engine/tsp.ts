@@ -30,10 +30,13 @@ export function addTspVehicle(ctx: Ctx, input: { vin: string; vehicleModelId: st
   if (!ctx.s.vehicleModels[input.vehicleModelId]) throw notFound('vehicle model', input.vehicleModelId);
   const expected = input.expectedVersion?.trim() || null;
   if (expected && !VERSION.test(expected)) throw rule('INVALID_VERSION', 'versions look like 1.2 or 1.2.0');
+  const uvid = input.uvid?.trim() || `UV-${vin.slice(-10)}`;
+  const tboxId = input.tboxId?.trim() || `TBOX-${vin.slice(-10)}`;
+  if (ctx.s.tsp.vehicles.some((v) => v.uvid === uvid || v.tboxId === tboxId)) throw conflict('TSP_ID_TAKEN', `TSP already has a car with UVID ${uvid} or T-Box ${tboxId}`);
   ctx.s.tsp.vehicles.push({
     vin,
-    uvid: input.uvid?.trim() || `UV-${vin.slice(-8)}`,
-    tboxId: input.tboxId?.trim() || `TBOX-${vin.slice(-6)}`,
+    uvid,
+    tboxId,
     vehicleModelId: input.vehicleModelId,
     licensePlate: input.licensePlate?.trim() || null,
     hardware: hardwareOf(input.hardware ?? []),

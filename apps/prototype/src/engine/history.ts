@@ -213,7 +213,8 @@ export function versionHistory(s: State, vehicleModelId: string, version: string
   }
   drafts.push(...callDrafts(s, vehicleModelId, names));
   for (const x of [w, sv]) for (const m of x?.moduleLog ?? []) drafts.push({ at: m.exportedAt, kind: 'MODULE_EXPORTED', by: m.exportedBy, version: x!.version, releaseId: m.releaseId, order: 0 });
-  const part = sv?.dclPart?.deliveredAt ? sv.dclPart : w?.dclPart;
+  // The delivery belongs to the working name the part was delivered for (a later version reusing the part has none).
+  const part = w ? w.dclPart : sv?.status === 'PLANNED' || sv?.workingName ? sv.dclPart : null;
   if (part?.deliveredAt) drafts.push({ at: part.deliveredAt, kind: 'PART_DELIVERED', by: part.deliveredBy, version: w?.version ?? version, reason: partVersion(part), order: 0 });
   if (w) drafts.push({ at: sv!.createdAt, kind: 'LINKED', version, reason: w.version, order: 0 });
   if (sv?.linkedTo) {

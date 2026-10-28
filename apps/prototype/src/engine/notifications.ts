@@ -54,6 +54,7 @@ export type NotificationKind =
   | 'PRODUCTION_BLOCKED'
   | 'DCL_PART_TO_DELIVER'
   | 'PLM_PART_UNKNOWN'
+  | 'PLM_NUMBER_CONFLICT'
   | 'EXPECTED_WITHOUT_SET'
   | 'TSP_MISMATCH'
   | 'UNRECORDED_SOFTWARE'
@@ -248,9 +249,15 @@ export function notificationsFor(s: State, actor: Actor, workspaceId: string): N
     for (const x of emergencyStopsOf(s, ws.vehicleModelId).filter((x) => x.requestedBy === actor.username && x.status !== 'REQUESTED' && fresh(x.decidedAt))) {
       add('DCL_ENGINEER', 'EMERGENCY_STOP', [x.id, x.status], { severity: 'INFO', subject: x.policyId, detail: x.status, link: 'release', at: x.decidedAt });
     }
-    // A released call's configuration waits for DCL to merge it into the DCL software and deliver it to PLM.
-    for (const v of Object.values(s.softwareVersions).filter((x) => workingNameState(x) === 'TO_DELIVER' && x.callId && s.integrationCalls[x.callId]?.workspaceId === workspaceId)) {
-      add('DCL_ENGINEER', 'DCL_PART_TO_DELIVER', [v.version, v.dclModule!.releaseId], { severity: 'WARNING', subject: `${v.vehicleModelId} ${v.version}`, detail: s.releases[v.dclModule!.releaseId]?.dclVersion ?? null, link: 'release/applicability', at: v.dclModule!.exportedAt });
+    // A released call's configuration waits for DCL to merge it into the DCL software and deliver it to
+    // PLM; so does a delivered part whose set is no longer the one in effect (an emergency stop since).
+    for (const v of Object.values(s.softwareVersions).filter((x) => x.callId && s.integrationCalls[x.callId]?.workspaceId === workspaceId)) {
+      const state = workingNameState(v);
+      const current = state === 'DELIVERED' ? setInEffect(s, v.vehicleModelId, v.version) : null;
+      const outdated = !!current && s.resolvedConfigs[current.resolvedConfigId]?.digest !== v.dclPart!.digest;
+      if (state !== 'TO_DELIVER' && !outdated) continue;
+      const set = outdated ? current! : s.releases[v.dclModule!.releaseId];
+      add('DCL_ENGINEER', 'DCL_PART_TO_DELIVER', [v.version, set?.id ?? null], { severity: 'WARNING', subject: `${v.vehicleModelId} ${v.version}`, detail: set?.dclVersion ?? null, link: 'release/applicability', at: outdated ? set?.publishedAt ?? null : v.dclModule!.exportedAt });
     }
     if (ws.scopes.includes('Vehicle')) {
       for (const v of unknownParts(s, ws.vehicleModelId)) {
@@ -360,6 +367,9 @@ export function notificationsFor(s: State, actor: Actor, workspaceId: string): N
       }
       for (const [version, count] of coming) {
         add('CONFIG_RELEASE', 'EXPECTED_WITHOUT_SET', [version, count], { severity: 'WARNING', subject: `${ws.vehicleModelId} ${version}`, detail: String(count), link: 'release/applicability', at: null });
+      }
+      for (const c of (s.plmSync.conflicts ?? []).filter((x) => x.vehicleModelId === ws.vehicleModelId)) {
+        add('CONFIG_RELEASE', 'PLM_NUMBER_CONFLICT', [c.version], { severity: 'WARNING', subject: `${c.vehicleModelId} ${c.version}`, detail: c.reason, link: 'release/applicability', at: c.at });
       }
       for (const v of unknownParts(s, ws.vehicleModelId)) {
         add('CONFIG_RELEASE', 'PLM_PART_UNKNOWN', [v.version, v.dclPart!.digest], { severity: 'WARNING', subject: `${v.vehicleModelId} ${v.version}`, detail: partVersion(v.dclPart!), link: 'release/applicability', at: v.createdAt });

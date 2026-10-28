@@ -18,11 +18,16 @@ export function releaseOfDigest(s: State, vehicleModelId: string, digest: string
   return releasesOf(s, vehicleModelId).find((r) => s.resolvedConfigs[r.resolvedConfigId]?.digest === digest) ?? null;
 }
 
-/** The working name a set was released for, while PLM has not published it. */
-function unlinkedWorkingName(s: State, release: Release): SoftwareVersion | null {
+/**
+ * The working name a part belongs to, while PLM has not published it: the one the part was delivered
+ * for, or else the one whose call released the part's set.
+ */
+function unlinkedWorkingName(s: State, release: Release, digest: string): SoftwareVersion | null {
+  const open = (w: SoftwareVersion | undefined) => (w && w.status === 'PLANNED' && !w.linkedTo ? w : null);
+  const delivered = Object.values(s.softwareVersions).find((v) => v.vehicleModelId === release.vehicleModelId && v.dclPart?.digest === digest && open(v));
+  if (delivered) return delivered;
   const call = Object.values(s.integrationCalls).find((c) => c.releaseId === release.id && c.scope === 'Vehicle');
-  const w = call ? s.softwareVersions[softwareKey(call.vehicleModelId, call.targetVersion)] : undefined;
-  return w && w.status === 'PLANNED' && !w.linkedTo ? w : null;
+  return open(call ? s.softwareVersions[softwareKey(call.vehicleModelId, call.targetVersion)] : undefined);
 }
 
 /** The module a version bundles for a set: as it was exported, or built from the release when it never was. */
@@ -53,6 +58,17 @@ export function syncPlm(ctx: Ctx, snapshot: PlmCatalog): number {
     const release = v.dclPart ? releaseOfDigest(ctx.s, v.vehicleModelId, v.dclPart.digest) : null;
     const module = release ? moduleFor(ctx.s, release, v.dclPart!.digest) : null;
     const part = v.dclPart ? partFor(ctx.s, v.dclPart) : null;
+    const owner = release ? unlinkedWorkingName(ctx.s, release, v.dclPart!.digest) : null;
+    // PLM's number is one of our working names, but not for that working name's software: a working
+    // name PLM already published under another number, or a part delivered for another name. The
+    // platform cannot hold both; it records the conflict for people to settle with PLM.
+    if (existing && (existing.linkedTo || (release && owner?.version !== existing.version))) {
+      const conflicts = (ctx.s.plmSync.conflicts ??= []);
+      if (!conflicts.some((c) => c.vehicleModelId === v.vehicleModelId && c.version === v.version)) {
+        conflicts.push({ vehicleModelId: v.vehicleModelId, version: v.version, reason: existing.linkedTo ? `working name ${existing.version} is published as ${existing.linkedTo}` : `the part was delivered for ${owner?.version ?? 'another set'}`, at: ctx.now });
+      }
+      continue;
+    }
     if (existing) {
       // PLM kept the working name as its number: the same record becomes the published version.
       existing.status = 'RECORDED';
@@ -63,7 +79,7 @@ export function syncPlm(ctx: Ctx, snapshot: PlmCatalog): number {
       existing.dclModule = module;
       existing.dclPart = part;
     } else {
-      const w = release ? unlinkedWorkingName(ctx.s, release) : null;
+      const w = owner;
       ctx.s.softwareVersions[key] = {
         vehicleModelId: v.vehicleModelId,
         version: v.version,
@@ -109,7 +125,7 @@ export function syncPlm(ctx: Ctx, snapshot: PlmCatalog): number {
     }
     recorded += 1;
   }
-  ctx.s.plmSync = { revision: snapshot.revision, syncedAt: ctx.now };
+  ctx.s.plmSync = { revision: snapshot.revision, syncedAt: ctx.now, conflicts: ctx.s.plmSync.conflicts ?? [] };
   return recorded;
 }
 

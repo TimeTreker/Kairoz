@@ -68,15 +68,16 @@ describe('working names and the DCL part', () => {
 
   test('PLM publishes the software with the part: the platform links the working name by the digest', () => {
     const { w, callId, set } = released();
-    // A policy stopped before PLM published: the working name's newer set goes with it.
+    // A policy stopped before DCL delivered: the part carries the set in effect for the working name.
     const stop = w.as('dcl', (c) => em.requestEmergencyStop(c, { releaseId: set, policyId: 'chassis.steering.return_rate', reason: '回正率误报' }));
     const set111 = w.as('release', (c) => em.decideEmergencyStop(c, stop, { decision: 'APPROVED', note: '同意' }))!;
-    deliver(w);
+    const part = deliver(w);
+    assert.equal(part.setVersion, '1.1.1');
     w.sys((c) => advanceClockHours(c, 2));
     plmPublish(w.engine, 'X89', '1.2.0', { partOf: '1.2' });
     const v120 = w.s.softwareVersions['X89::1.2.0']!;
     assert.deepEqual([v120.status, v120.source, v120.workingName, v120.callId, v120.recordedBy], ['RECORDED', 'PLM', '1.2', callId, null]);
-    assert.equal(v120.dclModule!.releaseId, set, 'the factory configuration is the delivered set');
+    assert.equal(v120.dclModule!.releaseId, set111, 'the factory configuration is the delivered set, without the stopped policy');
     assert.equal(v120.dclPart!.deliveredBy, 'dcl');
     assert.deepEqual(v120.manifest, w.s.softwareVersions['X89::1.2']!.manifest);
     assert.equal(w.s.softwareVersions['X89::1.2']!.linkedTo, '1.2.0');

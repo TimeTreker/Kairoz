@@ -272,29 +272,35 @@ function to23(s: Saved): void {
       continue;
     }
     const vin = r.vin;
-    r.uvid ??= `UV-${vin.slice(-8)}`;
-    const car = { vin, uvid: r.uvid, tboxId: `TBOX-${vin.slice(-6)}`, vehicleModelId: r.vehicleModelId, licensePlate: r.licensePlate ?? null, hardware: [], expectedVersion: r.integrationVersion ?? null };
+    r.uvid ??= `UV-${vin.slice(-10)}`;
+    const car = { vin, uvid: r.uvid, tboxId: `TBOX-${vin.slice(-10)}`, vehicleModelId: r.vehicleModelId, licensePlate: r.licensePlate ?? null, hardware: [], expectedVersion: r.integrationVersion ?? null };
     cars.push(car);
     r.tsp ??= { tboxId: car.tboxId, hardware: [], expectedVersion: car.expectedVersion, syncedAt: r.updatedAt ?? null };
   }
   for (const [id, d] of Object.entries((s.devices ?? {}) as Rows)) {
     const r = ((s.resources ?? {}) as Rows)[id];
     if (r?.type === 'PHYSICAL' && d.software == null) d.software = r.integrationVersion ?? null;
-    d.controllers ??= [];
+    // A car a partial update left inconsistent keeps reporting its controllers that way.
+    d.controllers ??= r?.type === 'PHYSICAL' && r.softwareStatus === 'PARTIAL_FAILURE' ? JSON.parse(JSON.stringify(r.controllers ?? [])) : [];
   }
   const tspRevision = cars.length ? 1 : 0;
   s.tsp ??= { revision: tspRevision, vehicles: cars };
   s.tspSync ??= { revision: tspRevision, syncedAt: null };
   const versions: Record<string, unknown>[] = [];
+  const releases = (s.releases ?? {}) as Rows;
   for (const v of Object.values((s.softwareVersions ?? {}) as Rows)) {
-    v.dclPart ??= null;
+    // A module exported for a recorded version was in its OTA package: it is the version's DCL part
+    // (the DCL client those saves simulated was 2.3.0).
+    const m = v.status === 'RECORDED' ? (v.dclModule as Record<string, unknown> | null) : null;
+    const part = m ? { clientVersion: '2.3.0', setVersion: String(releases[m.releaseId as string]?.dclVersion ?? ''), digest: m.digest } : null;
+    v.dclPart ??= part ? { ...part, deliveredBy: m!.exportedBy ?? null, deliveredAt: m!.exportedAt ?? null } : null;
     v.workingName ??= v.status === 'RECORDED' && v.callId ? v.version : null;
     v.linkedTo ??= null;
-    if (v.status === 'RECORDED') versions.push({ vehicleModelId: v.vehicleModelId, version: v.version, modules: [], dclPart: null, publishedAt: v.createdAt });
+    if (v.status === 'RECORDED') versions.push({ vehicleModelId: v.vehicleModelId, version: v.version, modules: [], dclPart: part, publishedAt: v.createdAt });
   }
   const revision = versions.length ? 1 : 0;
   s.plm ??= { revision, versions };
-  s.plmSync ??= { revision, syncedAt: null };
+  s.plmSync ??= { revision, syncedAt: null, conflicts: [] };
   s.schema = 23;
 }
 

@@ -76,7 +76,7 @@ export function DclPartCell({ v }: { v: SoftwareVersion }) {
     const state_ = workingNameState(v);
     return (
       <Space size={4} wrap>
-        {partTag ?? (v.dclModule ? <Tag color="orange">{L(`待交付 · ${state.releases[v.dclModule.releaseId]?.dclVersion ?? ''}`, `to deliver · ${state.releases[v.dclModule.releaseId]?.dclVersion ?? ''}`)}</Tag> : '—')}
+        {partTag ?? (v.dclModule ? <Tag color="orange">{L(`待导出 · ${state.releases[v.dclModule.releaseId]?.dclVersion ?? ''}`, `to export · ${state.releases[v.dclModule.releaseId]?.dclVersion ?? ''}`)}</Tag> : '—')}
         {canDeliver && (state_ === 'TO_DELIVER' || state_ === 'DELIVERED') && (
           <Button type="link" size="small" onClick={() => (setClient(reportedClientVersion(state, v.vehicleModelId) ?? ''), setOpen(true))}>
             {part ? L('重新导出', 'Export again') : L('导出 DCL 件（交付 PLM）', 'Export the DCL part (for PLM)')}

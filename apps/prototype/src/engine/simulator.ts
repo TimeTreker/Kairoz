@@ -234,7 +234,19 @@ export function provisionDevice(ctx: Ctx, resourceId: string): Draft<DeviceState
     lastContentDigest: null,
     lastSentAt: null,
   };
-  return ctx.s.devices[resourceId]!;
+  const device = ctx.s.devices[resourceId]!;
+  // A production car fresh from the factory runs its version's DCL part (出厂配置).
+  if (r.type === 'PHYSICAL' && r.env === 'production' && !r.appliedConfigId && device.software) installBundled(ctx, r, device, device.software);
+  return device;
+}
+
+/** A production car flashed with a PLM version whose BOM has a DCL part runs the part's client and set. */
+function installBundled(ctx: Ctx, r: Resource, device: Draft<DeviceState>, version: string): void {
+  const part = ctx.s.plm.versions.find((x) => x.vehicleModelId === r.vehicleModelId && x.version === version)?.dclPart;
+  if (!part) return;
+  const config = Object.values(ctx.s.resolvedConfigs).find((c) => c.digest === part.digest);
+  device.clientVersion = part.clientVersion;
+  if (config) device.config = config.id;
 }
 
 /** The public key a vehicle ships with, as vehicle resources would receive it (prototype tool). */
@@ -401,10 +413,7 @@ function flash(ctx: Ctx, r: Resource, version: string, failed: string[]): void {
     ctx.s.tsp.revision += 1;
   }
   if (failed.length || r.env !== 'production') return;
-  const part = ctx.s.plm.versions.find((x) => x.vehicleModelId === r.vehicleModelId && x.version === version)?.dclPart;
-  const config = part ? Object.values(ctx.s.resolvedConfigs).find((c) => c.digest === part.digest) : undefined;
-  if (part) device.clientVersion = part.clientVersion;
-  if (config) device.config = config.id;
+  installBundled(ctx, r, device, version);
 }
 
 /**

@@ -42,6 +42,7 @@ export const NOTIFICATION_CATEGORY: Record<NotificationKind, string> = {
   PRODUCTION_BLOCKED: 'RELEASE',
   DCL_PART_TO_DELIVER: 'RELEASE',
   PLM_PART_UNKNOWN: 'RELEASE',
+  PLM_NUMBER_CONFLICT: 'RELEASE',
   EXPECTED_WITHOUT_SET: 'RELEASE',
   TSP_MISMATCH: 'VEHICLE',
   UNRECORDED_SOFTWARE: 'VEHICLE',
@@ -159,6 +160,11 @@ export function useNotificationText() {
           title: L(`${s} 的 DCL 件待导出交付 PLM`, `${s}: export the DCL part for PLM`),
           body: L(`策略集 ${d ?? ''} 已发布；DCL 件交给 PLM 后，PLM 才能把它放进这个整车版本。`, `Policy set ${d ?? ''} is released; PLM can put the DCL part into this version once it is handed over.`),
         };
+      case 'PLM_NUMBER_CONFLICT':
+        return {
+          title: L(`PLM 版本 ${s} 与工作名冲突，平台没有同步它`, `PLM version ${s} clashes with a working name and was not synced`),
+          body: L(`这个版本号是平台上另一套软件的工作名（${d}）。请与 PLM 核对版本号，或改用别的工作名。`, `The number is the working name of other software here (${d}). Check the number with PLM, or use another working name.`),
+        };
       case 'PLM_PART_UNKNOWN':
         return {
           title: L(`PLM 版本 ${s} 的 DCL 件无法识别`, `The DCL part of PLM version ${s} is unknown`),
@@ -183,7 +189,7 @@ export function useNotificationText() {
         const [reported, linked] = d.split(' → ');
         return linked
           ? { title: L(`${s} 上报了工作名 ${reported}`, `${s} reported the working name ${reported}`), body: L(`PLM 已把它发布为 ${linked}；请为车辆刷写 ${linked}。`, `PLM published it as ${linked}; flash the vehicle with ${linked}.`) }
-          : { title: L(`${s} 上报了 PLM 未发布的软件版本`, `${s} reported a version PLM has not published`), body: L(`${reported} 不在 PLM 的发布记录里；PLM 发布后，车辆下一次上报即生效。`, `${reported} is not in PLM's record; once PLM publishes it, the vehicle's next report takes effect.`) };
+          : { title: L(`${s} 上报了 PLM 未发布的软件版本`, `${s} reported a version PLM has not published`), body: L(`${reported} 不在 PLM 的发布记录里；PLM 发布并同步后，这份上报即生效。`, `${reported} is not in PLM's record; once PLM publishes it and the platform syncs, this report takes effect.`) };
       }
       case 'GROUP_MISMATCH': {
         const [group, outcome] = d.split(' · ');

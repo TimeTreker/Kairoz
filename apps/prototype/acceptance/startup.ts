@@ -470,7 +470,7 @@ export const scenes: Record<string, SceneSpec> = {
   },
   E01: {
     run: (w) => {
-      plmPublish(w.engine, 'X89', '1.0', { modules: [{ name: 'ADC', version: '1.0' }, { name: 'BMS', version: '1.0' }] });
+      plmPublish(w.engine, 'X89', '1.0', { modules: [{ name: 'ADC', version: '1.0' }, { name: 'BMS', version: '1.0' }, { name: 'VCU', version: '1.0' }] });
       w.as('resource', (c) => fleet.registerImage(c, { id: 'x89-1.0', vehicleModelId: 'X89', integrationVersion: '1.0', build: 'x89-1.0.0', digest: sha('x89-1.0'), simulator: 'SimOne 3' }));
       for (const [id, vin] of [
         ['VEH-951', 'LSDEMX89000000951'],

@@ -22,7 +22,7 @@ describe('cars come from TSP', () => {
     w.fails('TSP_MODEL_MISMATCH', () => w.as('resource', (c) => fleet.registerPhysical(c, { id: 'VEH-007', vin: 'LSDEM0X8900000007', vehicleModelId: 'X90', env: 'development', pool: 'ADC' })));
     w.as('resource', (c) => fleet.registerPhysical(c, { id: 'VEH-007', vin: 'LSDEM0X8900000007', env: 'development', pool: 'ADC', displayName: '泊车研发车 2' }));
     const r = w.s.resources['VEH-007']!;
-    assert.deepEqual([r.vehicleModelId, r.licensePlate, r.uvid, r.tsp?.tboxId, r.tsp?.hardware], ['X89', '沪A·D0007', 'UV-00000007', 'TBOX-000007', [{ item: '激光雷达', value: '有' }, { item: '座舱芯片', value: '8295' }]]);
+    assert.deepEqual([r.vehicleModelId, r.licensePlate, r.uvid, r.tsp?.tboxId, r.tsp?.hardware], ['X89', '沪A·D0007', 'UV-8900000007', 'TBOX-8900000007', [{ item: '激光雷达', value: '有' }, { item: '座舱芯片', value: '8295' }]]);
     assert.equal(r.integrationVersion, null, 'unknown until the car reports');
     w.fails('VIN_TAKEN', () => w.as('resource', (c) => fleet.registerPhysical(c, { id: 'VEH-008', vin: 'LSDEM0X8900000007', env: 'development', pool: 'ADC' })));
     w.fails('TSP_VIN_EXISTS', () => w.sys((c) => addTspVehicle(c, { vin: 'LSDEM0X8900000007', vehicleModelId: 'X89' })));
@@ -103,7 +103,7 @@ describe('cars come from TSP', () => {
     for (const x of Object.values(saved.softwareVersions) as Record<string, unknown>[]) for (const k of ['dclPart', 'workingName', 'linkedTo']) delete x[k];
     const s = migrate(saved)!;
     assert.equal(s.tsp.vehicles.length, Object.values(s.resources).filter((r) => r.type === 'PHYSICAL').length);
-    assert.deepEqual(s.resources['VEH-201']!.tsp, { tboxId: 'TBOX-000201', hardware: [], expectedVersion: '1.0', syncedAt: s.resources['VEH-201']!.updatedAt });
+    assert.deepEqual(s.resources['VEH-201']!.tsp, { tboxId: 'TBOX-8900000201', hardware: [], expectedVersion: '1.0', syncedAt: s.resources['VEH-201']!.updatedAt });
     assert.deepEqual([s.devices['VEH-201']!.software, s.devices['VEH-002']!.software, s.devices['SIM-021']!.software], ['1.0', null, null]);
     assert.equal(s.tspSync.revision, s.tsp.revision);
   });

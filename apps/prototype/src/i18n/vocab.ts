@@ -991,6 +991,7 @@ Object.assign(ERROR_LABELS, {
   TSP_REQUIRED: b('TSP 里没有这辆车：实车只能从 TSP 登记', 'TSP has no such car: vehicles are registered from TSP'),
   TSP_MODEL_MISMATCH: b('TSP 记录的车型与所选车型不同', 'TSP holds the car as another vehicle model'),
   TSP_VIN_EXISTS: b('TSP 已有这辆车', 'TSP already has this car'),
+  TSP_ID_TAKEN: b('TSP 已有使用这个 UVID 或 T-Box 的车', 'TSP already has a car with this UVID or T-Box'),
   INVALID_HARDWARE: b('硬件配置的每一项都要有名称和值，且不重复', 'Each hardware item has a name and a value, once'),
   UNKNOWN_CONTROLLER: b('该版本的 PLM BOM 中没有这个域控', 'The version’s PLM BOM has no such controller'),
   INVALID_BOM: b('BOM 的每个模块都要有名称和版本，且不重复', 'Each module of the BOM has a name and a version, once'),

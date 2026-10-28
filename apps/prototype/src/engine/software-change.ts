@@ -57,7 +57,8 @@ export function noteReportedSoftware(ctx: Ctx, resourceId: string, reported: str
   // version PLM has not published.
   if (ctx.s.softwareVersions[softwareKey(r.vehicleModelId, reported)] && !(r.env === 'production' && isPlanned(ctx.s, r.vehicleModelId, reported))) {
     const previous = r.integrationVersion;
-    const changeId = recordSoftwareChange(ctx, r, reported, 'CLIENT_REPORT');
+    // After a partial or unknown stretch, the change starts from the last version the vehicle ran whole.
+    const changeId = recordSoftwareChange(ctx, r, reported, 'CLIENT_REPORT', previous ?? lastWholeVersion(ctx.s, r));
     const request = Object.values(ctx.s.vehicleSoftwareRequests).find(
       (q) => q.resourceId === r.id && q.status === 'APPLIED' && q.toVersion === reported && !Object.values(ctx.s.softwareChanges).some((c) => c.requestId === q.id),
     );
@@ -94,6 +95,16 @@ export function noteReportedSoftware(ctx: Ctx, resourceId: string, reported: str
     acknowledgedAt: null,
     requestId: null,
   };
+}
+
+/** The last whole-vehicle version a vehicle's earlier signed reports said it ran, when the platform knows it. */
+function lastWholeVersion(s: State, r: Resource): string | null {
+  for (const x of s.clientReports[r.id]?.history ?? []) {
+    const p = x.payload;
+    if (x.result !== 'ACCEPTED' || !p.vehicleIntegrationVersion || p.domains.some((d) => d.status === 'FAIL')) continue;
+    if (s.softwareVersions[softwareKey(r.vehicleModelId, p.vehicleIntegrationVersion)]) return p.vehicleIntegrationVersion;
+  }
+  return null;
 }
 
 export type ChangeOutcome = 'NONE' | 'FIX' | 'REPUBLISH' | 'NEW_FEATURE' | 'NO_BASE' | 'UNKNOWN_SOFTWARE' | 'CANNOT_CHECK' | 'PRODUCTION' | 'NOT_PUBLISHED' | 'UNRECORDED';

@@ -311,18 +311,18 @@ function dropStaleRolloutTargets(ctx: Ctx, r: Draft<Resource>): void {
  * so the vehicle's team is told and its configuration checked. A pending report of a version the
  * platform did not know yet is resolved once that version is confirmed.
  */
-export function recordSoftwareChange(ctx: Ctx, r: Resource, toVersion: string | null, source: SoftwareChange['source']): string | null {
+export function recordSoftwareChange(ctx: Ctx, r: Resource, toVersion: string | null, source: SoftwareChange['source'], fromVersion: string | null = r.integrationVersion): string | null {
   for (const c of Object.values(ctx.s.softwareChanges)) {
     if (c.resourceId === r.id && c.status === 'UNRECORDED' && c.toVersion === toVersion) c.status = 'RESOLVED';
   }
   // Learning a vehicle's first known version is no change; neither is the same version again.
-  if (r.type !== 'PHYSICAL' || !toVersion || !r.integrationVersion || toVersion === r.integrationVersion) return null;
+  if (r.type !== 'PHYSICAL' || !toVersion || !fromVersion || toVersion === fromVersion) return null;
   const id = newId('sc');
   ctx.s.softwareChanges[id] = {
     id,
     seq: ctx.seq(),
     resourceId: r.id,
-    fromVersion: r.integrationVersion,
+    fromVersion,
     toVersion,
     source,
     status: 'APPLIED',

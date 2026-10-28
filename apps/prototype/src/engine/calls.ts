@@ -15,7 +15,7 @@ import type { Ctx } from './engine.ts';
 import { softwareKey } from './fleet.ts';
 import { closeCandidate, collectibleSubsystems, defaultScope, isCollectible, isMergeWorkspace, previewMerge, verifiedSources } from './integration.ts';
 import { getWorkspace } from './org.ts';
-import { compareVersions } from './release.ts';
+import { compareVersions, setInEffect } from './release.ts';
 import { partVersion } from './types.ts';
 import type { Candidate, CallModule, CallModuleEvent, DclModule, DclPart, IntegrationCall, MergePlan, SoftwareVersion, State } from './types.ts';
 
@@ -659,9 +659,11 @@ export function reportedClientVersion(s: State, vehicleModelId: string): string 
 
 /**
  * DCL merges a released working name's exported configuration into the DCL software and delivers it
- * to PLM as one part (DCL 件), before PLM publishes the version. The part's version names the client
- * and the set; its digest is how the platform recognises the set when PLM publishes. Delivering
- * again with another client version replaces the part, until PLM has published.
+ * to PLM as one part (DCL 件), before PLM publishes the version. The part carries the set in effect
+ * for the working name now (an emergency stop since the release is in it). Its version names the
+ * client and the set; its digest is how the platform recognises the set when PLM publishes.
+ * Delivering again with another client version or another set replaces the part, until PLM has
+ * published.
  */
 export function deliverDclPart(ctx: Ctx, input: { vehicleModelId: string; version: string; clientVersion: string }): DclPart {
   const sv = ctx.s.softwareVersions[softwareKey(input.vehicleModelId, input.version)];
@@ -673,12 +675,18 @@ export function deliverDclPart(ctx: Ctx, input: { vehicleModelId: string; versio
   if (!sv.dclModule) throw rule('NO_MODULE_TO_DELIVER', `the call for ${input.vehicleModelId} ${input.version} has not been released; there is no configuration to deliver yet`);
   const clientVersion = input.clientVersion.trim();
   if (!CLIENT_VERSION.test(clientVersion)) throw rule('INVALID_CLIENT_VERSION', 'a DCL client version looks like 2.3.0');
-  if (sv.dclPart?.clientVersion === clientVersion) throw conflict('PART_DELIVERED', `the part ${partVersion(sv.dclPart)} is already delivered`);
   const draft = ctx.s.softwareVersions[softwareKey(input.vehicleModelId, input.version)]!;
+  const current = setInEffect(ctx.s, input.vehicleModelId, input.version);
+  if (current && current.id !== sv.dclModule.releaseId) {
+    // A set took the working name over since the release (an emergency stop): export it instead.
+    draft.dclModule = moduleOf(ctx, current.id);
+    draft.moduleLog.push({ ...draft.dclModule });
+  }
+  if (sv.dclPart?.clientVersion === clientVersion && sv.dclPart.digest === draft.dclModule!.digest) throw conflict('PART_DELIVERED', `the part ${partVersion(sv.dclPart)} is already delivered`);
   draft.dclPart = {
     clientVersion,
-    setVersion: ctx.s.releases[sv.dclModule.releaseId]?.dclVersion ?? '',
-    digest: sv.dclModule.digest,
+    setVersion: ctx.s.releases[draft.dclModule!.releaseId]?.dclVersion ?? '',
+    digest: draft.dclModule!.digest,
     deliveredBy: ctx.user().username,
     deliveredAt: ctx.now,
   };
