@@ -840,7 +840,7 @@ export const SCRIPTS: Script[] = [
           "在账号入口输入 resource，点击进入；核对角色“车辆资源”。原型不需密码，仍需匹配授权。",
           "核对工作区：x89-project；组/范围：范围 Vehicle；环境：production。前序未创建或未授权时记录 BLOCKED，不自动补权。",
           "记录单车各域控实际成功或失败状态，不填写期望版本冒充实际版本。",
-          "由外部OTA完成或回滚后取得可信上报，确认软件状态与DCL兼容，再恢复量产资格。",
+          "外部 OTA 完成或回滚后由车端重新上报，确认软件状态与 DCL 兼容，再恢复量产资格。",
           "检查完成条件：研发可按明确兼容范围继续；量产在状态恢复一致前不放行。",
           "保存 runId、账号/角色、工作区/环境、对象版本、操作结果及证据；可信资源 → REL/E03或业务研发。失败时：不能把期望软件版本填写成实际版本。"
         ],
@@ -1154,7 +1154,7 @@ export const SCRIPTS: Script[] = [
         "page": "可信软件发布记录 → 候选发布",
         "pre": "E11完成；软件团队已发布适用整车版本，或本地Mock演练明确声明软件记录是fixture。",
         "steps": [
-          "resource在x89-integration登记软件整车版本1.0，车型X89，来源填写外部软件发布编号；演练可写“MOCK 外部软件发布记录”。这不自动给车刷软件。",
+          "PLM（模拟）发布整车版本 X89 1.0（不带 DCL 件），同步到平台；版本只从 PLM 来，平台没有手工登记入口。这不自动给车刷软件。",
           "release在x89-integration、Vehicle、testing打开已Verified候选，点击正式发布。",
           "填写DCL集成版本1.0.0，适用整车软件版本1.0。软件1.0不是DCL1.0.0，它们是独立对象，适用关系在此关联。",
           "检查处理集合确认、当前候选仿真和实车模型证据、基线未被其他发布替换等门禁，然后发布。",
@@ -1194,8 +1194,8 @@ export const SCRIPTS: Script[] = [
         "page": "资源详情、可信软件版本、工作区资源",
         "pre": "E12完成；在隔离本地环境。",
         "steps": [
-          "登记VEH-903、VEH-904：车型X89、production、Integration资源池，归入获授权x89-integration，分别填模拟VIN LSDEMOX89000000903 / LSDEMOX89000000904。",
-          "真实场景由车端/DIP/OTA上报actualIntegration=1.0及各域控状态。演练用授权API：node first-ota-manual/mock_receipt.mjs action resource 车辆资源 x89-integration production reportControllerVersions '[\"VEH-903\",{\"target\":\"1.0\",\"source\":\"MOCK DIP\",\"controllers\":[{\"name\":\"ADC\",\"version\":\"1.0\",\"status\":\"PASS\"},{\"name\":\"BMS\",\"version\":\"1.0\",\"status\":\"PASS\"}]}]'；对VEH-904重复。",
+          "从 TSP 登记 VEH-903、VEH-904：production、Integration 资源池，归入获授权 x89-integration。",
+          "TSP（模拟）收录 VEH-903、VEH-904（应为 1.0），resource 从 TSP 登记两辆量产车并登记设备密钥；车辆按 PLM BOM 运行 1.0，签名上报各域控状态，平台记为一致。",
           "检查两车不为PartialFailure，软件版本1.0确实与DCL适用关系匹配。没有回执前已生效配置仍为空或旧配置。",
           "本轮直接灰度使用暂不归车辆组的两车；如果已归组，必须从车辆组下发界面操作，不能同时创建直投任务。量产组需额外授权工作区管理员production，默认制动管理员没有此权限。",
           "首版可能没有上一份兼容正式DCL：预先定义暂停、恢复到受验证的出厂安全配置或停止采集方案；不能将内部Bootstrap视为已验证量产回滚包。"
@@ -1743,8 +1743,8 @@ export const SCRIPTS: Script[] = [
         "page": "车辆与车辆组 → 软件版本与镜像；发布与配置 OTA → 软件版本与适用性",
         "pre": "演示数据：策略集 1.0.0 适用于 X89 1.0，量产车 VEH-201、VEH-202 都运行它。",
         "steps": [
-          "resource 登记整车软件版本 X89 1.2，来源为整车 OTA 发布记录，软件清单“从上一版本复制”。",
-          "resource 在车辆台账把量产车 VEH-202 的实际软件确认为 1.2（整车 OTA 回执）。",
+          "PLM（模拟）发布 X89 1.2（不带 DCL 件），同步到平台；resource 为 1.2 补录软件清单（从上一版本复制）。",
+          "车辆模拟器把量产车 VEH-202 刷到 1.2，车端签名上报 1.2。",
           "release 打开“软件版本与适用性”：1.2 没有适用的策略集，VEH-202 被列为阻止；适用性确认单已自动开启，候选策略集为 1.0.0，逐条检查全部可运行。"
         ],
         "done": "新软件登记即产生待办；量产车没有适用策略集时被阻止，而不是回退到研发配置。",
@@ -1765,7 +1765,7 @@ export const SCRIPTS: Script[] = [
         "pre": "P01 完成。",
         "steps": [
           "dcl 登记仿真镜像 x89-1.2-sim（整车版本 1.2）；integration_admin 在 X89 集成测试创建测试环境仿真车 SIM-112。",
-          "resource 登记测试车 VEH-032 并确认软件 1.2；integration_admin 把它加入 X89 集成测试。",
+          "resource 从 TSP 登记测试车 VEH-032，车辆刷写 1.2 后上报；integration_admin 把它加入 X89 集成测试。",
           "integration_tester 在“适用性测试”先尝试下发到 X89 集成测试车组：车辆运行 1.0，被拒绝。",
           "改为直接下发 SIM-112 与 VEH-032，在模拟器回执；先仿真后实车登记 PASS，确认验证。"
         ],
@@ -1802,7 +1802,7 @@ export const SCRIPTS: Script[] = [
         "page": "车辆与车辆组 → 软件版本与镜像；发布与配置 OTA → 软件版本与适用性",
         "pre": "P03 完成。",
         "steps": [
-          "resource 登记 X89 1.3，软件清单复制后把信号 steering_angle_rate 改名为 steering_wheel_rate。",
+          "PLM（模拟）发布 X89 1.3；resource 补录软件清单，复制后把信号 steering_angle_rate 改名为 steering_wheel_rate。",
           "release 查看自动开启的确认单：chassis.steering.angle_jump 缺少信号 steering_angle_rate。",
           "确认适用不可用：该软件需要修改后的策略集，而不是带例外地确认。"
         ],
@@ -1847,7 +1847,7 @@ export const SCRIPTS: Script[] = [
         "pre": "P05 完成；制动研发车组已发布 brake_monitor。",
         "steps": [
           "workspace_manager 查看制动研发车组：SIM-021（软件 1.0）应运行显示“软件或策略集已变化，需重新下发”。",
-          "resource 把 VEH-001 的软件确认为 1.2；它的基线仍是策略集 1.0.0，应运行与已生效一致。",
+          "VEH-001 刷到 1.2 并上报；它的基线仍是策略集 1.0.0，应运行与已生效一致。",
           "brake_tester 重新下发 brake_monitor：两辆车基线不同，平台生成两次下发；回执后各自运行自己的组合。"
         ],
         "done": "每辆车运行“自身软件当前适用的策略集 + 本组提交”；平台不会自行推送，变化提示后由团队显式下发。",
@@ -1885,7 +1885,7 @@ export const SCRIPTS: Script[] = [
         "pre": "P07 完成；lane_drift 在 P05 基于策略集 1.0.0 提交。",
         "steps": [
           "steering_tester 下发 lane_drift 到转向研发车组：策略集 1.0.1 已改动 chassis.steering，下发被拒绝。",
-          "resource 把 VEH-003 的软件确认为 1.3：转向研发车组上它显示“没有适用基线，保持已生效配置”。",
+          "VEH-003 刷到 1.3 并上报：转向研发车组上它显示“没有适用基线，保持已生效配置”。",
           "workspace_manager 为转向研发车组指定显式基线策略集 1.0.0；steering_tester 再次下发 lane_drift，两辆车都以 1.0.0 为基线运行。"
         ],
         "done": "与新基线冲突时保持已生效配置并给出原因；显式基线让团队在未确认适用的软件上继续研发测试。",
@@ -2437,7 +2437,7 @@ export const SCRIPTS: Script[] = [
         "pre": "演示数据。",
         "steps": [
           "release 为 X89 1.1 开启适用性确认（策略集 1.0.0）。",
-          "integration_admin 停止 SIM-101，“运行镜像”切换到 x89-1.1-sim，模拟器“部署成功”后启动；resource 把 VEH-031 的软件确认为 1.1（DIP 上报）。",
+          "integration_admin 停止 SIM-101，“运行镜像”切换到 x89-1.1-sim，模拟器“部署成功”后启动；车辆模拟器把 VEH-031 刷到 1.1，车端上报。",
           "integration_tester 向 X89 集成测试车组下发适用性测试，回执后先仿真后实车登记 PASS，确认验证；release 确认适用。"
         ],
         "done": "策略集 1.0.0 同时适用 1.0 与 1.1，版本号不变。",
@@ -2474,7 +2474,7 @@ export const SCRIPTS: Script[] = [
         "pre": "VC02 完成。",
         "steps": [
           "把 VEH-001 刷写为 1.3 并上报：平台仍记录 1.1；resource 工作台出现“上报了未登记的软件版本 VEH-001 · 1.3”。",
-          "resource 登记 X89 1.3：软件清单从上一版本复制，把 ADC:/var/log 改为 ADC:/var/log/chassis；在车辆台账“确认软件版本”（已按上报预填 1.3、来源客户端上报）。",
+          "PLM（模拟）发布 X89 1.3，resource 补录软件清单：从上一版本复制，把 ADC:/var/log 改为 ADC:/var/log/chassis。同步后，VEH-001 之前的上报立即生效，记为 1.3。",
           "business 打开 VEH-001 的变化：“新软件没有适用的策略集”；文件“制动监测日志 · 来源缺失”；两条制动策略“有问题 · 文件有问题：制动监测日志”。"
         ],
         "done": "平台不认未登记的版本；登记后才更新车辆并检查。",
@@ -3823,7 +3823,7 @@ export const SCRIPTS: Script[] = [
         "steps": [
           "integration_admin 不能生成集成预览（要读并合并各组配置，是配置集成的事）。",
           "integrator 点“收齐，生成集成预览”，dcl 确认处理集合，integrator 送测：测试集成版本 X89 1.2-T1，标注“集成征集 X89 1.2 第 1 轮”。",
-          "dcl 登记规划版本 1.2 的仿真镜像 x89-1.2-sim；integration_admin 建测试仿真 SIM-112；resource 登记测试车 VEH-032 并确认为 1.2，加入 X89 集成测试。"
+          "dcl 登记工作名 1.2 的仿真镜像 x89-1.2-sim；integration_admin 建测试仿真 SIM-112；resource 从 TSP 登记测试车 VEH-032，车辆刷写 1.2 预发布软件后上报，加入 X89 集成测试。"
         ],
         "done": "第一轮测试集成版本冻结，测试车运行 1.2 的预发布软件。",
         "fail": "未收齐不能合并；送测只走现有的合并、DCL 确认和冻结门禁。"
@@ -4024,7 +4024,7 @@ export const SCRIPTS: Script[] = [
         "pre": "MM01 完成。",
         "steps": [
           "resource 登记 X90 1.0；dcl 登记 X90 的研发镜像（无整车版本）和 1.0 镜像。",
-          "x90_admin 在制动团队 X90 工作区用研发镜像建仿真 SIM-901；resource 登记实车 VEH-901（整车版本为空）并交给该工作区；x90_admin 建“X90 制动研发车组”，加入两辆车。",
+          "x90_admin 在制动团队 X90 工作区用研发镜像建仿真 SIM-901；resource 从 TSP 登记实车 VEH-901（整车版本为空，等车辆上报）并交给该工作区；x90_admin 建“X90 制动研发车组”，加入两辆车。",
           "用 X89 的镜像为 X90 工作区建仿真：被拒绝。"
         ],
         "done": "X90 1.0 与 X89 1.0 是两个版本；X90 首车的软件版本为空。",
@@ -4079,7 +4079,7 @@ export const SCRIPTS: Script[] = [
         "page": "配置集成 → 集成候选",
         "pre": "MM04 完成。",
         "steps": [
-          "x90_admin 在 X90 集成测试用 1.0 镜像建仿真 SIM-911；resource 登记测试实车 VEH-911 并确认为 X90 1.0，交给 X90 集成测试。",
+          "x90_admin 在 X90 集成测试用 1.0 镜像建仿真 SIM-911；resource 从 TSP 登记测试实车 VEH-911，车辆刷写 X90 1.0 后上报，交给 X90 集成测试。",
           "x90_integration_tester 把 X90-C1 下发到两辆车，回执后登记 PASS 并确认集成验证通过。"
         ],
         "done": "X90 的候选在 X90 1.0 上通过集成测试。",
@@ -4154,11 +4154,111 @@ export const SCRIPTS: Script[] = [
         "pre": "MM02 完成（支线）。",
         "steps": [
           "admin 建一个以 X89 团队工作区为来源的 X90 项目工作区：被拒绝。",
-          "resource 把 X90 车确认为 1.1（只有 X89 有）：被拒绝；x90_admin 把 X89 的 VEH-001 加入 X90 工作区：被拒绝。",
+          "X90 车上报 1.1（只有 X89 有这个版本）：平台不认，等 PLM 发布 X90 1.1；x90_admin 把 X89 的 VEH-001 加入 X90 工作区：被拒绝。",
           "x90_tester 为 X89 的 Feature 登记结果：无权。"
         ],
         "done": "来源、车辆、软件版本、镜像与测试都按车型隔离。",
         "fail": "越权与跨车型操作不改变任何记录。"
+      }
+    ]
+  },
+  {
+    "id": "plm-tsp",
+    "name": "外部系统 · PLM 与 TSP",
+    "start": "demo",
+    "scenes": [
+      {
+        "id": "EX01",
+        "title": "PLM 发布 X89 1.2，平台同步",
+        "actor": "PLM（模拟）；release / 孙立；business",
+        "accounts": [
+          "release",
+          "business"
+        ],
+        "workspace": "x89-project",
+        "page": "原型工具 → PLM（模拟）；发布与配置 OTA → 软件版本与策略集",
+        "pre": "演示数据：PLM 已发布 X89 1.0、1.1。",
+        "steps": [
+          "PLM（模拟）发布整车版本 X89 1.2，不带 DCL 件；BOM 默认取 1.1 的各模块版本。同步到平台。",
+          "平台记为 PLM 已发布的 1.2；没有策略集适用，平台自动开一张适用性确认待办。",
+          "business 不能补录 1.2 的软件清单；平台没有手工登记版本的入口。"
+        ],
+        "done": "整车版本只从 PLM 来，平台按同步结果开待办。",
+        "fail": "平台不自己造整车版本。"
+      },
+      {
+        "id": "EX02",
+        "title": "PLM 版本带了平台不认识的 DCL 件",
+        "actor": "PLM（模拟）；release / 孙立；dcl / 林书涵",
+        "accounts": [
+          "release",
+          "dcl"
+        ],
+        "workspace": "x89-project",
+        "page": "原型工具 → PLM（模拟）；通知中心",
+        "pre": "演示数据。",
+        "steps": [
+          "PLM（模拟）发布 X89 1.3，BOM 中的 DCL 件选“平台不认识的 DCL 件（模拟错误）”。",
+          "平台同步后，1.3 没有出厂配置；配置发布和 DCL 都收到“DCL 件无法识别”的提醒。"
+        ],
+        "done": "平台只按配置摘要认 DCL 件，认不出来就提醒人核对。",
+        "fail": "不认识的件不会被当成任何策略集。"
+      },
+      {
+        "id": "EX03",
+        "title": "车辆资源从 TSP 登记车辆",
+        "actor": "resource / 刘子衡；车辆模拟器",
+        "accounts": [
+          "resource"
+        ],
+        "workspace": "x89-project",
+        "page": "车辆与车辆组 → 车辆台账；原型工具 → TSP（模拟）",
+        "pre": "演示数据：TSP 收录了还没登记的 LSDEM0X8900000007。",
+        "steps": [
+          "登记一辆 TSP 里没有的车：被拒绝。",
+          "从 TSP 选 LSDEM0X8900000007 登记为 VEH-007（研发、ADC）：车型 X89、车牌、T-Box 和硬件配置（激光雷达 有、座舱芯片 8295）都来自 TSP；整车版本为空。",
+          "登记设备密钥后，车辆模拟器把它刷到 1.1：车端签名上报，平台记为 1.1。"
+        ],
+        "done": "车辆信息来自 TSP，实际版本来自车端上报。",
+        "fail": "平台不手工录入车辆身份和版本。"
+      },
+      {
+        "id": "EX04",
+        "title": "TSP 应为版本与车端实为版本",
+        "actor": "TSP（模拟）；车辆模拟器；resource；release",
+        "accounts": [
+          "resource",
+          "release"
+        ],
+        "workspace": "x89-project",
+        "page": "原型工具 → TSP（模拟）；车辆台账；通知中心",
+        "pre": "演示数据。",
+        "steps": [
+          "TSP（模拟）把 VEH-201 的应为版本改为 1.1（整车 OTA 给它定了 1.1），同步：车辆台账显示“TSP 应为 1.1”，车端仍上报 1.0，平台按 1.0。",
+          "resource 收到“与 TSP 的应为版本不一致”；release 收到“将升到 1.1，它还没有适用的策略集”。",
+          "车辆模拟器刷写 1.1 时 BMS 失败：车端上报部分域控失败，平台不记整车版本。",
+          "重新刷写成功：车端上报 1.1，与 TSP 一致。"
+        ],
+        "done": "量产和研发车一样：TSP 给应为版本，车端给实为版本，以车端为准。",
+        "fail": "TSP 的应为版本永远不直接变成车辆的实际版本。"
+      },
+      {
+        "id": "N01",
+        "title": "反向：车型不符、重复登记、越权、PLM 版本号重复",
+        "actor": "resource；business；PLM（模拟）",
+        "accounts": [
+          "resource",
+          "business"
+        ],
+        "workspace": "x89-project",
+        "page": "车辆台账；PLM（模拟）",
+        "pre": "演示数据。",
+        "steps": [
+          "把 TSP 里的 X90 车按 X89 登记：被拒绝；重复登记 VEH-001 的 VIN：被拒绝；business 登记车辆：无权。",
+          "PLM 再发布一次 X89 1.1：被拒绝。"
+        ],
+        "done": "登记只认 TSP 的记录，版本号只由 PLM 给出一次。",
+        "fail": "被拒绝的操作不改变任何记录。"
       }
     ]
   }

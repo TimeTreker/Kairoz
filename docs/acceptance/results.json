@@ -1,8 +1,8 @@
 {
-  "runAt": "2026-10-28T02:21:48.781Z",
+  "runAt": "2026-10-28T02:40:41.250Z",
   "layer": "engine",
   "counts": {
-    "PASS": 226,
+    "PASS": 231,
     "FAIL": 0,
     "GAP": 0,
     "BLOCKED": 0,
@@ -429,7 +429,7 @@
           "id": "E05",
           "title": "登记无整车版本研发镜像和团队资源",
           "actor": "dcl → resource → workspace_manager",
-          "adaptation": "剧本中的模拟 VIN “LSDEMOX89000000901” 是 18 位且含字母 O，不是合法 VIN；平台拒绝后改用合法的 17 位模拟 VIN。车辆组设为“需审批”，对应 E06/E07 的团队测试申请流程。",
+          "adaptation": "剧本中的模拟 VIN “LSDEMOX89000000901” 是 18 位且含字母 O，不是合法 VIN；平台拒绝后改用合法的 17 位模拟 VIN，并先由模拟 TSP 收录这辆车。车辆组设为“需审批”，对应 E06/E07 的团队测试申请流程。",
           "status": "PASS",
           "detail": null,
           "notes": []
@@ -483,7 +483,7 @@
           "id": "E11",
           "title": "准备并验证独立集成资源",
           "actor": "resource → integration_tester",
-          "adaptation": "剧本 VIN “LSDEMOX89000000902” 同 E05 不合规，改用合法的 17 位模拟 VIN；车辆登记后还需由车辆资源“添加车辆”加入 x89-integration。",
+          "adaptation": "剧本 VIN “LSDEMOX89000000902” 同 E05 不合规，改用合法的 17 位模拟 VIN（先由模拟 TSP 收录）；车辆登记后还需由车辆资源“添加车辆”加入 x89-integration。",
           "status": "PASS",
           "detail": null,
           "notes": []
@@ -510,7 +510,7 @@
           "id": "E14",
           "title": "准备量产目标与首版恢复方案",
           "actor": "resource / 车辆资源",
-          "adaptation": "剧本 VIN “LSDEMOX8900000090x” 同 E05 不合规，改用合法模拟 VIN；域控版本上报（reportControllerVersions）在车辆台账“域控”中登记。",
+          "adaptation": "剧本 VIN “LSDEMOX8900000090x” 同 E05 不合规，改用合法模拟 VIN；剧本的域控版本上报（reportControllerVersions）由车辆模拟器刷写 1.0 后车端签名上报代替，平台不接受人工录入。",
           "status": "PASS",
           "detail": null,
           "notes": []
@@ -1974,6 +1974,57 @@
           "id": "N01",
           "title": "跨车型操作一律拒绝",
           "actor": "admin；resource；x90_admin；x90_tester",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        }
+      ]
+    },
+    {
+      "script": "plm-tsp",
+      "name": "外部系统 · PLM 与 TSP",
+      "rows": [
+        {
+          "id": "EX01",
+          "title": "PLM 发布 X89 1.2，平台同步",
+          "actor": "PLM（模拟）；release / 孙立；business",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "EX02",
+          "title": "PLM 版本带了平台不认识的 DCL 件",
+          "actor": "PLM（模拟）；release / 孙立；dcl / 林书涵",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "EX03",
+          "title": "车辆资源从 TSP 登记车辆",
+          "actor": "resource / 刘子衡；车辆模拟器",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "EX04",
+          "title": "TSP 应为版本与车端实为版本",
+          "actor": "TSP（模拟）；车辆模拟器；resource；release",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "N01",
+          "title": "反向：车型不符、重复登记、越权、PLM 版本号重复",
+          "actor": "resource；business；PLM（模拟）",
           "adaptation": null,
           "status": "PASS",
           "detail": null,

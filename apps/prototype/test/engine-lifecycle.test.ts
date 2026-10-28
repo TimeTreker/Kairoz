@@ -9,6 +9,7 @@ import { createAccount } from '../src/engine/identity.ts';
 import * as loans from '../src/engine/loans.ts';
 import { createGroup, createOrgUnit, createWorkspace, moveWorkspaceUnit, updateWorkspace, visibleWorkspaces } from '../src/engine/org.ts';
 import { demoState } from '../src/engine/seed.ts';
+import { tspCar } from '../acceptance/helpers.ts';
 
 const groupId = (w: World, name: string) => Object.values(w.s.vehicleGroups).find((g) => g.name === name)!.id;
 const issues = (e: { details?: unknown }) => (e.details as { issues: string[] }).issues;
@@ -110,7 +111,8 @@ describe('archiving and restoring', () => {
   test('a workspace whose vehicle groups still route vehicles is not archived; an archived one uses no vehicle', () => {
     const w = new World(demoState());
     labWorkspace(w);
-    w.as('resource', (c) => fleet.registerPhysical(c, { id: 'VEH-900', vin: 'LVX89000000000900', licensePlate: '沪A900', vehicleModelId: 'X89', env: 'testing', pool: 'Vehicle', displayName: 'V900' }));
+    tspCar(w.engine, 'LVX89000000000900', 'X89', { plate: '沪A900' });
+    w.as('resource', (c) => fleet.registerPhysical(c, { id: 'VEH-900', vin: 'LVX89000000000900', vehicleModelId: 'X89', env: 'testing', pool: 'Vehicle', displayName: 'V900' }));
     w.as('resource', (c) => fleet.addWorkspaceVehicle(c, 'x89-lab', 'VEH-900'));
     w.as('admin', (c) => createAccount(c, { username: 'lab_admin', displayName: '试验区管理员', grants: [{ role: 'WORKSPACE_ADMIN', workspaces: ['x89-lab'], groups: [], scopes: [], envs: ['development', 'testing'], dispatchOnly: false }] }));
     const vg = w.as('lab_admin', (c) => fleet.createVehicleGroup(c, { workspaceId: 'x89-lab', groupId: null, name: '试验车组', purpose: 'TEST', env: 'testing' }));

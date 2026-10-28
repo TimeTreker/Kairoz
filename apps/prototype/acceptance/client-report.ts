@@ -7,6 +7,7 @@ import { demoState } from '../src/engine/seed.ts';
 import { devicePublicKey, flushOutbox, provisionDevice, reportNow, restartClient, sendFault, setAgent, upgradeClient } from '../src/engine/simulator.ts';
 import type { State } from '../src/engine/types.ts';
 import type { SceneSpec } from './world.ts';
+import { tspCar } from './helpers.ts';
 
 export const start = (): State => demoState();
 
@@ -51,6 +52,7 @@ export const scenes: Record<string, SceneSpec> = {
   },
   R04: {
     run: (w) => {
+      tspCar(w.engine, 'LSDEMX89000000098', 'X89');
       w.as('resource', (c) => registerPhysical(c, { id: 'VEH-098', vin: 'LSDEMX89000000098', vehicleModelId: 'X89', env: 'development', pool: 'Chassis', displayName: '上报演练车 098' }));
       w.fails('DEVICE_NOT_REGISTERED', () => w.sys((c) => reportNow(c, 'VEH-098')));
       const key = w.sys((c) => {

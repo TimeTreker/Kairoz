@@ -717,7 +717,11 @@ function ProductionDistribution() {
           dataSource={rows}
           columns={[
             { title: L('整车软件版本', 'Software'), render: (_, r) => (r.version ? `${workspace.vehicleModelId} ${r.version}` : <Typography.Text type="warning">{L('未知或不一致', 'Unknown or inconsistent')}</Typography.Text>) },
-            { title: L('量产车', 'Vehicles'), dataIndex: 'vehicles' },
+            { title: L('量产车（车端上报）', 'Vehicles (reported)'), dataIndex: 'vehicles' },
+            {
+              title: <Tooltip title={L('TSP 记录应运行这个版本的量产车；与车端上报不同的，还没升级或升级失败。', 'Production vehicles TSP says should run the version; those that differ from their reports have not updated yet, or failed.')}>{L('应为（TSP）', 'Expected (TSP)')}</Tooltip>,
+              render: (_, r) => (r.version ? (r.expected !== r.vehicles ? <Typography.Text type="warning">{r.expected}</Typography.Text> : r.expected) : '—'),
+            },
             {
               title: L('正在运行', 'Running'),
               render: (_, r) => (

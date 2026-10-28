@@ -1,7 +1,7 @@
 // Shared setup for patch tests: the mainline moves to 1.1.0 for software 1.1, and a steering fix
 // started on 1.0.0 can be released as patch 1.0.1 for software 1.0.
 
-import { answerAll, verifyFeatureOn } from '../acceptance/helpers.ts';
+import { answerAll, carRuns, tspCar, verifyFeatureOn } from '../acceptance/helpers.ts';
 import type { World } from '../acceptance/world.ts';
 import * as config from '../src/engine/config.ts';
 import * as fleet from '../src/engine/fleet.ts';
@@ -20,8 +20,9 @@ export const ON_11 = { group: null, vehicles: ['SIM-111', 'VEH-033'] };
 /** Testing vehicles on software 1.1 in the integration workspace. */
 export function vehiclesOn11(w: World): void {
   w.as('integration_admin', (c) => fleet.createSimulation(c, { id: 'SIM-111', workspaceId: 'x89-integration', imageId: 'x89-1.1-sim', env: 'testing', pool: 'Vehicle', displayName: '整车 1.1 仿真' }));
+  tspCar(w.engine, 'LSDEMX89000000033', 'X89');
   w.as('resource', (c) => fleet.registerPhysical(c, { id: 'VEH-033', vin: 'LSDEMX89000000033', vehicleModelId: 'X89', env: 'testing', pool: 'Vehicle', displayName: '整车 1.1 测试车' }));
-  w.as('resource', (c) => fleet.confirmIntegration(c, 'VEH-033', { version: '1.1', source: 'DIP 上报' }));
+  carRuns(w.engine, 'VEH-033', '1.1');
   w.as('integration_admin', (c) => fleet.addWorkspaceVehicle(c, 'x89-integration', 'VEH-033'));
 }
 

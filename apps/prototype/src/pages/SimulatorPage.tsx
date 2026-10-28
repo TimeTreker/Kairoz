@@ -190,6 +190,7 @@ export function SimulatorPage() {
   const auto = useAutoRun();
   const [otaOf, setOtaOf] = useState<string | null>(null);
   const [otaVersion, setOtaVersion] = useState('');
+  const [otaFailed, setOtaFailed] = useState<string[]>([]);
 
   const system = <R,>(op: (c: Ctx) => R, ok?: string) => {
     try {
@@ -451,7 +452,7 @@ export function SimulatorPage() {
                           ],
                           onClick: ({ key }) => {
                             if (key === 'upgrade') system((c) => upgradeClient(c, r.id, next), L(`客户端已升级到 ${next}，下一次上报会带上新版本`, `Client upgraded to ${next}; the next report carries it`));
-                            else if (key === 'ota') (setOtaVersion(''), setOtaOf(r.id));
+                            else if (key === 'ota') (setOtaVersion(''), setOtaFailed([]), setOtaOf(r.id));
                             else fault(key as ReportFault);
                           },
                         }}
@@ -650,17 +651,35 @@ export function SimulatorPage() {
           okText={L('刷写', 'Flash')}
           onCancel={() => setOtaOf(null)}
           onOk={() => {
-            const done = system((c) => simulateSoftwareOta(c, otaOf!, otaVersion), L('车辆已运行新版本；下一次上报会带上它', 'The vehicle runs the new version; its next report carries it'));
+            const done = system((c) => simulateSoftwareOta(c, otaOf!, otaVersion, otaFailed), otaFailed.length ? L('部分域控升级失败；下一次上报会带上各域控状态', 'Some controllers failed; the next report carries each controller’s state') : L('车辆已运行新版本；下一次上报会带上它', 'The vehicle runs the new version; its next report carries it'));
             if (done !== undefined) setOtaOf(null);
           }}
         >
           <Typography.Paragraph type="secondary">
             {L(
-              '扮演一次外部整车软件 OTA：车辆实际运行的版本改变，平台只从车辆签名的上报中得知。可以是平台未登记的版本。',
-              'Plays an external vehicle software OTA: the version the vehicle actually runs changes, and the platform learns it only from the vehicle’s signed report. It may be a version the platform has not recorded.',
+              '扮演一次整车软件 OTA：各域控按该版本的 PLM BOM 刷写，TSP 把它记为这辆车的应为版本；车辆实际运行的版本只由车辆签名的上报告诉平台。可以是 PLM 未发布的版本（例如工作名的预发布软件）。',
+              'Plays a vehicle software OTA: each controller is flashed from the version’s PLM BOM and TSP records it as the version the car should run; only the vehicle’s signed report tells the platform what it runs. It may be a version PLM has not published (e.g. a working name’s pre-release build).',
             )}
           </Typography.Paragraph>
-          <Input value={otaVersion} onChange={(e) => setOtaVersion(e.target.value)} placeholder="1.1" />
+          <Space orientation="vertical" style={{ width: '100%' }}>
+            <Input value={otaVersion} onChange={(e) => setOtaVersion(e.target.value)} placeholder="1.1" aria-label={L('整车版本', 'Software version')} />
+            {(() => {
+              const model = otaOf ? state.resources[otaOf]?.vehicleModelId : undefined;
+              const modules = state.plm.versions.find((x) => x.vehicleModelId === model && x.version === otaVersion.trim())?.modules ?? [];
+              return modules.length ? (
+                <Select
+                  mode="multiple"
+                  allowClear
+                  style={{ width: '100%' }}
+                  value={otaFailed}
+                  onChange={setOtaFailed}
+                  placeholder={L('升级失败的域控（可选，模拟部分失败）', 'Controllers that fail (optional, a partial update)')}
+                  aria-label={L('升级失败的域控', 'Controllers that fail')}
+                  options={modules.map((m) => ({ value: m.name, label: `${m.name} → ${m.version}` }))}
+                />
+              ) : null;
+            })()}
+          </Space>
         </Modal>
       </Space>
     </div>

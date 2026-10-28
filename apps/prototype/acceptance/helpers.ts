@@ -7,7 +7,8 @@ import { membersOf, setSoftwareManifest } from '../src/engine/fleet.ts';
 import { registerDeviceKey } from '../src/engine/client-report.ts';
 import { publishPlmVersion, syncPlmIfChanged } from '../src/engine/plm.ts';
 import { devicePublicKey, provisionDevice, reportNow, sendReceipt, simulateSoftwareOta } from '../src/engine/simulator.ts';
-import type { PlmVersion } from '../src/engine/types.ts';
+import { addTspVehicle, syncTspIfChanged } from '../src/engine/tsp.ts';
+import type { HardwareItem, PlmVersion } from '../src/engine/types.ts';
 import * as v from '../src/engine/validation.ts';
 import type { World } from './world.ts';
 
@@ -24,16 +25,24 @@ export function plmPublish(e: Engine, vehicleModelId: string, version: string, o
 }
 
 /**
- * The vehicle is flashed with `version` (the simulator's software OTA) and says so in its next signed
- * report; vehicle resources register its device key first when it has none.
+ * The vehicle is flashed with `version` (the simulator's software OTA; `failed` controllers keep their
+ * software) and says so in its next signed report, and TSP's record follows; vehicle resources
+ * register its device key first when it has none.
  */
-export function carRuns(e: Engine, resourceId: string, version: string): void {
+export function carRuns(e: Engine, resourceId: string, version: string | null, failed: string[] = []): void {
   if (!e.getState().resources[resourceId]!.deviceKey) {
     const key = e.run(null, (c) => (provisionDevice(c, resourceId), devicePublicKey(c.s, resourceId)!));
     e.run('resource', (c) => registerDeviceKey(c, resourceId, key));
   }
-  e.run(null, (c) => simulateSoftwareOta(c, resourceId, version));
+  e.run(null, (c) => simulateSoftwareOta(c, resourceId, version, failed));
   e.run(null, (c) => reportNow(c, resourceId));
+  // TSP records the target as the version the car should run.
+  e.run(null, (c) => syncTspIfChanged(c));
+}
+
+/** TSP knows the car (simulated), so vehicle resources can register it. */
+export function tspCar(e: Engine, vin: string, vehicleModelId: string, o: { expectedVersion?: string | null; plate?: string; hardware?: HardwareItem[] } = {}): void {
+  e.run(null, (c) => addTspVehicle(c, { vin, vehicleModelId, licensePlate: o.plate ?? null, hardware: o.hardware ?? [], expectedVersion: o.expectedVersion ?? null }));
 }
 
 export const CONTROLS = {

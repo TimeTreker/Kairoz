@@ -16,7 +16,7 @@ import { sendReceipt } from '../src/engine/simulator.ts';
 import { commitSnapshot } from '../src/engine/snapshots.ts';
 import type { State } from '../src/engine/types.ts';
 import * as v from '../src/engine/validation.ts';
-import { answerAll, CONTROLS } from './helpers.ts';
+import { answerAll, carRuns, CONTROLS, tspCar } from './helpers.ts';
 import { sha, World } from './world.ts';
 import type { SceneSpec } from './world.ts';
 
@@ -60,6 +60,7 @@ export const cases: Record<string, SceneSpec> = {
   'T-N03': {
     run: (w) => {
       w.fails('VIN_TAKEN', () => w.as('resource', (c) => fleet.registerPhysical(c, { id: 'VEH-777', vin: 'LSDEM0X8900000001', vehicleModelId: 'X89', env: 'development', pool: 'Chassis' })));
+      tspCar(w.engine, 'LSDEMX89000000777', 'X89');
       w.fails('ID_TAKEN', () => w.as('resource', (c) => fleet.registerPhysical(c, { id: 'VEH-001', vin: 'LSDEMX89000000777', vehicleModelId: 'X89', env: 'development', pool: 'Chassis' })));
     },
   },
@@ -67,7 +68,7 @@ export const cases: Record<string, SceneSpec> = {
     run: (w) => {
       w.as('dcl', (c) => fleet.registerImage(c, { id: 'x90-dev', vehicleModelId: 'X90', integrationVersion: null, build: 'x90', digest: sha('x90'), simulator: 'SimOne 3' }));
       w.fails('IMAGE_MODEL_MISMATCH', () => w.as('workspace_manager', (c) => fleet.createSimulation(c, { id: 'SIM-90', workspaceId: 'team-brake', imageId: 'x90-dev', env: 'development', pool: 'Chassis' })));
-      w.fails('SIMULATION_SOFTWARE_FROM_IMAGE', () => w.as('resource', (c) => fleet.confirmIntegration(c, 'SIM-021', { version: '1.1', source: '伪造' })));
+      w.fails('SIMULATION_SOFTWARE_FROM_IMAGE', () => carRuns(w.engine, 'SIM-021', '1.1'));
     },
   },
   'T-N05': {
@@ -184,7 +185,7 @@ export const cases: Record<string, SceneSpec> = {
       const cand = w.as('integrator', (c) => integ.freezeCandidate(c, plan, { label: 'X89-C2' }));
       w.fails('DISPATCH_BLOCKED', () => w.as('integration_tester', (c) => v.dispatchCandidate(c, cand, { vehicleGroupIds: [group(w, '制动研发车组')] })));
       w.fails('DISPATCH_BLOCKED', () => w.as('integration_tester', (c) => v.dispatchCandidate(c, cand, { vehicleGroupIds: [group(w, 'X89 量产车组')] })));
-      w.as('resource', (c) => fleet.confirmIntegration(c, 'VEH-202', { version: '1.1', source: 'DIP' }));
+      carRuns(w.engine, 'VEH-202', '1.1');
       const r100 = rel.releasesOf(w.s, 'X89')[0]!.id;
       w.fails('OTA_BLOCKED', () => w.as('release', (c) => ota.createOta(c, { releaseId: r100, vehicleGroupIds: [group(w, 'X89 量产车组')], firstWave: 'ALL' })));
     },
@@ -260,7 +261,7 @@ export const cases: Record<string, SceneSpec> = {
   },
   'T-N22': {
     run: (w) => {
-      w.as('resource', (c) => fleet.reportControllers(c, 'VEH-202', { target: '1.0', source: 'DIP', controllers: [{ name: 'ADC', version: '1.0', status: 'PASS' }, { name: 'BMS', version: '1.1', status: 'FAIL' }] }));
+      carRuns(w.engine, 'VEH-202', '1.0', ['BMS']);
       w.eq([w.s.resources['VEH-202']!.softwareStatus, w.s.resources['VEH-202']!.integrationVersion], ['PARTIAL_FAILURE', null], 'the real controller state is recorded; no whole-vehicle success');
       const { release } = nextRelease(w, ['VEH-201']);
       const err = w.fails('OTA_BLOCKED', () => w.as('release', (c) => ota.createOta(c, { releaseId: release, vehicleGroupIds: [group(w, 'X89 量产车组')], firstWave: 'ALL' })));

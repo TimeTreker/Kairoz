@@ -42,6 +42,8 @@ export const NOTIFICATION_CATEGORY: Record<NotificationKind, string> = {
   PRODUCTION_BLOCKED: 'RELEASE',
   DCL_PART_TO_DELIVER: 'RELEASE',
   PLM_PART_UNKNOWN: 'RELEASE',
+  EXPECTED_WITHOUT_SET: 'RELEASE',
+  TSP_MISMATCH: 'VEHICLE',
   UNRECORDED_SOFTWARE: 'VEHICLE',
   GROUP_MISMATCH: 'VEHICLE',
   SOFTWARE_UPDATE: 'VEHICLE',
@@ -162,6 +164,21 @@ export function useNotificationText() {
           title: L(`PLM 版本 ${s} 的 DCL 件无法识别`, `The DCL part of PLM version ${s} is unknown`),
           body: L(`件 ${d}：配置摘要不属于任何策略集。刷这个版本的车不会被认作运行某个策略集，请与 PLM 核对。`, `Part ${d}: its configuration digest matches no policy set. Vehicles flashed with this version are not taken as running a set; check with PLM.`),
         };
+      case 'EXPECTED_WITHOUT_SET':
+        return {
+          title: L(`${d} 辆量产车将升到 ${s}，它还没有适用的策略集`, `${d} production vehicle(s) are to move to ${s}, which no policy set applies to yet`),
+          body: L('TSP 记录的应为版本：车辆升级后会被阻止，提前开启适用性确认。', 'The version TSP says they should run: they will be blocked once updated; open an applicability check ahead.'),
+        };
+      case 'TSP_MISMATCH': {
+        const [expected, actual] = d.split(' · ');
+        return {
+          title: L(`${s} 与 TSP 的应为版本不一致`, `${s} differs from the version TSP expects`),
+          body:
+            actual === 'PARTIAL'
+              ? L(`TSP 应为 ${expected}，车端上报部分域控升级失败。`, `TSP expects ${expected}; the vehicle reports a partial update.`)
+              : L(`TSP 应为 ${expected}，车端上报 ${actual || '未知'}：车辆还没升级，或升级失败。以车端为准。`, `TSP expects ${expected}; the vehicle reports ${actual || 'unknown'}: not updated yet, or the update failed. The vehicle’s report counts.`),
+        };
+      }
       case 'UNRECORDED_SOFTWARE': {
         const [reported, linked] = d.split(' → ');
         return linked

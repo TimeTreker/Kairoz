@@ -3,6 +3,7 @@ import { describe, test } from 'node:test';
 import { Engine } from '../src/engine/engine.ts';
 import { landingWorkspace, markNotificationsRead, notificationsFor, unreadByWorkspace } from '../src/engine/notifications.ts';
 import { demoState } from '../src/engine/seed.ts';
+import { carRuns } from '../acceptance/helpers.ts';
 
 describe('where an account starts', () => {
   test('in the workspace with the most to do, else the one most grants name, else project before team before integration', () => {
@@ -29,7 +30,7 @@ describe('what a vehicle of unknown software is told', () => {
     const { answerConfigRequest } = await import('../src/engine/ota.ts');
     const fleet = await import('../src/engine/fleet.ts');
     const e = new Engine(demoState());
-    e.run('resource', (c) => fleet.confirmIntegration(c, 'VEH-001', { version: null, source: '刷写记录丢失' }));
+    carRuns(e, 'VEH-001', null);
     assert.equal(answerConfigRequest(e.getState(), 'VEH-001').reason, 'UNKNOWN_SOFTWARE');
   });
 });

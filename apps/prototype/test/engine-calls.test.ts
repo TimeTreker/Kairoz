@@ -12,7 +12,7 @@ import * as rel from '../src/engine/release.ts';
 import { demoState } from '../src/engine/seed.ts';
 import { advanceClockHours, sendReceipt } from '../src/engine/simulator.ts';
 import * as v from '../src/engine/validation.ts';
-import { carRuns, plmPublish } from '../acceptance/helpers.ts';
+import { carRuns, plmPublish, tspCar } from '../acceptance/helpers.ts';
 
 function fails(fn: () => unknown, code: string): DomainError {
   try {
@@ -48,8 +48,9 @@ function complete() {
 function testVehiclesOn12(e: Engine): string[] {
   e.run('dcl', (c) => fleet.registerImage(c, { id: 'x89-1.2-sim', vehicleModelId: 'X89', integrationVersion: '1.2', build: 'x89-1.2.0-rc1', digest: 'sha256:mock-x89-1-2-rc1', simulator: 'SimOne 3' }));
   e.run('integration_admin', (c) => fleet.createSimulation(c, { id: 'SIM-112', workspaceId: 'x89-integration', imageId: 'x89-1.2-sim', env: 'testing', pool: 'Vehicle' }));
+  tspCar(e, 'LSDEMX89000003200', 'X89');
   e.run('resource', (c) => fleet.registerPhysical(c, { id: 'VEH-032', vin: 'LSDEMX89000003200', vehicleModelId: 'X89', env: 'testing', pool: 'Vehicle' }));
-  e.run('resource', (c) => fleet.confirmIntegration(c, 'VEH-032', { version: '1.2', source: '1.2 RC1 刷写记录' }));
+  carRuns(e, 'VEH-032', '1.2');
   e.run('integration_admin', (c) => fleet.addWorkspaceVehicle(c, 'x89-integration', 'VEH-032'));
   return ['SIM-112', 'VEH-032'];
 }
@@ -120,7 +121,9 @@ describe('integration calls', () => {
   test('a failed round sends a module back and cancels its test integration version; the next round passes and is released for 1.2', () => {
     const { e, callId, call } = complete();
     const vehicles = testVehiclesOn12(e);
-    fails(() => e.run('resource', (c) => fleet.confirmIntegration(c, 'VEH-201', { version: '1.2', source: 'x' })), 'PLANNED_VERSION_IN_PRODUCTION');
+    // A production car reporting a working name waits: production runs only what PLM published.
+    carRuns(e, 'VEH-201', '1.2');
+    assert.equal(e.getState().resources['VEH-201']!.integrationVersion, '1.0');
     const r100 = rel.releasesOf(e.getState(), 'X89')[0]!.id;
     fails(() => e.run('release', (c) => ap.openApplicabilityCheck(c, { releaseId: r100, version: '1.2' })), 'VERSION_PLANNED');
 
@@ -160,7 +163,7 @@ describe('integration calls', () => {
     assert.equal(rel.setInEffect(s, 'X89', '1.2')!.id, set);
     assert.equal(rel.setInEffect(s, 'X89', '1.0')!.id, r100, '1.0 keeps its set');
     assert.deepEqual([sv.dclModule?.releaseId, sv.dclModule?.resolvedConfigId], [set, s.releases[set]!.resolvedConfigId]);
-    fails(() => e.run('resource', (c) => fleet.confirmIntegration(c, 'VEH-201', { version: '1.2', source: '整车 OTA 回执' })), 'PLANNED_VERSION_IN_PRODUCTION');
+    assert.equal(s.resources['VEH-201']!.integrationVersion, '1.0', 'still waiting for PLM');
 
     // DCL hands the part over to PLM; PLM publishes the software as 1.2.0 with it in the BOM, and the
     // platform links the working name by the part's configuration digest.
@@ -174,7 +177,6 @@ describe('integration calls', () => {
     assert.deepEqual([plm.status, plm.workingName, plm.callId, s.softwareVersions['X89::1.2']!.linkedTo], ['RECORDED', '1.2', callId, '1.2.0']);
     assert.equal(rel.setInEffect(s, 'X89', '1.2.0')!.id, set, 'the PLM version takes over the working name’s set');
     assert.equal(Object.values(s.applicabilityChecks).filter((c) => c.version === '1.2.0').length, 0, 'no check: the call tested this software');
-    fails(() => e.run('resource', (c) => fleet.confirmIntegration(c, 'VEH-031', { version: '1.2', source: '预发布' })), 'WORKING_NAME_LINKED');
 
     // A production vehicle flashed with 1.2.0 reports the bundled digest and runs the set at once,
     // without a cloud push (weak signal included).

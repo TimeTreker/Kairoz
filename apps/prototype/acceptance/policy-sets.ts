@@ -12,7 +12,7 @@ import * as rel from '../src/engine/release.ts';
 import { demoState } from '../src/engine/seed.ts';
 import type { State } from '../src/engine/types.ts';
 import * as v from '../src/engine/validation.ts';
-import { answerAll, simpleFeature, plmPublish } from './helpers.ts';
+import { answerAll, carRuns, plmPublish, simpleFeature, tspCar } from './helpers.ts';
 import type { SceneSpec, World } from './world.ts';
 
 export const start = (): State => demoState();
@@ -37,7 +37,7 @@ export const scenes: Record<string, SceneSpec> = {
       plmPublish(w.engine, 'X89', '1.2', { manifest });
       const check = checkFor(w, '1.2');
       w.eq([check.status, check.auto, w.s.releases[check.releaseId]!.dclVersion], ['OPEN', true, '1.0.0'], 'recording 1.2 opened a check for the newest set');
-      w.as('resource', (c) => fleet.confirmIntegration(c, 'VEH-202', { version: '1.2', source: '整车 OTA 回执 X89-1.2' }));
+      carRuns(w.engine, 'VEH-202', '1.2');
       w.eq(ap.blockedProductionVehicles(w.s, 'X89').map((r) => r.id), ['VEH-202'], 'VEH-202 runs software no set applies to');
       w.check(ap.compatibilityOf(w.s, check.releaseId, '1.2').every((c) => c.status === 'OK'), 'every policy of 1.0.0 fits 1.2');
       w.ref.check12 = check.id;
@@ -48,8 +48,9 @@ export const scenes: Record<string, SceneSpec> = {
     run: (w) => {
       w.as('dcl', (c) => fleet.registerImage(c, { id: 'x89-1.2-sim', vehicleModelId: 'X89', integrationVersion: '1.2', build: 'x89-1.2.0', digest: 'sha256:mock-x89-1-2', simulator: 'SimOne 3' }));
       w.as('integration_admin', (c) => fleet.createSimulation(c, { id: 'SIM-112', workspaceId: 'x89-integration', imageId: 'x89-1.2-sim', env: 'testing', pool: 'Vehicle', displayName: '整车 1.2 仿真' }));
+      tspCar(w.engine, 'LSDEMX89000000032', 'X89');
       w.as('resource', (c) => fleet.registerPhysical(c, { id: 'VEH-032', vin: 'LSDEMX89000000032', vehicleModelId: 'X89', env: 'testing', pool: 'Vehicle', displayName: '整车集成测试车 2' }));
-      w.as('resource', (c) => fleet.confirmIntegration(c, 'VEH-032', { version: '1.2', source: 'DIP 上报' }));
+      carRuns(w.engine, 'VEH-032', '1.2');
       w.as('integration_admin', (c) => fleet.addWorkspaceVehicle(c, 'x89-integration', 'VEH-032'));
       const check = w.ref.check12!;
       const wrong = w.fails('DISPATCH_BLOCKED', () => w.as('integration_tester', (c) => ap.dispatchApplicability(c, check, { vehicleGroupIds: [group(w, 'X89 集成测试车组')] })));
@@ -119,7 +120,7 @@ export const scenes: Record<string, SceneSpec> = {
     needs: ['P05'],
     run: (w) => {
       w.eq(ota.answerConfigRequest(w.s, 'SIM-021').reason, 'REPUBLISH', 'SIM-021’s set changed: publish again');
-      w.as('resource', (c) => fleet.confirmIntegration(c, 'VEH-001', { version: '1.2', source: '刷写 1.2 回执' }));
+      carRuns(w.engine, 'VEH-001', '1.2');
       const veh = ota.answerConfigRequest(w.s, 'VEH-001');
       w.eq([veh.reason, veh.configId === w.s.resources['VEH-001']!.appliedConfigId], ['GROUP_TARGET', true], 'on 1.2 VEH-001 keeps base 1.0.0, as applied');
       const ds = dispatchBrake(w);
@@ -146,7 +147,7 @@ export const scenes: Record<string, SceneSpec> = {
       const head = w.s.features[lane]!.headCommitId!;
       const err = w.fails('DISPATCH_BLOCKED', () => w.as('steering_tester', (c) => v.dispatchFeature(c, lane, { commitId: head, vehicleGroupIds: [vg] })));
       w.check((err.details as { issues: string[] }).issues.some((i) => i.includes('policy set 1.0.1 changed chassis.steering after the Feature started')), 'the new base changed the Feature’s own group');
-      w.as('resource', (c) => fleet.confirmIntegration(c, 'VEH-003', { version: '1.3', source: '刷写 1.3 回执' }));
+      carRuns(w.engine, 'VEH-003', '1.3');
       w.eq(ota.answerConfigRequest(w.s, 'VEH-003').reason, 'NO_BASE', 'no set applies to 1.3 and the group names no base');
       w.denied('steering_tester', (c) => fleet.setGroupBase(c, vg, set(w, '1.0.0').id));
       w.as('workspace_manager', (c) => fleet.setGroupBase(c, vg, set(w, '1.0.0').id));

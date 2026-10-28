@@ -16,7 +16,7 @@ import { cleanState } from '../src/engine/seed.ts';
 import { sendReceipt } from '../src/engine/simulator.ts';
 import type { State } from '../src/engine/types.ts';
 import * as v from '../src/engine/validation.ts';
-import { answerAll, CONTROLS, recordPasses, verifyFeatureOn, plmPublish } from './helpers.ts';
+import { answerAll, carRuns, CONTROLS, plmPublish, recordPasses, tspCar, verifyFeatureOn } from './helpers.ts';
 import { World } from './world.ts';
 import type { SceneSpec } from './world.ts';
 
@@ -90,7 +90,8 @@ export const scenes: Record<string, SceneSpec> = {
       w.as('dcl', (c) => fleet.registerImage(c, { id: 'x89-dev-first', vehicleModelId: 'X89', integrationVersion: null, build: 'dev-first', digest: 'sha256:mock-dev-first', simulator: 'SimOne 3' }));
       w.as('resource', (c) => fleet.createSimulation(c, { id: 'SIM-901', workspaceId: 'team-brake', imageId: 'x89-dev-first', env: 'development', pool: 'Chassis' }));
       w.fails('INVALID_VIN', () => w.as('resource', (c) => fleet.registerPhysical(c, { id: 'VEH-901', vin: 'LSDEMOX89000000901', vehicleModelId: 'X89', env: 'development', pool: 'Chassis' })));
-      w.as('resource', (c) => fleet.registerPhysical(c, { id: 'VEH-901', vin: 'LSDEMX89000000901', licensePlate: '沪A·M0901', vehicleModelId: 'X89', env: 'development', pool: 'Chassis', displayName: 'Mock 实车 901' }));
+      tspCar(w.engine, 'LSDEMX89000000901', 'X89', { plate: '沪A·M0901' });
+      w.as('resource', (c) => fleet.registerPhysical(c, { id: 'VEH-901', vin: 'LSDEMX89000000901', vehicleModelId: 'X89', env: 'development', pool: 'Chassis', displayName: 'Mock 实车 901' }));
       w.as('resource', (c) => fleet.addWorkspaceVehicle(c, 'team-brake', 'VEH-901'));
       w.eq(fleet.workspaceVehicles(w.s, 'team-brake').map((r) => r.id), ['SIM-901', 'VEH-901'], 'both vehicles are in team-brake');
       w.ref.group = w.as('workspace_manager', (c) => fleet.createVehicleGroup(c, { workspaceId: 'team-brake', groupId: 'brake', name: '制动首版验证组', purpose: 'DEV', env: 'development', requiresApproval: true }));
@@ -169,6 +170,7 @@ export const scenes: Record<string, SceneSpec> = {
     needs: ['E10'],
     run: (w) => {
       w.as('resource', (c) => fleet.createSimulation(c, { id: 'SIM-902', workspaceId: 'x89-integration', imageId: 'x89-dev-first', env: 'testing', pool: 'Vehicle' }));
+      tspCar(w.engine, 'LSDEMX89000000902', 'X89');
       w.as('resource', (c) => fleet.registerPhysical(c, { id: 'VEH-902', vin: 'LSDEMX89000000902', vehicleModelId: 'X89', env: 'testing', pool: 'Vehicle' }));
       w.as('resource', (c) => fleet.addWorkspaceVehicle(c, 'x89-integration', 'VEH-902'));
       w.denied('brake_tester', (c) => v.recordCandidateTest(c, w.ref.candidate!, { resourceId: 'SIM-902', result: 'PASS', summary: 'x' }));
@@ -207,11 +209,10 @@ export const scenes: Record<string, SceneSpec> = {
         ['VEH-903', 'LSDEMX89000000903'],
         ['VEH-904', 'LSDEMX89000000904'],
       ] as const) {
+        tspCar(w.engine, vin, 'X89', { expectedVersion: '1.0' });
         w.as('resource', (c) => fleet.registerPhysical(c, { id, vin, vehicleModelId: 'X89', env: 'production', pool: 'Vehicle' }));
         w.as('resource', (c) => fleet.addWorkspaceVehicle(c, 'x89-integration', id));
-        w.as('resource', (c) =>
-          fleet.reportControllers(c, id, { target: '1.0', source: 'MOCK DIP', controllers: [{ name: 'ADC', version: '1.0', status: 'PASS' }, { name: 'BMS', version: '1.0', status: 'PASS' }] }),
-        );
+        carRuns(w.engine, id, '1.0');
         const r = w.s.resources[id]!;
         w.eq([r.softwareStatus, r.integrationVersion, r.appliedConfigId, w.s.groupMembers[id]], ['CONSISTENT', '1.0', null, undefined], `${id}: production, idle, consistent, not grouped`);
       }

@@ -1,5 +1,5 @@
-// Vehicle software changes (整车软件版本变化). A physical vehicle's signed report, a vehicle
-// resources confirmation or controller reports can change its whole-vehicle software. The team
+// Vehicle software changes (整车软件版本变化). Only a physical vehicle's own signed report changes
+// its whole-vehicle software (TSP says which version it should run, never which it runs). The team
 // whose vehicle group it serves is told, and what the group published is checked on two levels:
 // files (are their sources still provided; did a referenced file change in the new base) and the
 // policies that depend on them. A branch follows the policy set, not the software version, so a
@@ -14,19 +14,47 @@ import type { Actor, Ctx } from './engine.ts';
 import { afterSoftwareChange, isPlanned, recordSoftwareChange, softwareKey } from './fleet.ts';
 import { releaseDiff } from './release.ts';
 import { commitSnapshot, resolveFiles } from './snapshots.ts';
+import type { VersionItem } from '../domain/client-report.ts';
 import type { Resource, SoftwareChange, State, VehicleGroup } from './types.ts';
 import { baseTarget, vehicleBase } from './validation.ts';
 
 /**
  * What a vehicle's own report says it runs (system context, after the report was accepted). A
- * version the platform knows changes the vehicle's record; an unknown one waits for vehicle
- * resources to record it, and the record stays as it was.
+ * controller reporting a failure means a partial software update: the vehicle runs no whole-vehicle
+ * version. A version PLM published changes the vehicle's record; one PLM has not published waits
+ * (the record stays as it was) until PLM publishes it. A vehicle that does not know its software
+ * makes it unknown.
  */
-export function noteReportedSoftware(ctx: Ctx, resourceId: string, reported: string | null, reportedDigest: string | null = null): void {
+export function noteReportedSoftware(ctx: Ctx, resourceId: string, reported: string | null, reportedDigest: string | null = null, domains: VersionItem[] = []): void {
   const r = ctx.s.resources[resourceId] as Draft<Resource> | undefined;
-  if (!r || r.type !== 'PHYSICAL' || !reported || reported === r.integrationVersion) return;
-  // A production vehicle runs released software only: a planned version it reports waits, like an
-  // unrecorded one, until the version is released and vehicle resources confirm it.
+  if (!r || r.type !== 'PHYSICAL') return;
+  if (domains.some((d) => d.status === 'FAIL')) {
+    // Never write the expected version as the actual one: a partial update claims none.
+    const controllers = domains.map((d) => ({ name: d.id, version: d.version ?? '—', status: d.status === 'FAIL' ? ('FAIL' as const) : ('PASS' as const) }));
+    if (r.softwareStatus === 'PARTIAL_FAILURE' && JSON.stringify(r.controllers) === JSON.stringify(controllers)) return;
+    const previous = r.integrationVersion;
+    r.controllers = controllers;
+    r.softwareStatus = 'PARTIAL_FAILURE';
+    r.integrationVersion = null;
+    r.integrationSource = 'DCL client report (signed)';
+    r.updatedAt = ctx.now;
+    afterSoftwareChange(ctx, r, previous, null);
+    return;
+  }
+  if (!reported) {
+    if (r.integrationVersion === null && r.softwareStatus === 'UNKNOWN') return;
+    const previous = r.integrationVersion;
+    r.integrationVersion = null;
+    r.integrationSource = 'DCL client report (signed)';
+    r.softwareStatus = 'UNKNOWN';
+    r.controllers = [];
+    r.updatedAt = ctx.now;
+    afterSoftwareChange(ctx, r, previous, null);
+    return;
+  }
+  if (reported === r.integrationVersion && r.softwareStatus === 'CONSISTENT') return;
+  // A production vehicle runs PLM-published software only: a working name it reports waits, like a
+  // version PLM has not published.
   if (ctx.s.softwareVersions[softwareKey(r.vehicleModelId, reported)] && !(r.env === 'production' && isPlanned(ctx.s, r.vehicleModelId, reported))) {
     const previous = r.integrationVersion;
     const changeId = recordSoftwareChange(ctx, r, reported, 'CLIENT_REPORT');

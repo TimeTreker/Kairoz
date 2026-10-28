@@ -10,6 +10,7 @@ import * as rel from '../src/engine/release.ts';
 import { demoState } from '../src/engine/seed.ts';
 import { sendReceipt, setAgent, tick } from '../src/engine/simulator.ts';
 import * as v from '../src/engine/validation.ts';
+import { carRuns } from '../acceptance/helpers.ts';
 
 function fails(fn: () => unknown, code: string): DomainError {
   try {
@@ -196,7 +197,7 @@ describe('configuration OTA', () => {
     const older = fails(() => e.run('release', (c) => ota.createOta(c, { releaseId: r100, vehicleGroupIds: [production], firstWave: 'ALL' })), 'OTA_BLOCKED');
     assert.match((older.details as { issues: string[] }).issues[0]!, /resolves to the newer policy set 1.0.1/);
     // A partial software upgrade leaves the whole-vehicle version unknown: production targets block.
-    e.run('resource', (c) => fleet.confirmIntegration(c, 'VEH-202', { version: null, source: '域控 ADC 升级失败，版本不一致' }));
+    carRuns(e, 'VEH-202', null);
     const blocked = fails(() => e.run('release', (c) => ota.createOta(c, { releaseId: r101, vehicleGroupIds: [production], firstWave: 'ALL' })), 'OTA_BLOCKED');
     assert.deepEqual((blocked.details as { issues: string[] }).issues, ['VEH-202: the whole-vehicle software version is unknown']);
     const testGroup = Object.values(e.getState().vehicleGroups).find((g) => g.name === 'X89 集成测试车组')!.id;

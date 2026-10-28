@@ -13,7 +13,7 @@ import { mismatchesFor } from './delivery.ts';
 import type { Actor, Ctx } from './engine.ts';
 import { emergencyStopsOf } from './emergency.ts';
 import { carriesData } from './events.ts';
-import { isOverdue, softwareKey, workspaceVehicles } from './fleet.ts';
+import { isOverdue, managedResources, softwareKey, workspaceVehicles } from './fleet.ts';
 import { workspaceAccess } from './identity.ts';
 import { intakeQueue } from './intake.ts';
 import { isConfirmed, isMergeWorkspace, verifiedSources } from './integration.ts';
@@ -21,6 +21,8 @@ import { borrowedBy, lentBy, loansToAgree, loansToApprove, managedLoans } from '
 import { orphanedOrgObjects } from './org.ts';
 import { otaRollouts } from './ota.ts';
 import { workingNameState } from './plm-sync.ts';
+import { setInEffect } from './release.ts';
+import { tspMismatch } from './tsp-sync.ts';
 import { deploymentNumber, planNumber } from './labels.ts';
 import { referenceRequestsFor } from './references.ts';
 import { assessSoftwareChange, softwareChangesFor, unrecordedReports } from './software-change.ts';
@@ -52,6 +54,8 @@ export type NotificationKind =
   | 'PRODUCTION_BLOCKED'
   | 'DCL_PART_TO_DELIVER'
   | 'PLM_PART_UNKNOWN'
+  | 'EXPECTED_WITHOUT_SET'
+  | 'TSP_MISMATCH'
   | 'UNRECORDED_SOFTWARE'
   | 'GROUP_MISMATCH'
   | 'SOFTWARE_UPDATE'
@@ -347,12 +351,26 @@ export function notificationsFor(s: State, actor: Actor, workspaceId: string): N
       for (const r of blockedProductionVehicles(s, ws.vehicleModelId)) {
         add('CONFIG_RELEASE', 'PRODUCTION_BLOCKED', [r.id, r.integrationVersion], { severity: 'WARNING', subject: r.id, detail: r.integrationVersion, link: 'release/applicability', at: r.updatedAt });
       }
+      // Production cars TSP says will run a version no set applies to yet: they would be blocked on arrival.
+      const coming = new Map<string, number>();
+      for (const r of Object.values(s.resources)) {
+        const target = r.tsp?.expectedVersion;
+        if (r.vehicleModelId !== ws.vehicleModelId || r.env !== 'production' || r.status === 'RETIRED' || !target || target === r.integrationVersion) continue;
+        if (!setInEffect(s, r.vehicleModelId, target)) coming.set(target, (coming.get(target) ?? 0) + 1);
+      }
+      for (const [version, count] of coming) {
+        add('CONFIG_RELEASE', 'EXPECTED_WITHOUT_SET', [version, count], { severity: 'WARNING', subject: `${ws.vehicleModelId} ${version}`, detail: String(count), link: 'release/applicability', at: null });
+      }
       for (const v of unknownParts(s, ws.vehicleModelId)) {
         add('CONFIG_RELEASE', 'PLM_PART_UNKNOWN', [v.version, v.dclPart!.digest], { severity: 'WARNING', subject: `${v.vehicleModelId} ${v.version}`, detail: partVersion(v.dclPart!), link: 'release/applicability', at: v.createdAt });
       }
     }
   }
   if (has('VEHICLE_RESOURCE')) {
+    // TSP says the car should run another version than it reports: not updated yet, or the update failed.
+    for (const r of managedResources(s, actor).filter(tspMismatch)) {
+      add('VEHICLE_RESOURCE', 'TSP_MISMATCH', [r.id, r.tsp!.expectedVersion, r.integrationVersion, r.softwareStatus], { severity: 'INFO', subject: r.id, detail: `${r.tsp!.expectedVersion} · ${r.softwareStatus === 'PARTIAL_FAILURE' ? 'PARTIAL' : (r.integrationVersion ?? '')}`, link: 'fleet/registry', at: r.updatedAt });
+    }
     for (const c of unrecordedReports(s, actor)) {
       // A production vehicle reporting a working name waits for PLM; once PLM published it, the
       // vehicle runs a pre-release build of what is now another number.

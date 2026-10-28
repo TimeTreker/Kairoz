@@ -86,6 +86,7 @@ const VersionsPage = lazyPage(() => import('../pages/VersionsPage.tsx').then((m)
 const QueryPage = lazyPage(() => import('../pages/QueryPage.tsx').then((m) => m.QueryPage));
 const SimulatorPage = lazyPage(() => import('../pages/SimulatorPage.tsx').then((m) => m.SimulatorPage));
 const PlmPage = lazyPage(() => import('../pages/PlmPage.tsx').then((m) => m.PlmPage));
+const TspPage = lazyPage(() => import('../pages/TspPage.tsx').then((m) => m.TspPage));
 const OrgPage = lazyPage(() => import('../pages/OrgPage.tsx').then((m) => m.OrgPage));
 const AccountsPage = lazyPage(() => import('../pages/AccountsPage.tsx').then((m) => m.AccountsPage));
 const AuditPage = lazyPage(() => import('../pages/AuditPage.tsx').then((m) => m.AuditPage));
@@ -101,7 +102,7 @@ const AcceptancePage = lazyPage(() => import('../pages/AcceptancePage.tsx').then
 const PAGES: [string, { preload(): void }][] = [
   ['workbench', WorkbenchPage], ['features', FeaturesPage], ['features', FeatureDetailPage], ['data', DataCatalogPage], ['intake', IntakePage],
   ['processing', ProcessingPage], ['fleet', FleetPage], ['integration', IntegrationPage], ['release', ReleasePage], ['versions', VersionsPage],
-  ['query', QueryPage], ['simulator', SimulatorPage], ['plm', PlmPage], ['org', OrgPage], ['accounts', AccountsPage], ['audit', AuditPage], ['guide', GuidePage],
+  ['query', QueryPage], ['simulator', SimulatorPage], ['plm', PlmPage], ['tsp', TspPage], ['org', OrgPage], ['accounts', AccountsPage], ['audit', AuditPage], ['guide', GuidePage],
   ['notifications', NotificationsPage], ['acceptance', AcceptancePage],
 ];
 
@@ -214,6 +215,7 @@ export function Shell() {
       query: <QueryPage key={workspace?.id} tab={route[1]} />,
       simulator: <SimulatorPage />,
       plm: <PlmPage />,
+      tsp: <TspPage />,
       org: <OrgPage />,
       accounts: <AccountsPage />,
       audit: <AuditPage />,
@@ -287,7 +289,7 @@ export function Shell() {
           </div>
         </Layout.Header>
         <Layout.Content>
-          {workspace && !['org', 'accounts', 'audit', 'guide', 'simulator', 'plm', 'acceptance'].includes(page) && (
+          {workspace && !['org', 'accounts', 'audit', 'guide', 'simulator', 'plm', 'tsp', 'acceptance'].includes(page) && (
             <div style={{ padding: '12px 24px 0' }}>
               <Breadcrumb
                 items={[

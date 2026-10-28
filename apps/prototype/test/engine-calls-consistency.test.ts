@@ -13,6 +13,7 @@ import { demoState } from '../src/engine/seed.ts';
 import { sendReceipt } from '../src/engine/simulator.ts';
 import * as vs from '../src/engine/vehicle-software.ts';
 import * as v from '../src/engine/validation.ts';
+import { carRuns } from '../acceptance/helpers.ts';
 
 function fails(fn: () => unknown, code: string): DomainError {
   try {
@@ -152,7 +153,7 @@ describe('release history keeps every step', () => {
 
   test('a migrated schema 20 rollout keeps the software its vehicles ran when it was sent', () => {
     const e = new Engine(demoState());
-    e.run('resource', (c) => fleet.confirmIntegration(c, 'VEH-201', { version: '1.1', source: 'OTA' }));
+    carRuns(e, 'VEH-201', '1.1');
     const live = e.getState();
     const saved = JSON.parse(JSON.stringify(live));
     saved.schema = 20;

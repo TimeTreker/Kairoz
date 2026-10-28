@@ -20,7 +20,7 @@ import { advanceClockHours, sendReceipt } from '../src/engine/simulator.ts';
 import { partVersion } from '../src/engine/types.ts';
 import type { State } from '../src/engine/types.ts';
 import * as v from '../src/engine/validation.ts';
-import { carRuns, verifyFeatureOn } from './helpers.ts';
+import { carRuns, tspCar, verifyFeatureOn } from './helpers.ts';
 import type { SceneSpec, World } from './world.ts';
 
 export const start = (): State => demoState();
@@ -61,7 +61,6 @@ export const scenes: Record<string, SceneSpec> = {
         ['domain:CDC', 'DOMAIN', 'WAITING'],
       ], 'leaf groups and upper domains, all waiting');
       w.eq([w.s.softwareVersions['X89::1.2']!.status, w.s.softwareVersions['X89::1.2']!.callId], ['PLANNED', w.ref.call], 'the target is planned');
-      w.fails('PLANNED_VERSION_IN_PRODUCTION', () => w.as('resource', (c) => fleet.confirmIntegration(c, 'VEH-201', { version: '1.2', source: 'x' })));
       const r100 = rel.releasesOf(w.s, 'X89')[0]!.id;
       w.fails('VERSION_PLANNED', () => w.as('release', (c) => ap.openApplicabilityCheck(c, { releaseId: r100, version: '1.2' })));
       w.check(canOpenPage(w.actor('integration_admin').grants, 'versions', 'x89-project'), 'the integration admin opens Integration versions');
@@ -104,8 +103,9 @@ export const scenes: Record<string, SceneSpec> = {
       // Testing vehicles run pre-release 1.2 builds.
       w.as('dcl', (c) => fleet.registerImage(c, { id: 'x89-1.2-sim', vehicleModelId: 'X89', integrationVersion: '1.2', build: 'x89-1.2.0-rc1', digest: 'sha256:mock-x89-1-2-rc1', simulator: 'SimOne 3' }));
       w.as('integration_admin', (c) => fleet.createSimulation(c, { id: 'SIM-112', workspaceId: 'x89-integration', imageId: 'x89-1.2-sim', env: 'testing', pool: 'Vehicle' }));
+      tspCar(w.engine, 'LSDEMX89000003200', 'X89');
       w.as('resource', (c) => fleet.registerPhysical(c, { id: 'VEH-032', vin: 'LSDEMX89000003200', vehicleModelId: 'X89', env: 'testing', pool: 'Vehicle' }));
-      w.as('resource', (c) => fleet.confirmIntegration(c, 'VEH-032', { version: '1.2', source: '1.2 RC1 刷写记录' }));
+      carRuns(w.engine, 'VEH-032', '1.2');
       w.as('integration_admin', (c) => fleet.addWorkspaceVehicle(c, 'x89-integration', 'VEH-032'));
     },
   },
@@ -149,8 +149,6 @@ export const scenes: Record<string, SceneSpec> = {
       const sv = w.s.softwareVersions['X89::1.2']!;
       w.eq([sv.status, sv.dclModule?.releaseId, call(w).status, call(w).releaseId], ['PLANNED', set, 'RELEASED', set], 'working name still planned, set related, configuration exported');
       w.eq(w.s.releases[set]!.vehicleIntegrationVersions, ['1.2'], 'the set ↔ working name relation');
-      // Production runs only what PLM published.
-      w.fails('PLANNED_VERSION_IN_PRODUCTION', () => w.as('resource', (c) => fleet.confirmIntegration(c, 'VEH-201', { version: '1.2', source: '整车 OTA 回执' })));
       w.eq(rel.releaseFor(w.s, w.s.resources['VEH-202']!).release?.dclVersion, '1.0.0', 'VEH-202 on 1.0 keeps 1.0.0');
     },
   },

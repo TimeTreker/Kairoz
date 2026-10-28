@@ -16,6 +16,7 @@ import { confirmHold, isCollectionPaused } from './collection-hold.ts';
 import { syncIfChanged } from './company-directory.ts';
 import { pushPending } from './delivery.ts';
 import { syncPlmIfChanged } from './plm.ts';
+import { syncTspIfChanged, tspVehicle } from './tsp.ts';
 import { advanceEvent } from './events.ts';
 import { answerImageChange } from './sim-software.ts';
 import { acceptReceipt } from './validation.ts';
@@ -190,9 +191,10 @@ export function tick(ctx: Ctx): number {
     answered += 1;
   }
   for (const r of Object.values(ctx.s.resources)) reportIfDue(ctx, r);
-  // The company directory pushes its changes like a SCIM feed would; PLM its published versions.
+  // The company directory pushes its changes like a SCIM feed would; PLM its published versions; TSP its cars.
   answered += syncIfChanged(ctx);
   answered += syncPlmIfChanged(ctx);
+  answered += syncTspIfChanged(ctx);
   return answered;
 }
 
@@ -213,6 +215,7 @@ export function provisionDevice(ctx: Ctx, resourceId: string): Draft<DeviceState
   if (existing) return existing;
   if (!ctx.s.resources[resourceId]) throw notFound('vehicle', resourceId);
   const secret = `device-secret:${resourceId}:${newId('k')}`;
+  const r = ctx.s.resources[resourceId]!;
   ctx.s.devices[resourceId] = {
     keyId: `${resourceId}-k1`,
     secret,
@@ -221,7 +224,9 @@ export function provisionDevice(ctx: Ctx, resourceId: string): Draft<DeviceState
     bootId: newId('boot'),
     sequence: 0,
     clientVersion: DCL_CLIENT_VERSION,
-    software: null,
+    // A car leaves the factory on the version TSP holds for it (its record may also be unknown).
+    software: r.type === 'PHYSICAL' ? (tspVehicle(ctx.s, r.vin)?.expectedVersion ?? r.integrationVersion) : null,
+    controllers: [],
     config: null,
     unsent: [],
     outbox: [],
@@ -247,14 +252,14 @@ function observe(s: State, r: Resource, device: DeviceState): Omit<ClientReportP
   const held = device.unsent.at(-1);
   const sent = s.receipts.findLast((x) => x.resourceId === r.id);
   const last = held ? { deploymentId: held.deploymentId, attempt: held.attempt, error: null } : sent;
-  // After a simulated software OTA the car runs its own version, whatever the platform recorded.
-  const software = r.type === 'PHYSICAL' && device.software ? device.software : r.integrationVersion;
+  // A physical car runs its own software, whatever the platform recorded; a simulation its image's.
+  const software = r.type === 'PHYSICAL' ? device.software : r.integrationVersion;
   const domains: VersionItem[] =
     r.type === 'SIMULATION'
       ? [{ id: `image ${r.imageId ?? '—'}`, version: r.integrationVersion, status: r.instance ?? 'RUNNING' }]
-      : r.controllers.length && !device.software
-        ? r.controllers.map((c) => ({ id: c.name, version: c.version, status: c.status }))
-        : [{ id: 'VEHICLE', version: software, status: device.software ? 'CONSISTENT' : r.softwareStatus }];
+      : device.controllers.length
+        ? device.controllers.map((c) => ({ id: c.name, version: c.version, status: c.status }))
+        : [{ id: 'VEHICLE', version: software, status: software ? 'CONSISTENT' : 'UNKNOWN' }];
   return {
     schemaVersion: 1,
     resourceId: r.id,
@@ -373,23 +378,54 @@ export function restartClient(ctx: Ctx, resourceId: string): 'ACCEPTED' | 'REPLA
 
 /** Installs another DCL client version; the next report carries it. */
 /**
- * A whole-vehicle software OTA on a simulated physical vehicle: the car now runs `version`, and
- * says so in its next signed report. The platform learns it only from that report.
+ * The car is flashed with `version`: each controller takes its software from the version's PLM BOM.
+ * Controllers named in `failed` keep their software and report a failure, so the car runs no
+ * whole-vehicle version. The vehicle OTA program records the target in TSP as the version the car
+ * should run. A production car's package is PLM's version: its DCL part brings the DCL client and the
+ * bundled set (出厂配置), which the car runs at once and reports.
  */
-export function simulateSoftwareOta(ctx: Ctx, resourceId: string, version: string): string {
-  const r = ctx.s.resources[resourceId];
-  if (!r) throw notFound('vehicle', resourceId);
-  if (r.type !== 'PHYSICAL') throw rule('SIMULATION_SOFTWARE_FROM_IMAGE', 'a simulation’s software comes from its image');
-  const v = version.trim();
-  if (!/^[A-Za-z0-9._-]{1,40}$/.test(v)) throw rule('INVALID_VERSION', 'a software version is letters, digits, . _ - (up to 40)');
+function flash(ctx: Ctx, r: Resource, version: string, failed: string[]): void {
   const device = provisionDevice(ctx, r.id);
-  device.software = v;
-  // A production car's package is PLM's version: its DCL part brings the DCL client and the bundled
-  // set (出厂配置), which the car runs at once and reports.
-  const part = r.env === 'production' ? ctx.s.plm.versions.find((x) => x.vehicleModelId === r.vehicleModelId && x.version === v)?.dclPart : null;
+  const bom = (v: string | null) => (v ? ctx.s.plm.versions.find((x) => x.vehicleModelId === r.vehicleModelId && x.version === v)?.modules : undefined);
+  const modules = bom(version) ?? [];
+  const unknown = failed.filter((f) => !modules.some((m) => m.name === f));
+  if (unknown.length) throw rule('UNKNOWN_CONTROLLER', `${version} has no controller ${unknown.join(', ')} in its PLM BOM`);
+  const before = bom(device.software) ?? [];
+  device.software = version;
+  device.controllers = failed.length
+    ? modules.map((m) => (failed.includes(m.name) ? { name: m.name, version: before.find((b) => b.name === m.name)?.version ?? '—', status: 'FAIL' as const } : { name: m.name, version: m.version, status: 'PASS' as const }))
+    : modules.map((m) => ({ name: m.name, version: m.version, status: 'PASS' as const }));
+  const t = tspVehicle(ctx.s, r.vin);
+  if (t && t.expectedVersion !== version) {
+    t.expectedVersion = version;
+    ctx.s.tsp.revision += 1;
+  }
+  if (failed.length || r.env !== 'production') return;
+  const part = ctx.s.plm.versions.find((x) => x.vehicleModelId === r.vehicleModelId && x.version === version)?.dclPart;
   const config = part ? Object.values(ctx.s.resolvedConfigs).find((c) => c.digest === part.digest) : undefined;
   if (part) device.clientVersion = part.clientVersion;
   if (config) device.config = config.id;
+}
+
+/**
+ * A whole-vehicle software OTA on a simulated physical vehicle (an external one, or a partial one
+ * when some controllers fail): the car now runs `version` (no version: an interrupted flash, the car
+ * cannot tell), and says so in its next signed report. The platform learns it only from that report.
+ */
+export function simulateSoftwareOta(ctx: Ctx, resourceId: string, version: string | null, failed: string[] = []): string | null {
+  const r = ctx.s.resources[resourceId];
+  if (!r) throw notFound('vehicle', resourceId);
+  if (r.type !== 'PHYSICAL') throw rule('SIMULATION_SOFTWARE_FROM_IMAGE', 'a simulation’s software comes from its image');
+  if (!version?.trim()) {
+    // The flash was interrupted and the car cannot tell which version it runs.
+    const device = provisionDevice(ctx, r.id);
+    device.software = null;
+    device.controllers = [];
+    return null;
+  }
+  const v = version.trim();
+  if (!/^[A-Za-z0-9._-]{1,40}$/.test(v)) throw rule('INVALID_VERSION', 'a software version is letters, digits, . _ - (up to 40)');
+  flash(ctx, r, v, failed);
   return v;
 }
 
@@ -400,7 +436,7 @@ export function simulateSoftwareOta(ctx: Ctx, resourceId: string, version: strin
 export function completeVehicleSoftware(ctx: Ctx, requestId: string, result: 'APPLIED' | 'FAILED'): string {
   const q = answerVehicleSoftware(ctx, requestId, result);
   if (result === 'APPLIED') {
-    provisionDevice(ctx, q.resourceId).software = q.toVersion;
+    flash(ctx, ctx.s.resources[q.resourceId]!, q.toVersion, []);
     if (clientRunning(ctx.s.resources[q.resourceId]!)) restartClient(ctx, q.resourceId);
   }
   return q.status;

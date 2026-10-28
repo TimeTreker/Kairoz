@@ -4,7 +4,7 @@
 
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
-import { carRuns, simpleFeature, verifyFeatureOn } from '../acceptance/helpers.ts';
+import { carRuns, simpleFeature, tspCar, verifyFeatureOn } from '../acceptance/helpers.ts';
 import { World } from '../acceptance/world.ts';
 import * as calls from '../src/engine/calls.ts';
 import * as config from '../src/engine/config.ts';
@@ -69,8 +69,9 @@ function twoSets(w: World): string {
   w.as('cdc_integrator', (c) => calls.submitDomain(c, callId, 'CDC', {}));
   w.as('dcl', (c) => fleet.registerImage(c, { id: 'x89-1.2-sim', vehicleModelId: 'X89', integrationVersion: '1.2', build: 'x89-1.2.0-rc1', digest: 'sha256:mock-x89-1-2-rc1', simulator: 'SimOne 3' }));
   w.as('integration_admin', (c) => fleet.createSimulation(c, { id: 'SIM-112', workspaceId: 'x89-integration', imageId: 'x89-1.2-sim', env: 'testing', pool: 'Vehicle' }));
+  tspCar(w.engine, 'LSDEMX89000003200', 'X89');
   w.as('resource', (c) => fleet.registerPhysical(c, { id: 'VEH-032', vin: 'LSDEMX89000003200', vehicleModelId: 'X89', env: 'testing', pool: 'Vehicle' }));
-  w.as('resource', (c) => fleet.confirmIntegration(c, 'VEH-032', { version: '1.2', source: '1.2 预发布刷写记录' }));
+  carRuns(w.engine, 'VEH-032', '1.2');
   w.as('integration_admin', (c) => fleet.addWorkspaceVehicle(c, 'x89-integration', 'VEH-032'));
   const plan = w.as('integrator', (c) => calls.previewCall(c, callId));
   w.as('dcl', (c) => integ.confirmProcessing(c, plan, { note: '' }));
@@ -209,8 +210,9 @@ describe('vehicles released from a dispatch', () => {
     w.as('workspace_manager', (c) => fleet.removeGroupMember(c, group, 'VEH-001', '转测试环境'));
     assert.ok(!v.featureTestStatus(w.s, w.s.features[f.id]!).some((t) => t.resourceId === 'VEH-001'));
     // A replacement car joins and passes with the simulator.
+    tspCar(w.engine, 'LSDEMX89000000900', 'X89');
     w.as('resource', (c) => fleet.registerPhysical(c, { id: 'VEH-009', vin: 'LSDEMX89000000900', vehicleModelId: 'X89', env: 'development', pool: 'Chassis' }));
-    w.as('resource', (c) => fleet.confirmIntegration(c, 'VEH-009', { version: w.s.resources['VEH-001']!.integrationVersion!, source: 'DIP' }));
+    carRuns(w.engine, 'VEH-009', w.s.resources['VEH-001']!.integrationVersion!);
     w.as('workspace_manager', (c) => fleet.addWorkspaceVehicle(c, 'team-brake', 'VEH-009'));
     w.as('workspace_manager', (c) => fleet.addGroupMember(c, group, 'VEH-009', '替换 VEH-001'));
     w.sys((c) => sendReceipt(c, d!, 'SIM-021', 'APPLIED'));
@@ -226,8 +228,9 @@ describe('vehicles released from a dispatch', () => {
     const w = new World(demoState());
     const f = Object.values(w.s.features).find((x) => x.name === 'guided_brake')!;
     const g1 = vg(w, '制动研发车组');
+    tspCar(w.engine, 'LSDEMX89000000900', 'X89');
     w.as('resource', (c) => fleet.registerPhysical(c, { id: 'VEH-009', vin: 'LSDEMX89000000900', vehicleModelId: 'X89', env: 'development', pool: 'Chassis' }));
-    w.as('resource', (c) => fleet.confirmIntegration(c, 'VEH-009', { version: w.s.resources['VEH-001']!.integrationVersion!, source: 'DIP' }));
+    carRuns(w.engine, 'VEH-009', w.s.resources['VEH-001']!.integrationVersion!);
     w.as('workspace_manager', (c) => fleet.addWorkspaceVehicle(c, 'team-brake', 'VEH-009'));
     const g2 = w.as('workspace_manager', (c) => fleet.createVehicleGroup(c, { workspaceId: 'team-brake', groupId: 'brake', name: '制动第二车组', purpose: 'DEV', env: 'development' }));
     w.as('workspace_manager', (c) => fleet.addGroupMember(c, g2, 'VEH-009', '第二车组'));
@@ -275,11 +278,11 @@ describe('planned versions and sign-in', () => {
     }
   });
 
-  test('the release history names who confirmed a vehicle’s software', () => {
+  test('the release history tells that the vehicle itself reported its software', () => {
     const w = new World(demoState());
-    w.as('resource', (c) => fleet.confirmIntegration(c, 'VEH-201', { version: '1.1', source: '整车 OTA 回执' }));
+    carRuns(w.engine, 'VEH-201', '1.1');
     const arrived = w.engine.read('release', (s) => versionHistory(s, 'X89', '1.1')).find((e) => e.kind === 'VEHICLE_ARRIVED')!;
-    assert.equal(arrived.by, 'resource');
+    assert.deepEqual([arrived.by, arrived.resourceIds], [null, ['VEH-201']]);
   });
 
   test('a domain integrator starts in its integration workspace', () => {

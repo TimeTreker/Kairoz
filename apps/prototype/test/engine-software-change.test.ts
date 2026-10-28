@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import { produce } from 'immer';
-import { answerAll, plmPublish } from '../acceptance/helpers.ts';
+import { answerAll, carRuns, plmPublish } from '../acceptance/helpers.ts';
 import { World } from '../acceptance/world.ts';
 import * as config from '../src/engine/config.ts';
 import { decideEmergencyStop, requestEmergencyStop } from '../src/engine/emergency.ts';
@@ -43,7 +43,7 @@ const MANIFEST_13 = {
 };
 
 describe('vehicle software changes', () => {
-  test('a signed report of a known version changes the vehicle; an unknown one waits for vehicle resources', () => {
+  test('a signed report of a known version changes the vehicle; one PLM has not published waits for PLM', () => {
     const w = demoWith11();
     ota(w, 'VEH-001', '1.1');
     const c = latest(w, 'VEH-001');
@@ -52,10 +52,11 @@ describe('vehicle software changes', () => {
     const u = latest(w, 'VEH-001');
     assert.deepEqual([w.s.resources['VEH-001']!.integrationVersion, u.toVersion, u.status], ['1.1', '1.3', 'UNRECORDED']);
     assert.deepEqual(sc.unrecordedReports(w.s, w.actor('resource')).map((x) => x.id), [u.id]);
+    // Once PLM publishes 1.3, the vehicle's latest signed report counts without another report.
     plmPublish(w.engine, 'X89', '1.3', { manifest: MANIFEST_13 });
-    w.as('resource', (c) => fleet.confirmIntegration(c, 'VEH-001', { version: '1.3', source: '客户端上报' }));
     assert.equal(w.s.softwareChanges[u.id]!.status, 'RESOLVED');
-    assert.deepEqual([latest(w, 'VEH-001').fromVersion, latest(w, 'VEH-001').toVersion, latest(w, 'VEH-001').source], ['1.1', '1.3', 'CONFIRMED']);
+    assert.equal(w.s.resources['VEH-001']!.integrationVersion, '1.3');
+    assert.deepEqual([latest(w, 'VEH-001').fromVersion, latest(w, 'VEH-001').toVersion, latest(w, 'VEH-001').source], ['1.1', '1.3', 'CLIENT_REPORT']);
   });
 
   test('same set, everything runnable: confirm only; the earlier result still counts', () => {

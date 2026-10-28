@@ -7,6 +7,7 @@ import * as fleet from '../src/engine/fleet.ts';
 import { demoState } from '../src/engine/seed.ts';
 import { sendReceipt, setAgent, tick } from '../src/engine/simulator.ts';
 import * as v from '../src/engine/validation.ts';
+import { carRuns } from '../acceptance/helpers.ts';
 
 function fails(fn: () => unknown, code: string): DomainError {
   try {
@@ -134,13 +135,15 @@ describe('dispatch, receipts and tests', () => {
 });
 
 describe('vehicles and vehicle groups', () => {
-  test('a simulation’s software comes from its image; physical software is confirmed from a source', () => {
+  test('a simulation’s software comes from its image; a physical car’s from its own report', () => {
     const { e } = setup();
     const s = e.getState();
     assert.equal(s.resources['SIM-021']!.integrationVersion, '1.0');
-    assert.equal(s.resources['VEH-002']!.integrationVersion, null, 'unknown until confirmed');
-    fails(() => e.run('resource', (c) => fleet.confirmIntegration(c, 'SIM-021', { version: '1.1', source: 'x' })), 'SIMULATION_SOFTWARE_FROM_IMAGE');
-    fails(() => e.run('resource', (c) => fleet.confirmIntegration(c, 'VEH-002', { version: '9.9', source: 'x' })), 'UNKNOWN_SOFTWARE_VERSION');
+    assert.equal(s.resources['VEH-002']!.integrationVersion, null, 'unknown until the car reports a version');
+    fails(() => carRuns(e, 'SIM-021', '1.1'), 'SIMULATION_SOFTWARE_FROM_IMAGE');
+    carRuns(e, 'VEH-002', '9.9');
+    assert.equal(e.getState().resources['VEH-002']!.integrationVersion, null, 'a version PLM never published waits');
+    assert.ok(Object.values(e.getState().softwareChanges).some((c) => c.resourceId === 'VEH-002' && c.toVersion === '9.9' && c.status === 'UNRECORDED'));
   });
 
   test('one routing group per vehicle; membership changes need idle vehicles of the right environment', () => {

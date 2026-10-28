@@ -9,7 +9,7 @@ import * as rel from '../src/engine/release.ts';
 import { demoState } from '../src/engine/seed.ts';
 import { sendReceipt } from '../src/engine/simulator.ts';
 import * as v from '../src/engine/validation.ts';
-import { plmPublish } from '../acceptance/helpers.ts';
+import { carRuns, plmPublish, tspCar } from '../acceptance/helpers.ts';
 
 function fails(fn: () => unknown, code: string): DomainError {
   try {
@@ -39,8 +39,9 @@ function testVehiclesOn(e: Engine, version: string, n: number): string[] {
   const sim = `SIM-1${n}`;
   const veh = `VEH-0${n}`;
   e.run('integration_admin', (c) => fleet.createSimulation(c, { id: sim, workspaceId: 'x89-integration', imageId: image, env: 'testing', pool: 'Vehicle' }));
+  tspCar(e, `LSDEMX89000000${n}0`.slice(0, 17), 'X89');
   e.run('resource', (c) => fleet.registerPhysical(c, { id: veh, vin: `LSDEMX89000000${n}0`.slice(0, 17), vehicleModelId: 'X89', env: 'testing', pool: 'Vehicle' }));
-  e.run('resource', (c) => fleet.confirmIntegration(c, veh, { version, source: 'DIP 上报' }));
+  carRuns(e, veh, version);
   e.run('integration_admin', (c) => fleet.addWorkspaceVehicle(c, 'x89-integration', veh));
   return [sim, veh];
 }
@@ -84,7 +85,7 @@ describe('policy sets and software versions', () => {
   test('confirming appends a record; the set keeps its content and version; blocked production vehicles resolve', () => {
     const e = new Engine(demoState());
     record(e, '1.2', MANIFEST_12);
-    e.run('resource', (c) => fleet.confirmIntegration(c, 'VEH-202', { version: '1.2', source: '整车 OTA 回执' }));
+    carRuns(e, 'VEH-202', '1.2');
     let s = e.getState();
     const release = rel.releasesOf(s, 'X89')[0]!;
     assert.deepEqual(ap.blockedProductionVehicles(s, 'X89').map((r) => r.id), ['VEH-202']);
@@ -144,7 +145,7 @@ describe('policy sets and software versions', () => {
     record(e, '1.2', MANIFEST_12);
     const [check] = checksFor(e, '1.2');
     // VEH-031 runs 1.2 when the next candidate is tested, so the new set may list 1.2.
-    e.run('resource', (c) => fleet.confirmIntegration(c, 'VEH-031', { version: '1.2', source: 'DIP 上报' }));
+    carRuns(e, 'VEH-031', '1.2');
     let s = e.getState();
     const steering = Object.values(s.features).find((f) => f.name === 'steering_return_rate')!;
     const plan = e.run('integrator', (c) => integ.previewMerge(c, { workspaceId: 'x89-project', featureIds: [steering.id] }));

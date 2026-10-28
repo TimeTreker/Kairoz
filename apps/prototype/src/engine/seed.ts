@@ -9,8 +9,9 @@ import { createAccount, createGrantRule, installAdmin } from './identity.ts';
 import { createGroup, createOrgUnit, createProject, createVehicleModel, createWorkspace } from './org.ts';
 import { createPipeline, createTemplate } from './processing.ts';
 import { requestReference } from './references.ts';
-import { addGroupMember, addWorkspaceVehicle, confirmIntegration, createSimulation, createVehicleGroup, registerImage, registerPhysical, setSoftwareManifest } from './fleet.ts';
+import { addGroupMember, addWorkspaceVehicle, createSimulation, createVehicleGroup, registerImage, registerPhysical, setSoftwareManifest } from './fleet.ts';
 import { publishPlmVersion, syncPlmIfChanged } from './plm.ts';
+import { addTspVehicle } from './tsp.ts';
 import { registerDeviceKey } from './client-report.ts';
 import { connectDirectory, hirePerson, syncIfChanged } from './company-directory.ts';
 import { captureEvent, processEvent } from './events.ts';
@@ -322,32 +323,35 @@ export function demoState(): State {
   as('dcl', (c) => registerImage(c, { id: 'x89-dev-sim', vehicleModelId: 'X89', integrationVersion: null, build: 'x89-dev-2026.10', digest: digest('x89-dev-sim'), simulator: 'SimOne 3' }));
   as('dcl', (c) => registerImage(c, { id: 'x89-1.0-sim', vehicleModelId: 'X89', integrationVersion: '1.0', build: 'x89-1.0.4', digest: digest('x89-1.0-sim'), simulator: 'SimOne 3' }));
   as('dcl', (c) => registerImage(c, { id: 'x89-1.1-sim', vehicleModelId: 'X89', integrationVersion: '1.1', build: 'x89-1.1.2', digest: digest('x89-1.1-sim'), simulator: 'SimOne 3' }));
-  for (const [id, vin, plate, env, pool, name, version] of [
-    ['VEH-001', 'LSDEM0X8900000001', '沪A·D0001', 'development', 'Chassis', '制动研发车 1', '1.0'],
-    ['VEH-002', 'LSDEM0X8900000002', '沪A·D0002', 'development', 'ADC', '泊车研发车 1', null],
-    ['VEH-003', 'LSDEM0X8900000003', '沪A·D0003', 'development', 'Chassis', '转向研发车 1', '1.0'],
-    ['VEH-031', 'LSDEM0X8900000031', '沪A·T0031', 'testing', 'Vehicle', '整车集成测试车 1', '1.0'],
-    ['VEH-201', 'LSDEM0X8900000201', '沪A·P0201', 'production', 'Vehicle', '量产车 201', '1.0'],
-    ['VEH-202', 'LSDEM0X8900000202', '沪A·P0202', 'production', 'Vehicle', '量产车 202', '1.0'],
-  ] as const) {
-    as('resource', (c) => registerPhysical(c, { id, vin, licensePlate: plate, vehicleModelId: 'X89', env, pool, displayName: name }));
-    if (version) as('resource', (c) => confirmIntegration(c, id, { version, source: 'DIP 上报 2026-10-15' }));
+  // Cars come from TSP (simulated): identity, plate, hardware and the version each should run.
+  // Development cars on daily builds have no version in TSP. Two cars TSP knows are not registered yet.
+  const lidar = (has: boolean, chip: string) => [{ item: '激光雷达', value: has ? '有' : '无' }, { item: '座舱芯片', value: chip }];
+  const cars = [
+    ['VEH-001', 'LSDEM0X8900000001', '沪A·D0001', 'development', 'Chassis', '制动研发车 1', '1.0', lidar(false, '8155')],
+    ['VEH-002', 'LSDEM0X8900000002', '沪A·D0002', 'development', 'ADC', '泊车研发车 1', null, lidar(true, '8155')],
+    ['VEH-003', 'LSDEM0X8900000003', '沪A·D0003', 'development', 'Chassis', '转向研发车 1', '1.0', lidar(false, '8155')],
+    ['VEH-031', 'LSDEM0X8900000031', '沪A·T0031', 'testing', 'Vehicle', '整车集成测试车 1', '1.0', lidar(true, '8295')],
+    ['VEH-201', 'LSDEM0X8900000201', '沪A·P0201', 'production', 'Vehicle', '量产车 201', '1.0', lidar(true, '8295')],
+    ['VEH-202', 'LSDEM0X8900000202', '沪A·P0202', 'production', 'Vehicle', '量产车 202', '1.0', lidar(false, '8155')],
+    // ADC and CDC teams test on their own development vehicles; each domain workspace has testing
+    // vehicles on software 1.0 for its subsystem candidates.
+    ['VEH-004', 'LSDEM0X8900000004', '沪A·D0004', 'development', 'ADC', '智驾研发车 4', null, lidar(true, '8155')],
+    ['VEH-005', 'LSDEM0X8900000005', '沪A·D0005', 'development', 'CDC', '座舱研发车 5', null, lidar(false, '8295')],
+    ['VEH-006', 'LSDEM0X8900000006', '沪A·D0006', 'development', 'CDC', '座舱研发车 6', null, lidar(false, '8295')],
+    ['VEH-141', 'LSDEM0X8900000141', '沪A·T0141', 'testing', 'ADC', 'ADC 域集成测试车', '1.0', lidar(true, '8155')],
+    ['VEH-151', 'LSDEM0X8900000151', '沪A·T0151', 'testing', 'CDC', 'CDC 域集成测试车', '1.0', lidar(false, '8295')],
+  ] as const;
+  for (const [, vin, plate, , , , version, hardware] of cars) {
+    engine.run(null, (c) => addTspVehicle(c, { vin, vehicleModelId: 'X89', licensePlate: plate, hardware: [...hardware], expectedVersion: version }));
   }
-  // ADC and CDC teams test on their own development vehicles; each domain workspace has testing
-  // vehicles confirmed on software 1.0 for its subsystem candidates.
-  for (const [id, vin, plate, pool, name] of [
-    ['VEH-004', 'LSDEM0X8900000004', '沪A·D0004', 'ADC', '智驾研发车 4'],
-    ['VEH-005', 'LSDEM0X8900000005', '沪A·D0005', 'CDC', '座舱研发车 5'],
-    ['VEH-006', 'LSDEM0X8900000006', '沪A·D0006', 'CDC', '座舱研发车 6'],
-  ] as const) {
-    as('resource', (c) => registerPhysical(c, { id, vin, licensePlate: plate, vehicleModelId: 'X89', env: 'development', pool, displayName: name }));
-  }
-  for (const [id, vin, plate, pool, name] of [
-    ['VEH-141', 'LSDEM0X8900000141', '沪A·T0141', 'ADC', 'ADC 域集成测试车'],
-    ['VEH-151', 'LSDEM0X8900000151', '沪A·T0151', 'CDC', 'CDC 域集成测试车'],
-  ] as const) {
-    as('resource', (c) => registerPhysical(c, { id, vin, licensePlate: plate, vehicleModelId: 'X89', env: 'testing', pool, displayName: name }));
-    as('resource', (c) => confirmIntegration(c, id, { version: '1.0', source: 'DIP 上报 2026-10-15' }));
+  engine.run(null, (c) => addTspVehicle(c, { vin: 'LSDEM0X8900000007', vehicleModelId: 'X89', licensePlate: '沪A·D0007', hardware: lidar(true, '8295'), expectedVersion: null }));
+  engine.run(null, (c) => addTspVehicle(c, { vin: 'LSDEM0X9000000001', vehicleModelId: 'X90', licensePlate: '沪A·P9001', hardware: lidar(true, '8295'), expectedVersion: null }));
+  // Vehicle resources register each car from TSP and its device key; the car reports what it runs.
+  for (const [id, vin, , env, pool, name] of cars) {
+    as('resource', (c) => registerPhysical(c, { id, vin, env, pool, displayName: name }));
+    const key = engine.run(null, (c) => (provisionDevice(c, id), devicePublicKey(c.s, id)!));
+    as('resource', (c) => registerDeviceKey(c, id, key));
+    engine.run(null, (c) => reportNow(c, id));
   }
   for (const [admin_, team, group, sim, vehicle, groupName] of [
     ['adc_integrator', 'team-adc-parking', 'adc-parking', 'SIM-041', 'VEH-002', '泊车研发车组'],
@@ -509,7 +513,7 @@ export function demoState(): State {
       if (id === 'SIM-021') upgradeClient(c, id, '2.2.0');
       return devicePublicKey(c.s, id)!;
     }) as { keyId: string; publicKey: string };
-    as('resource', (c) => registerDeviceKey(c, id, key));
+    if (!engine.getState().resources[id]!.deviceKey) as('resource', (c) => registerDeviceKey(c, id, key));
     if (engine.getState().resources[id]!.instance === 'STOPPED') continue;
     engine.run(null, (c) => reportNow(c, id));
     engine.run(null, (c) => reportNow(c, id));

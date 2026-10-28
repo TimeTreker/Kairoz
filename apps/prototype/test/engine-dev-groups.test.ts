@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
-import { answerAll, simpleFeature, plmPublish } from '../acceptance/helpers.ts';
+import { answerAll, carRuns, plmPublish, simpleFeature } from '../acceptance/helpers.ts';
 import { World } from '../acceptance/world.ts';
 import { configurationContents } from '../src/engine/client-report.ts';
 import { capturablePolicies, captureEvent } from '../src/engine/events.ts';
@@ -68,7 +68,7 @@ describe('development vehicle groups', () => {
     const w = new World(demoState());
     const vg = groupId(w, '制动研发车组');
     plmPublish(w.engine, 'X89', '1.2');
-    w.as('resource', (c) => fleet.confirmIntegration(c, 'VEH-001', { version: '1.2', source: 'DIP 上报' }));
+    carRuns(w.engine, 'VEH-001', '1.2');
     assert.equal(answerConfigRequest(w.s, 'VEH-001').reason, 'NO_BASE');
     const blocked = w.fails('DISPATCH_BLOCKED', () => dispatchBrake(w));
     assert.deepEqual((blocked.details as { issues: string[] }).issues, ['VEH-001: no policy set applies to software 1.2; choose an explicit base']);
@@ -82,7 +82,7 @@ describe('development vehicle groups', () => {
 
     // Back to following the software: VEH-001's software is now unknown, so it takes the initial configuration.
     w.as('workspace_manager', (c) => fleet.setGroupBase(c, vg, null));
-    w.as('resource', (c) => fleet.confirmIntegration(c, 'VEH-001', { version: null, source: '刷写中断，待复核' }));
+    carRuns(w.engine, 'VEH-001', null);
     const ds = dispatchBrake(w);
     assert.equal(ds.length, 2);
     const byVehicle = Object.fromEntries(ds.map((d) => [w.s.deployments[d]!.targets[0]!.resourceId, configOf(w, d)]));

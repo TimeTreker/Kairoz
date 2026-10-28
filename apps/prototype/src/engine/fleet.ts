@@ -15,6 +15,8 @@ import { getWorkspace } from './org.ts';
 import { displayName } from './config.ts';
 import type { ControllerState, Deployment, GroupPublication, Loan, Resource, SoftwareChange, State, VehicleGroup, VehicleGroupEvent, VehicleGroupPurpose } from './types.ts';
 import { todayOf } from './clock.ts';
+import { tspVehicle } from './tsp.ts';
+import { tspMirror } from './tsp-sync.ts';
 
 const RESOURCE_ID = /^[A-Z][A-Z0-9-]{2,40}$/;
 const VIN = /^[A-HJ-NPR-Z0-9]{17}$/;
@@ -167,6 +169,7 @@ export function baseResource(ctx: Ctx, input: { id: string; vehicleModelId: stri
     status: 'AVAILABLE' as const,
     softwareStatus: 'UNKNOWN' as const,
     controllers: [],
+    tsp: null,
     reservation: null,
     appliedConfigId: null,
     personal: null,
@@ -178,25 +181,30 @@ export function baseResource(ctx: Ctx, input: { id: string; vehicleModelId: stri
   };
 }
 
-/** Physical vehicles are registered by vehicle resources; the actual software version starts unknown. */
-export function registerPhysical(
-  ctx: Ctx,
-  input: { id: string; vin: string; licensePlate?: string; vehicleModelId: string; env: Env; pool: Scope; displayName?: string; uvid?: string },
-): string {
+/**
+ * Vehicle resources register a car TSP knows: its identity, model, plate and hardware come from TSP,
+ * the environment, pool and name from vehicle resources. The actual software starts unknown, until
+ * the car's own signed report says what it runs.
+ */
+export function registerPhysical(ctx: Ctx, input: { id: string; vin: string; env: Env; pool: Scope; displayName?: string; vehicleModelId?: string }): string {
   ctx.allow('resource.manage', { type: 'resource', id: input.id, scope: input.pool, env: input.env });
-  const base = baseResource(ctx, input);
   const vin = input.vin.trim().toUpperCase();
   if (!VIN.test(vin)) throw rule('INVALID_VIN', 'a VIN has 17 characters without I, O or Q');
+  const t = tspVehicle(ctx.s, vin);
+  if (!t) throw rule('TSP_REQUIRED', `TSP has no car ${vin}; vehicles are registered from TSP`);
+  if (input.vehicleModelId && input.vehicleModelId !== t.vehicleModelId) throw rule('TSP_MODEL_MISMATCH', `TSP holds ${vin} as a ${t.vehicleModelId}`);
+  const base = baseResource(ctx, { ...input, vehicleModelId: t.vehicleModelId });
   if (Object.values(ctx.s.resources).some((r) => r.vin === vin)) throw conflict('VIN_TAKEN', `VIN ${vin} is already registered`);
-  if (input.uvid && Object.values(ctx.s.resources).some((r) => r.uvid === input.uvid)) throw conflict('UVID_TAKEN', `UVID ${input.uvid} is already registered`);
+  if (Object.values(ctx.s.resources).some((r) => r.uvid === t.uvid)) throw conflict('UVID_TAKEN', `UVID ${t.uvid} is already registered`);
   ctx.s.resources[input.id] = {
     ...base,
     type: 'PHYSICAL',
     vin,
-    uvid: input.uvid ?? null,
-    licensePlate: input.licensePlate?.trim() || null,
+    uvid: t.uvid,
+    licensePlate: t.licensePlate,
     integrationVersion: null,
     integrationSource: null,
+    tsp: tspMirror(t, ctx.now),
     instance: null,
     imageId: null,
     homeWorkspaceId: null,
@@ -235,29 +243,6 @@ export function createSimulation(ctx: Ctx, input: { id: string; workspaceId: str
   };
   ctx.s.workspaceResources[workspace.id] = [...(ctx.s.workspaceResources[workspace.id] ?? []), input.id];
   return input.id;
-}
-
-/** Vehicle resources confirm the actual software of a physical vehicle from a trusted source. */
-export function confirmIntegration(ctx: Ctx, resourceId: string, input: { version: string | null; source: string }): void {
-  const r = getResource(ctx.s, resourceId) as Draft<Resource>;
-  ctx.allow('resource.manage', { type: 'resource', id: r.id, scope: r.pool, env: r.env });
-  if (r.type !== 'PHYSICAL') throw rule('SIMULATION_SOFTWARE_FROM_IMAGE', 'a simulation’s software comes from its image');
-  if (input.version !== null && !ctx.s.softwareVersions[softwareKey(r.vehicleModelId, input.version)]) {
-    throw rule('UNKNOWN_SOFTWARE_VERSION', `${r.vehicleModelId} ${input.version} is not a recorded software version`);
-  }
-  if (input.version !== null) assertNotLinked(ctx.s, r.vehicleModelId, input.version);
-  if (input.version !== null && r.env === 'production' && isPlanned(ctx.s, r.vehicleModelId, input.version)) {
-    throw rule('PLANNED_VERSION_IN_PRODUCTION', `${r.vehicleModelId} ${input.version} is planned, not released; production vehicles run released software only`);
-  }
-  if (!input.source.trim()) throw rule('SOURCE_REQUIRED', 'name the trusted source (e.g. DIP report, OTA confirmation)');
-  const previous = r.integrationVersion;
-  const changeId = recordSoftwareChange(ctx, r, input.version, 'CONFIRMED');
-  r.integrationVersion = input.version;
-  r.integrationSource = input.source.trim();
-  r.softwareStatus = input.version ? 'CONSISTENT' : 'UNKNOWN';
-  r.controllers = [];
-  r.updatedAt = ctx.now;
-  afterSoftwareChange(ctx, r, previous, changeId);
 }
 
 /**
@@ -349,37 +334,6 @@ export function recordSoftwareChange(ctx: Ctx, r: Resource, toVersion: string | 
     by: ctx.actor?.username ?? null,
   };
   return id;
-}
-
-/**
- * A trusted per-controller report (vehicle, DIP or software OTA). Only when every controller runs
- * the target does the vehicle get that whole-vehicle version; a partial failure claims none.
- */
-export function reportControllers(ctx: Ctx, resourceId: string, input: { target: string; source: string; controllers: ControllerState[] }): void {
-  const r = getResource(ctx.s, resourceId) as Draft<Resource>;
-  ctx.allow('resource.manage', { type: 'resource', id: r.id, scope: r.pool, env: r.env });
-  if (r.type !== 'PHYSICAL') throw rule('SIMULATION_SOFTWARE_FROM_IMAGE', 'a simulation’s software comes from its image');
-  if (!ctx.s.softwareVersions[softwareKey(r.vehicleModelId, input.target)]) {
-    throw rule('UNKNOWN_SOFTWARE_VERSION', `${r.vehicleModelId} ${input.target} is not a recorded software version`);
-  }
-  if (!input.source.trim()) throw rule('SOURCE_REQUIRED', 'name the trusted source (e.g. DIP report, OTA confirmation)');
-  if (input.controllers.length === 0 || input.controllers.some((c) => !c.name.trim() || !c.version.trim())) {
-    throw rule('CONTROLLERS_REQUIRED', 'report every domain controller with its version and result');
-  }
-  assertNotLinked(ctx.s, r.vehicleModelId, input.target);
-  if (r.env === 'production' && isPlanned(ctx.s, r.vehicleModelId, input.target)) {
-    throw rule('PLANNED_VERSION_IN_PRODUCTION', `${r.vehicleModelId} ${input.target} is planned, not released; production vehicles run released software only`);
-  }
-  const consistent = input.controllers.every((c) => c.status === 'PASS' && c.version === input.target);
-  const previous = r.integrationVersion;
-  const changeId = consistent ? recordSoftwareChange(ctx, r, input.target, 'CONTROLLERS') : null;
-  r.controllers = input.controllers.map((c) => ({ name: c.name.trim(), version: c.version.trim(), status: c.status }));
-  r.softwareStatus = consistent ? 'CONSISTENT' : 'PARTIAL_FAILURE';
-  // Never write the expected version as the actual one.
-  r.integrationVersion = consistent ? input.target : null;
-  r.integrationSource = input.source.trim();
-  r.updatedAt = ctx.now;
-  afterSoftwareChange(ctx, r, previous, changeId);
 }
 
 /** Only the owner acts on a personal simulation, and only within a grant for its workspace and group. */

@@ -258,11 +258,33 @@ function to22(s: Saved): void {
 }
 
 /**
- * Schema 23: whole-vehicle versions come from PLM. Every version an earlier save recorded is taken as
- * published by PLM (the simulated PLM gets the same list, so nothing is synced again); a planned one
- * is a working name not linked yet. Applicability records and checks may now be the platform's own.
+ * Schema 23: whole-vehicle versions come from PLM and cars from TSP. Every version an earlier save
+ * recorded is taken as published by PLM (the simulated PLM gets the same list, so nothing is synced
+ * again); a planned one is a working name not linked yet. Every physical car is taken as known to
+ * TSP, which expects the version the platform recorded; its simulated device runs that version (it
+ * used to echo the platform's record). Applicability records and checks may now be the platform's own.
  */
 function to23(s: Saved): void {
+  const cars: Record<string, unknown>[] = [];
+  for (const r of Object.values((s.resources ?? {}) as Rows)) {
+    if (r.type !== 'PHYSICAL' || typeof r.vin !== 'string') {
+      r.tsp ??= null;
+      continue;
+    }
+    const vin = r.vin;
+    r.uvid ??= `UV-${vin.slice(-8)}`;
+    const car = { vin, uvid: r.uvid, tboxId: `TBOX-${vin.slice(-6)}`, vehicleModelId: r.vehicleModelId, licensePlate: r.licensePlate ?? null, hardware: [], expectedVersion: r.integrationVersion ?? null };
+    cars.push(car);
+    r.tsp ??= { tboxId: car.tboxId, hardware: [], expectedVersion: car.expectedVersion, syncedAt: r.updatedAt ?? null };
+  }
+  for (const [id, d] of Object.entries((s.devices ?? {}) as Rows)) {
+    const r = ((s.resources ?? {}) as Rows)[id];
+    if (r?.type === 'PHYSICAL' && d.software == null) d.software = r.integrationVersion ?? null;
+    d.controllers ??= [];
+  }
+  const tspRevision = cars.length ? 1 : 0;
+  s.tsp ??= { revision: tspRevision, vehicles: cars };
+  s.tspSync ??= { revision: tspRevision, syncedAt: null };
   const versions: Record<string, unknown>[] = [];
   for (const v of Object.values((s.softwareVersions ?? {}) as Rows)) {
     v.dclPart ??= null;

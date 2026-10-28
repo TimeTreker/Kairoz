@@ -1,5 +1,5 @@
-import { MinusCircleOutlined, PlusOutlined } from '@ant-design/icons';
-import { Button, Card, Col, Collapse, Empty, Form, Input, InputNumber, Modal, Popconfirm, Row, Select, Space, Switch, Table, Tabs, Tag, Timeline, Tooltip, Typography } from 'antd';
+import { PlusOutlined } from '@ant-design/icons';
+import { Button, Card, Col, Collapse, Descriptions, Empty, Form, Input, InputNumber, Modal, Popconfirm, Row, Select, Space, Switch, Table, Tabs, Tag, Timeline, Tooltip, Typography } from 'antd';
 import { useState } from 'react';
 import { useActor, useCan, useRun, useWorkspace } from '../app/hooks.ts';
 import { engine, useEngineState } from '../app/store.ts';
@@ -12,6 +12,8 @@ import { EnvironmentModal } from '../components/environment.tsx';
 import { DeliveryTag } from '../components/testing.tsx';
 import { GroupFitDrawer, SoftwareUpdateTag, UpdateSoftwareModal, useCanUpdateSoftware } from '../components/vehicle-software.tsx';
 import { VersionStatusTag } from '../components/plm.tsx';
+import { HardwareTags } from '../components/tsp.tsx';
+import { tspMismatch } from '../engine/tsp-sync.ts';
 import { fitOf } from '../engine/delivery.ts';
 import { openChangeOf, unrecordedReports } from '../engine/software-change.ts';
 import { catalogImages } from '../engine/sim-software.ts';
@@ -24,7 +26,6 @@ import {
   addWorkspaceVehicle,
   archiveVehicleGroup,
   assignableVehicles,
-  confirmIntegration,
   createSimulation,
   createVehicleGroup,
   managedResources,
@@ -36,7 +37,6 @@ import {
   releaseReservation,
   removeGroupMember,
   removeWorkspaceVehicle,
-  reportControllers,
   reserveVehicle,
   runningSimulations,
   setGroupApproval,
@@ -91,6 +91,23 @@ function VehicleTable({ vehicles, extra, workspaceId = '' }: { vehicles: Resourc
   );
   // The controls stay while a filter is set, even when the list has shrunk since.
   const filtering = !!q || type !== 'ALL' || env !== 'ALL';
+  const actualSoftware = (r: Resource) =>
+    r.softwareStatus === 'PARTIAL_FAILURE' ? (
+      <Tooltip title={r.controllers.map((c) => `${c.name} ${c.version} ${c.status}`).join(' · ')}>
+        <Tag color="red">{L('部分域控失败', 'Partial controller failure')}</Tag>
+      </Tooltip>
+    ) : r.integrationVersion ? (
+      <Tooltip title={r.integrationSource}>
+        <span>
+          {r.vehicleModelId} {r.integrationVersion}
+          {isDerivedImage(state, r.imageId) && <Tag color="purple" style={{ marginLeft: 4 }}>{L('派生镜像', 'Derived image')}</Tag>}
+        </span>
+      </Tooltip>
+    ) : isDerivedImage(state, r.imageId) ? (
+      <Tag color="purple">{L('派生镜像', 'Derived image')}</Tag>
+    ) : (
+      <Typography.Text type="secondary">{L('尚未获取', 'Unknown')}</Typography.Text>
+    );
   return (
     <Space orientation="vertical" size={8} style={{ width: '100%' }}>
       {(vehicles.length > 5 || filtering) && (
@@ -130,34 +147,32 @@ function VehicleTable({ vehicles, extra, workspaceId = '' }: { vehicles: Resourc
         },
         { title: L('类型', 'Type'), render: (_, r) => <LabelTag map={RESOURCE_TYPE_LABELS} value={r.type} color={r.type === 'PHYSICAL' ? 'blue' : 'cyan'} /> },
         {
-          title: L('VIN / UVID / 车牌', 'VIN / UVID / plate'),
+          title: L('VIN / 车牌 / TSP', 'VIN / plate / TSP'),
           render: (_, r) => (
             <Space orientation="vertical" size={0}>
               <Mono>{r.vin ?? r.uvid ?? '—'}</Mono>
               {r.licensePlate && <Typography.Text type="secondary">{r.licensePlate}</Typography.Text>}
+              {r.tsp && <HardwareTags tboxId={r.tsp.tboxId} hardware={r.tsp.hardware} />}
             </Space>
           ),
         },
         { title: L('环境 / 资源池', 'Env / pool'), render: (_, r) => <Space size={4}><EnvTag env={r.env} /><span>{r.pool}</span></Space> },
         {
-          title: L('实际整车版本', 'Actual software'),
-          render: (_, r) =>
-            r.softwareStatus === 'PARTIAL_FAILURE' ? (
-              <Tooltip title={r.controllers.map((c) => `${c.name} ${c.version} ${c.status}`).join(' · ')}>
-                <Tag color="red">{L('部分域控失败', 'Partial controller failure')}</Tag>
-              </Tooltip>
-            ) : r.integrationVersion ? (
-              <Tooltip title={r.controllers.length ? r.controllers.map((c) => `${c.name} ${c.version}`).join(' · ') : r.integrationSource}>
-                <span>
-                  {r.vehicleModelId} {r.integrationVersion}
-                  {isDerivedImage(state, r.imageId) && <Tag color="purple" style={{ marginLeft: 4 }}>{L('派生镜像', 'Derived image')}</Tag>}
-                </span>
-              </Tooltip>
-            ) : isDerivedImage(state, r.imageId) ? (
-              <Tag color="purple">{L('派生镜像', 'Derived image')}</Tag>
-            ) : (
-              <Typography.Text type="secondary">{L('尚未获取', 'Unknown')}</Typography.Text>
-            ),
+          title: L('实际整车版本（车端上报）', 'Actual software (vehicle report)'),
+          render: (_, r) => (
+            <Space orientation="vertical" size={2}>
+              {actualSoftware(r)}
+              {r.tsp?.expectedVersion && (
+                <Tooltip title={L('TSP 记录这辆车应运行的版本；实际版本只认车端上报。', 'The version TSP says the car should run; the actual version is the car’s own report.')}>
+                  {tspMismatch(r) ? (
+                    <Tag color="orange">{L(`TSP 应为 ${r.tsp.expectedVersion}`, `TSP expects ${r.tsp.expectedVersion}`)}</Tag>
+                  ) : (
+                    <Typography.Text type="secondary">{L(`TSP 应为 ${r.tsp.expectedVersion}`, `TSP expects ${r.tsp.expectedVersion}`)}</Typography.Text>
+                  )}
+                </Tooltip>
+              )}
+            </Space>
+          ),
         },
         { title: L('已生效配置', 'Applied configuration'), render: (_, r) => <Mono>{B(configName(state, r.appliedConfigId))}</Mono> },
         {
@@ -764,26 +779,23 @@ function Registry() {
   const { L, B } = useI18n();
   const run = useRun();
   const [registering, setRegistering] = useState(false);
-  const [confirming, setConfirming] = useState<Resource | null>(null);
   const [releasing, setReleasing] = useState<Resource | null>(null);
   const [releaseNote, setReleaseNote] = useState('');
   const [statusOf, setStatusOf] = useState<Resource | null>(null);
   const [envOf, setEnvOf] = useState<string | null>(null);
-  const [reporting, setReporting] = useState<Resource | null>(null);
   const [keying, setKeying] = useState<Resource | null>(null);
   const [clientOf, setClientOf] = useState<string | null>(null);
   const [imageOf, setImageOf] = useState<string | null>(null);
-  const [cf] = Form.useForm();
   const [kf] = Form.useForm();
   const [form] = Form.useForm();
-  const [vf] = Form.useForm();
   const [sf] = Form.useForm();
+  const pickedVin = Form.useWatch('vin', form);
   const vehicles = managedResources(state, actor);
   const unrecorded = unrecordedReports(state, actor);
   const releasingDispatch = releasing ? state.deployments[pendingDeploymentOf(state, releasing.id) ?? ''] : undefined;
   return (
     <Card extra={<Button icon={<PlusOutlined />} onClick={() => (form.resetFields(), setRegistering(true))}>{L('登记实车', 'Register vehicle')}</Button>}>
-      <Hint>{L('实车登记时整车版本为空，由 DIP / OTA 等可信来源上报后确认；仿真车的版本由镜像决定。', 'Physical vehicles start with unknown software, confirmed later from a trusted source (DIP, OTA); a simulation’s version comes from its image.')}</Hint>
+      <Hint>{L('实车从 TSP 登记：车辆身份、车型、车牌和硬件配置来自 TSP，TSP 还给出这辆车应运行的版本。实际整车版本只认车端签名上报；仿真车的版本由镜像决定。', 'Physical vehicles are registered from TSP: identity, model, plate and hardware come from TSP, which also says which version the car should run. The actual software is only what the car’s signed report says; a simulation’s version comes from its image.')}</Hint>
       <Modal
         open={!!releasing}
         title={`${L('解除下发占用', 'Release from dispatch')} · ${releasing?.id ?? ''}`}
@@ -810,38 +822,15 @@ function Registry() {
           <Space size={0}>
             {r.type === 'PHYSICAL' &&
               (() => {
-                // The vehicle reported a version the platform does not know: record it, then confirm it here.
+                // The vehicle reported a version PLM has not published (or a working name): it waits for PLM.
                 const reported = unrecorded.find((c) => c.resourceId === r.id);
                 const known = reported && state.softwareVersions[softwareKey(r.vehicleModelId, reported.toVersion)];
-                return (
-                  <>
-                    {reported && (
-                      <Tag color="purple">
-                        {L('上报', 'Reported')} {reported.toVersion}（{known?.status === 'PLANNED' && r.env === 'production' ? L('规划中，发布后再确认', 'planned; confirm it once released') : known ? L('已登记，待确认', 'recorded; confirm it') : L('未登记', 'not recorded')}）
-                      </Tag>
-                    )}
-                    <Button
-                      type="link"
-                      size="small"
-                      onClick={() => (vf.setFieldsValue(reported ? { version: known ? reported.toVersion : r.integrationVersion, source: L('客户端上报', 'Client report') } : { version: r.integrationVersion, source: '' }), setConfirming(r))}
-                    >
-                      {L('确认软件版本', 'Confirm software')}
-                    </Button>
-                  </>
-                );
+                return reported ? (
+                  <Tag color="purple">
+                    {L('上报', 'Reported')} {reported.toVersion}（{known?.linkedTo ? L(`工作名，PLM 已发布为 ${known.linkedTo}`, `working name; PLM published it as ${known.linkedTo}`) : known ? L('工作名，量产车等 PLM 发布', 'working name; production waits for PLM') : L('PLM 未发布，等 PLM', 'not published by PLM; waits for PLM')}）
+                  </Tag>
+                ) : null;
               })()}
-            {r.type === 'PHYSICAL' && (
-              <Button
-                type="link"
-                size="small"
-                onClick={() => (
-                  cf.setFieldsValue({ target: r.integrationVersion ?? undefined, source: '', controllers: r.controllers.length ? r.controllers : [{ name: 'ADC', version: '', status: 'PASS' }, { name: 'BMS', version: '', status: 'PASS' }] }),
-                  setReporting(r)
-                )}
-              >
-                {L('域控状态', 'Controllers')}
-              </Button>
-            )}
             {r.type === 'SIMULATION' && (
               <Button type="link" size="small" onClick={() => setImageOf(r.id)}>
                 {L('运行镜像', 'Running image')}
@@ -916,35 +905,45 @@ function Registry() {
       </Modal>
       <Modal
         open={registering}
-        title={L('登记实车', 'Register a physical vehicle')}
+        title={L('从 TSP 登记实车', 'Register a vehicle from TSP')}
         onCancel={() => setRegistering(false)}
         onOk={() =>
           form.validateFields().then((v) => {
-            if (run((c) => registerPhysical(c, v), L('已登记', 'Registered')) !== undefined) setRegistering(false);
+            if (run((c) => registerPhysical(c, v), L('已登记；登记设备密钥后，车辆上报实际软件', 'Registered; once its device key is registered, the car reports its software')) !== undefined) setRegistering(false);
           })
         }
       >
-        <Form form={form} name="register" layout="vertical" initialValues={{ vehicleModelId: workspace?.vehicleModelId ?? Object.keys(state.vehicleModels)[0], env: 'development', pool: 'Chassis' }}>
-          <Space>
+        <Form form={form} name="register" layout="vertical" initialValues={{ env: 'development', pool: 'Chassis' }}>
+          <Form.Item name="vin" label={L('TSP 中的车辆（VIN）', 'Vehicle in TSP (VIN)')} rules={[{ required: true }]}>
+            <Select
+              showSearch
+              optionFilterProp="label"
+              placeholder={L('选择 TSP 里还没登记的车', 'Choose a car TSP has that is not registered')}
+              options={state.tsp.vehicles
+                .filter((t) => !Object.values(state.resources).some((r) => r.vin === t.vin))
+                .map((t) => ({ value: t.vin, label: `${t.vin} · ${t.vehicleModelId}${t.licensePlate ? ` · ${t.licensePlate}` : ''}` }))}
+            />
+          </Form.Item>
+          {(() => {
+            const t = state.tsp.vehicles.find((x) => x.vin === pickedVin);
+            return t ? (
+              <Descriptions size="small" column={1} bordered style={{ marginBottom: 12 }}>
+                <Descriptions.Item label={L('车型 / 车牌', 'Model / plate')}>{`${t.vehicleModelId} · ${t.licensePlate ?? '—'}`}</Descriptions.Item>
+                <Descriptions.Item label="UVID / T-Box">{`${t.uvid} · ${t.tboxId}`}</Descriptions.Item>
+                <Descriptions.Item label={L('硬件配置', 'Hardware')}>{t.hardware.length ? <HardwareTags hardware={t.hardware} /> : '—'}</Descriptions.Item>
+                <Descriptions.Item label={L('TSP 应为版本', 'Version TSP expects')}>{t.expectedVersion ?? L('TSP 未记录', 'not in TSP')}</Descriptions.Item>
+              </Descriptions>
+            ) : null;
+          })()}
+          <Space wrap>
             <Form.Item name="id" label="ID" rules={[{ required: true }]}>
-              <Input placeholder="VEH-003" />
-            </Form.Item>
-            <Form.Item name="vin" label="VIN" rules={[{ required: true }]}>
-              <Input placeholder="LSDEM0X8900000003" />
-            </Form.Item>
-          </Space>
-          <Space>
-            <Form.Item name="licensePlate" label={L('车牌', 'Plate')}>
-              <Input />
+              <Input placeholder="VEH-007" />
             </Form.Item>
             <Form.Item name="displayName" label={L('名称', 'Name')}>
               <Input />
             </Form.Item>
           </Space>
-          <Space>
-            <Form.Item name="vehicleModelId" label={L('车型', 'Model')}>
-              <Select style={{ width: 120 }} options={Object.keys(state.vehicleModels).map((m) => ({ value: m, label: m }))} />
-            </Form.Item>
+          <Space wrap>
             <Form.Item name="env" label={L('环境', 'Environment')}>
               <Select style={{ width: 130 }} options={ENVS.map((e) => ({ value: e, label: B(ENV_LABELS[e]) }))} />
             </Form.Item>
@@ -952,95 +951,6 @@ function Registry() {
               <Select style={{ width: 130 }} options={SCOPES.map((p) => ({ value: p, label: p }))} />
             </Form.Item>
           </Space>
-        </Form>
-      </Modal>
-      <Modal
-        open={confirming !== null}
-        title={`${L('确认实际软件版本', 'Confirm actual software')} · ${confirming?.id}`}
-        onCancel={() => setConfirming(null)}
-        onOk={() =>
-          vf.validateFields().then((v) => {
-            if (run((c) => confirmIntegration(c, confirming!.id, { version: v.version ?? null, source: v.source }), L('已确认', 'Confirmed')) !== undefined) setConfirming(null);
-          })
-        }
-      >
-        <Hint>
-          {confirming?.env === 'production'
-            ? L('确认软件版本不等于刷写。该版本的 OTA 包若带 DCL 配置模块，量产车的配置随软件一起生效，不必等云端推送；规划中的版本不能用于量产车。', 'Confirming software is not flashing it. If the version’s OTA package carries a DCL module, a production vehicle runs that set with the software, without a cloud push; planned versions are not for production vehicles.')
-            : L('确认软件版本不等于刷写或配置生效。规划中的版本是集成征集测试用的预发布软件。', 'Confirming software is neither flashing nor applying a configuration. Planned versions are pre-release builds tested for an integration call.')}
-        </Hint>
-        <Form form={vf} name="software" layout="vertical">
-          <Form.Item name="version" label={L('整车版本（留空 = 未知）', 'Software version (blank = unknown)')}>
-            <Select
-              allowClear
-              options={Object.values(state.softwareVersions)
-                .filter((v) => v.vehicleModelId === confirming?.vehicleModelId)
-                .map((v) => ({
-                  value: v.version,
-                  disabled: v.status === 'PLANNED' && confirming?.env === 'production',
-                  label: `${v.vehicleModelId} ${v.version}${v.status === 'PLANNED' ? L('（规划中）', ' (planned)') : ''}${v.dclModule ? L(` · 包内 ${state.releases[v.dclModule.releaseId]?.dclVersion}`, ` · bundles ${state.releases[v.dclModule.releaseId]?.dclVersion}`) : ''}`,
-                }))}
-            />
-          </Form.Item>
-          <Form.Item name="source" label={L('可信来源', 'Trusted source')} rules={[{ required: true }]}>
-            <Input placeholder={L('例如：DIP 上报 / 外部 OTA 确认', 'e.g. DIP report / external OTA confirmation')} />
-          </Form.Item>
-        </Form>
-      </Modal>
-      <Modal
-        open={reporting !== null}
-        width={620}
-        title={`${L('登记各域控实际状态', 'Record each controller’s actual state')} · ${reporting?.id}`}
-        onCancel={() => setReporting(null)}
-        onOk={() =>
-          cf.validateFields().then((v) => {
-            if (run((c) => reportControllers(c, reporting!.id, { target: v.target, source: v.source, controllers: v.controllers ?? [] }), L('已登记', 'Recorded')) !== undefined) setReporting(null);
-          })
-        }
-      >
-        <Hint>
-          {L(
-            '只有全部域控都成功升级到目标版本，车辆才获得该整车版本；部分失败时整车版本记为未知并阻止量产配置，由外部软件 OTA 完成或回滚后重新上报。不要把期望版本填成实际版本。',
-            'Only when every controller reached the target does the vehicle get that version; a partial failure leaves it unknown and blocks production configuration until the external software OTA completes or rolls back. Never enter the expected version as the actual one.',
-          )}
-        </Hint>
-        <Form form={cf} name="controllers" layout="vertical">
-          <Space>
-            <Form.Item name="target" label={L('目标整车版本', 'Target version')} rules={[{ required: true }]}>
-              <Select
-                style={{ width: 140 }}
-                options={Object.values(state.softwareVersions)
-                  .filter((v) => v.vehicleModelId === reporting?.vehicleModelId)
-                  .map((v) => ({ value: v.version, label: v.version }))}
-              />
-            </Form.Item>
-            <Form.Item name="source" label={L('可信来源', 'Trusted source')} rules={[{ required: true }]}>
-              <Input style={{ width: 300 }} placeholder={L('DIP 上报 / 外部软件 OTA 回执', 'DIP report / software OTA receipt')} />
-            </Form.Item>
-          </Space>
-          <Form.List name="controllers">
-            {(fields, { add, remove }) => (
-              <>
-                {fields.map((f) => (
-                  <Space key={f.key} align="baseline">
-                    <Form.Item name={[f.name, 'name']} rules={[{ required: true }]}>
-                      <Input placeholder="ADC" style={{ width: 110 }} />
-                    </Form.Item>
-                    <Form.Item name={[f.name, 'version']} rules={[{ required: true }]}>
-                      <Input placeholder="1.0" style={{ width: 110 }} />
-                    </Form.Item>
-                    <Form.Item name={[f.name, 'status']}>
-                      <Select style={{ width: 110 }} options={[{ value: 'PASS', label: 'PASS' }, { value: 'FAIL', label: 'FAIL' }]} />
-                    </Form.Item>
-                    <Button type="text" size="small" icon={<MinusCircleOutlined />} aria-label={L('删除这个域控', 'Remove this controller')} onClick={() => remove(f.name)} />
-                  </Space>
-                ))}
-                <Button size="small" icon={<PlusOutlined />} onClick={() => add({ name: '', version: '', status: 'PASS' })}>
-                  {L('添加域控', 'Add controller')}
-                </Button>
-              </>
-            )}
-          </Form.List>
         </Form>
       </Modal>
       <Modal

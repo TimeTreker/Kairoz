@@ -14,7 +14,7 @@ import { demoState } from '../src/engine/seed.ts';
 import { sendReceipt } from '../src/engine/simulator.ts';
 import type { State } from '../src/engine/types.ts';
 import * as v from '../src/engine/validation.ts';
-import { answerAll, simpleFeature, verifyFeatureOn, plmPublish } from './helpers.ts';
+import { answerAll, carRuns, plmPublish, simpleFeature, tspCar, verifyFeatureOn } from './helpers.ts';
 import type { SceneSpec, World } from './world.ts';
 
 export const start = (): State => demoState();
@@ -70,6 +70,7 @@ export const scenes: Record<string, SceneSpec> = {
       w.as('dcl', (c) => fleet.registerImage(c, { id: 'x90-dev-sim', vehicleModelId: 'X90', integrationVersion: null, build: 'x90-dev', digest: 'sha256:mock-x90-dev', simulator: 'SimOne 3' }));
       w.as('dcl', (c) => fleet.registerImage(c, { id: 'x90-1.0-sim', vehicleModelId: 'X90', integrationVersion: '1.0', build: 'x90-1.0.0', digest: 'sha256:mock-x90-1-0', simulator: 'SimOne 3' }));
       w.as('x90_admin', (c) => fleet.createSimulation(c, { id: 'SIM-901', workspaceId: 'team-brake-x90', imageId: 'x90-dev-sim', env: 'development', pool: 'Chassis' }));
+      tspCar(w.engine, 'LSDEMX90000000901', 'X90');
       w.as('resource', (c) => fleet.registerPhysical(c, { id: 'VEH-901', vin: 'LSDEMX90000000901', vehicleModelId: 'X90', env: 'development', pool: 'Chassis' }));
       w.eq(w.s.resources['VEH-901']!.integrationVersion, null, 'the first X90 car starts with unknown software');
       w.as('x90_admin', (c) => fleet.addWorkspaceVehicle(c, 'team-brake-x90', 'VEH-901'));
@@ -119,8 +120,9 @@ export const scenes: Record<string, SceneSpec> = {
     needs: ['MM04'],
     run: (w) => {
       w.as('x90_admin', (c) => fleet.createSimulation(c, { id: 'SIM-911', workspaceId: 'x90-integration', imageId: 'x90-1.0-sim', env: 'testing', pool: 'Vehicle' }));
+      tspCar(w.engine, 'LSDEMX90000000911', 'X90');
       w.as('resource', (c) => fleet.registerPhysical(c, { id: 'VEH-911', vin: 'LSDEMX90000000911', vehicleModelId: 'X90', env: 'testing', pool: 'Vehicle' }));
-      w.as('resource', (c) => fleet.confirmIntegration(c, 'VEH-911', { version: '1.0', source: 'X90 1.0 刷写记录' }));
+      carRuns(w.engine, 'VEH-911', '1.0');
       w.as('x90_admin', (c) => fleet.addWorkspaceVehicle(c, 'x90-integration', 'VEH-911'));
       const d = w.as('x90_integration_tester', (c) => v.dispatchCandidate(c, w.ref.candidate!, { resourceIds: ['SIM-911', 'VEH-911'] }));
       answerAll(w, d);
@@ -147,8 +149,9 @@ export const scenes: Record<string, SceneSpec> = {
     run: (w) => {
       // Two production X90 cars on 1.0: a gray first wave that fails once, is retried, then expanded.
       for (const id of ['VEH-921', 'VEH-922']) {
+        tspCar(w.engine, `LSDEMX90000000${id.slice(4)}`, 'X90', { expectedVersion: '1.0' });
         w.as('resource', (c) => fleet.registerPhysical(c, { id, vin: `LSDEMX90000000${id.slice(4)}`, vehicleModelId: 'X90', env: 'production', pool: 'Vehicle' }));
-        w.as('resource', (c) => fleet.confirmIntegration(c, id, { version: '1.0', source: '出厂 OTA 回执' }));
+        carRuns(w.engine, id, '1.0');
         w.as('x90_admin', (c) => fleet.addWorkspaceVehicle(c, 'x90-project', id));
       }
       const group = w.as('x90_release', (c) => fleet.createVehicleGroup(c, { workspaceId: 'x90-project', groupId: null, name: 'X90 量产车组', purpose: 'PRODUCTION', env: 'production' }));
@@ -185,7 +188,10 @@ export const scenes: Record<string, SceneSpec> = {
       w.fails('SOURCE_MODEL_MISMATCH', () =>
         w.as('admin', (c) => createWorkspace(c, { id: 'x90-mixed', name: 'X90 混合', kind: 'PROJECT', orgUnitId: 'x90', vehicleModelId: 'X90', groupIds: ['brake'], scopes: ['Vehicle'], sourceWorkspaceIds: ['team-brake'] })),
       );
-      w.fails('UNKNOWN_SOFTWARE_VERSION', () => w.as('resource', (c) => fleet.confirmIntegration(c, 'VEH-901', { version: '1.1', source: '误填 X89 的版本' })));
+      // An X90 car reporting 1.1 (only X89 has it) does not take X89's 1.1: it waits for PLM to publish X90 1.1.
+      const before = w.s.resources['VEH-901']!.integrationVersion;
+      carRuns(w.engine, 'VEH-901', '1.1');
+      w.eq(w.s.resources['VEH-901']!.integrationVersion, before, 'X89 1.1 is not X90 1.1');
       w.fails('VEHICLE_NOT_ASSIGNABLE', () => w.as('x90_admin', (c) => fleet.addWorkspaceVehicle(c, 'team-brake-x90', 'VEH-001')));
       w.denied('x90_tester', (c) => v.recordFeatureTest(c, Object.values(w.s.features).find((f) => f.name === 'brake_monitor')!.id, { commitId: 'x', resourceId: 'VEH-001', result: 'PASS', summary: '' }));
     },

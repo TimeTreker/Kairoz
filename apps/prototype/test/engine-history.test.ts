@@ -10,7 +10,7 @@ import * as rel from '../src/engine/release.ts';
 import { demoState } from '../src/engine/seed.ts';
 import { sendReceipt } from '../src/engine/simulator.ts';
 import * as v from '../src/engine/validation.ts';
-import { plmPublish } from '../acceptance/helpers.ts';
+import { carRuns, plmPublish, tspCar } from '../acceptance/helpers.ts';
 
 const MANIFEST = {
   signals: ['brake_pressure', 'steering_angle_rate', 'steering_return_rate', 'vehicle_deceleration', 'vehicle_speed'],
@@ -110,12 +110,13 @@ describe('release history', () => {
     const e = new Engine(demoState());
     const r100 = rel.releasesOf(e.getState(), 'X89')[0]!.id;
     plmPublish(e, 'X89', '1.2', { manifest: MANIFEST });
-    e.run('resource', (c) => fleet.confirmIntegration(c, 'VEH-202', { version: '1.2', source: '整车 OTA 回执' }));
+    carRuns(e, 'VEH-202', '1.2');
     const check = Object.values(e.getState().applicabilityChecks).find((c) => c.version === '1.2')!;
     e.run('dcl', (c) => fleet.registerImage(c, { id: 'x89-1.2-sim', vehicleModelId: 'X89', integrationVersion: '1.2', build: 'x89-1.2.0', digest: 'sha256:mock-x89-1-2', simulator: 'SimOne 3' }));
     e.run('integration_admin', (c) => fleet.createSimulation(c, { id: 'SIM-112', workspaceId: 'x89-integration', imageId: 'x89-1.2-sim', env: 'testing', pool: 'Vehicle' }));
+    tspCar(e, 'LSDEMX89000001200', 'X89');
     e.run('resource', (c) => fleet.registerPhysical(c, { id: 'VEH-012', vin: 'LSDEMX89000001200', vehicleModelId: 'X89', env: 'testing', pool: 'Vehicle' }));
-    e.run('resource', (c) => fleet.confirmIntegration(c, 'VEH-012', { version: '1.2', source: 'DIP 上报' }));
+    carRuns(e, 'VEH-012', '1.2');
     e.run('integration_admin', (c) => fleet.addWorkspaceVehicle(c, 'x89-integration', 'VEH-012'));
     const vehicles = ['SIM-112', 'VEH-012'];
     const d = e.run('integration_tester', (c) => ap.dispatchApplicability(c, check.id, { resourceIds: vehicles }));

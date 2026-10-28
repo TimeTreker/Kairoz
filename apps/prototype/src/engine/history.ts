@@ -318,18 +318,27 @@ export interface DistributionRow {
   /** null: the vehicle's software is unknown (or a partial update left it inconsistent). */
   version: string | null;
   vehicles: number;
+  /** Production vehicles TSP says should run the version (they may not have updated yet). */
+  expected: number;
   /** What the vehicles run: a policy set's version, or null for anything else (none, a test configuration). */
   sets: { dclVersion: string | null; vehicles: number }[];
 }
 
 /**
  * How a model's production vehicles are spread over software versions and the sets they run (量产版本
- * 分布): counts only, no VIN, plate or vehicle id; unknown software is a row of its own.
+ * 分布), with how many TSP says should run each version: counts only, no VIN, plate or vehicle id;
+ * unknown software is a row of its own.
  */
 export function productionDistribution(s: State, vehicleModelId: string): DistributionRow[] {
   const rows = new Map<string | null, Map<string | null, number>>();
+  const expected = new Map<string, number>();
   for (const r of Object.values(s.resources)) {
     if (r.vehicleModelId !== vehicleModelId || r.env !== 'production' || r.status === 'RETIRED') continue;
+    const target = r.tsp?.expectedVersion;
+    if (target) {
+      expected.set(target, (expected.get(target) ?? 0) + 1);
+      if (!rows.has(target)) rows.set(target, new Map());
+    }
     const version = r.softwareStatus === 'CONSISTENT' ? r.integrationVersion : null;
     const config = r.appliedConfigId ? s.resolvedConfigs[r.appliedConfigId] : undefined;
     const set = config?.kind === 'RELEASE' ? (s.releases[config.sourceId]?.dclVersion ?? null) : null;
@@ -341,6 +350,7 @@ export function productionDistribution(s: State, vehicleModelId: string): Distri
     .map(([version, sets]) => ({
       version,
       vehicles: [...sets.values()].reduce((a, b) => a + b, 0),
+      expected: version ? (expected.get(version) ?? 0) : 0,
       sets: [...sets.entries()].map(([dclVersion, vehicles]) => ({ dclVersion, vehicles })).sort((a, b) => b.vehicles - a.vehicles),
     }))
     .sort((a, b) => (a.version === null ? 1 : b.version === null ? -1 : compareVersions(a.version, b.version)));

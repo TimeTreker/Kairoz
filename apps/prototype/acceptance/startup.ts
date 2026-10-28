@@ -19,7 +19,7 @@ import { commitSnapshot } from '../src/engine/snapshots.ts';
 import { sendReceipt, tick } from '../src/engine/simulator.ts';
 import type { State } from '../src/engine/types.ts';
 import * as v from '../src/engine/validation.ts';
-import { answerAll, CONTROLS, dispatchApplied, recordPasses, simpleFeature, verifyFeatureOn, plmPublish } from './helpers.ts';
+import { answerAll, carRuns, CONTROLS, dispatchApplied, plmPublish, recordPasses, simpleFeature, tspCar, verifyFeatureOn } from './helpers.ts';
 import { sha, World } from './world.ts';
 import type { SceneSpec } from './world.ts';
 
@@ -38,12 +38,6 @@ const grant = (role: string, workspaces: string[], groupsOrScopes: { groups?: st
 
 const account = (w: World, username: string, displayName: string, grants: ReturnType<typeof grant>[]) =>
   w.as('admin', (c) => createAccount(c, { username, displayName, grants }));
-
-const CONSISTENT_1_0 = [
-  { name: 'ADC', version: '1.0', status: 'PASS' as const },
-  { name: 'BMS', version: '1.0', status: 'PASS' as const },
-  { name: 'VCU', version: '1.0', status: 'PASS' as const },
-];
 
 const can = (w: World, user: string, action: Parameters<typeof authorize>[1], target: Parameters<typeof authorize>[2]) => authorize(w.actor(user).grants, action, target).ok;
 
@@ -212,10 +206,12 @@ export const scenes: Record<string, SceneSpec> = {
   },
   A10: {
     run: (w) => {
+      tspCar(w.engine, 'LSDEMX89000000901', 'X89');
       w.as('resource', (c) => fleet.registerPhysical(c, { id: 'VEH-901', vin: 'LSDEMX89000000901', vehicleModelId: 'X89', env: 'development', pool: 'Chassis', displayName: '制动研发车 901' }));
       w.eq(w.s.resources['VEH-901']!.integrationVersion, null, 'unknown software stays unknown');
       w.eq(w.s.resources['VEH-901']!.appliedConfigId, null, 'registering is neither flashing nor applying');
       w.fails('VIN_TAKEN', () => w.as('resource', (c) => fleet.registerPhysical(c, { id: 'VEH-90X', vin: 'LSDEMX89000000901', vehicleModelId: 'X89', env: 'development', pool: 'Chassis' })));
+      tspCar(w.engine, 'LSDEMX89000000911', 'X89');
       w.fails('ID_TAKEN', () => w.as('resource', (c) => fleet.registerPhysical(c, { id: 'VEH-901', vin: 'LSDEMX89000000911', vehicleModelId: 'X89', env: 'development', pool: 'Chassis' })));
     },
   },
@@ -368,6 +364,7 @@ export const scenes: Record<string, SceneSpec> = {
     run: (w) => {
       w.eq(w.s.workspaces['x89-project']!.sourceWorkspaceIds, ['team-brake', 'team-battery', 'team-power'], 'declared sources');
       // The testing pool is missing: vehicle resources register and assign it.
+      tspCar(w.engine, 'LSDEMX89000000902', 'X89');
       w.as('resource', (c) => fleet.registerPhysical(c, { id: 'VEH-902', vin: 'LSDEMX89000000902', vehicleModelId: 'X89', env: 'testing', pool: 'Vehicle', displayName: '集成测试车 902' }));
       w.as('resource', (c) => fleet.createSimulation(c, { id: 'SIM-902', workspaceId: 'x89-integration', imageId: 'x89-dev-r1', env: 'testing', pool: 'Vehicle', displayName: '集成仿真 902' }));
       w.as('resource', (c) => fleet.addWorkspaceVehicle(c, 'x89-integration', 'VEH-902'));
@@ -386,6 +383,7 @@ export const scenes: Record<string, SceneSpec> = {
         ['power', 'Powertrain', 'SIM-912', 'VEH-912', 'LSDEMX89000000922'],
       ] as const) {
         w.as('workspace_manager', (c) => fleet.createSimulation(c, { id: sim, workspaceId: `team-${team}`, imageId: 'x89-dev-r1', env: 'development', pool }));
+        tspCar(w.engine, vin, 'X89');
         w.as('resource', (c) => fleet.registerPhysical(c, { id: veh, vin, vehicleModelId: 'X89', env: 'development', pool }));
         w.as('workspace_manager', (c) => fleet.addWorkspaceVehicle(c, `team-${team}`, veh));
         const g = w.as('workspace_manager', (c) => fleet.createVehicleGroup(c, { workspaceId: `team-${team}`, groupId: team, name: `${team} 研发车组`, purpose: 'DEV', env: 'development' }));
@@ -472,17 +470,19 @@ export const scenes: Record<string, SceneSpec> = {
   },
   E01: {
     run: (w) => {
-      plmPublish(w.engine, 'X89', '1.0');
+      plmPublish(w.engine, 'X89', '1.0', { modules: [{ name: 'ADC', version: '1.0' }, { name: 'BMS', version: '1.0' }] });
       w.as('resource', (c) => fleet.registerImage(c, { id: 'x89-1.0', vehicleModelId: 'X89', integrationVersion: '1.0', build: 'x89-1.0.0', digest: sha('x89-1.0'), simulator: 'SimOne 3' }));
       for (const [id, vin] of [
         ['VEH-951', 'LSDEMX89000000951'],
         ['VEH-952', 'LSDEMX89000000952'],
       ] as const) {
+        tspCar(w.engine, vin, 'X89', { expectedVersion: '1.0' });
         w.as('resource', (c) => fleet.registerPhysical(c, { id, vin, vehicleModelId: 'X89', env: 'production', pool: 'Vehicle' }));
-        w.as('resource', (c) => fleet.reportControllers(c, id, { target: '1.0', source: 'DIP 上报（Mock）', controllers: CONSISTENT_1_0 }));
+        carRuns(w.engine, id, '1.0');
       }
+      tspCar(w.engine, 'LSDEMX89000000953', 'X89');
       w.as('resource', (c) => fleet.registerPhysical(c, { id: 'VEH-953', vin: 'LSDEMX89000000953', vehicleModelId: 'X89', env: 'production', pool: 'Vehicle' }));
-      w.as('resource', (c) => fleet.reportControllers(c, 'VEH-953', { target: '1.0', source: 'DIP 上报（Mock）', controllers: [{ name: 'ADC', version: '1.0', status: 'PASS' }, { name: 'BMS', version: '0.9', status: 'FAIL' }] }));
+      carRuns(w.engine, 'VEH-953', '1.0', ['BMS']);
       const partial = w.s.resources['VEH-953']!;
       w.eq([partial.softwareStatus, partial.integrationVersion], ['PARTIAL_FAILURE', null], 'a partial update claims no whole-vehicle version');
       w.check(rel.releaseFor(w.s, partial).problem?.includes('partial software update'), 'mixed ECU software is not a production target');
@@ -593,10 +593,10 @@ export const scenes: Record<string, SceneSpec> = {
   F04: {
     needs: ['F01'],
     run: (w) => {
-      w.as('resource', (c) => fleet.reportControllers(c, 'VEH-952', { target: '1.0', source: '外部软件 OTA 回执', controllers: [{ name: 'ADC', version: '1.0', status: 'PASS' }, { name: 'BMS', version: '0.9', status: 'FAIL' }] }));
+      carRuns(w.engine, 'VEH-952', '1.0', ['BMS']);
       w.eq([w.s.resources['VEH-952']!.softwareStatus, w.s.resources['VEH-952']!.integrationVersion], ['PARTIAL_FAILURE', null], 'the real state, not the expected version');
       w.eq(ota.answerConfigRequest(w.s, 'VEH-952').reason, 'BLOCKED', 'production waits until the software is consistent');
-      w.as('resource', (c) => fleet.reportControllers(c, 'VEH-952', { target: '1.0', source: '外部 OTA 完成后的可信上报', controllers: CONSISTENT_1_0 }));
+      carRuns(w.engine, 'VEH-952', '1.0');
       w.eq(rel.releaseFor(w.s, w.s.resources['VEH-952']!).release?.id, w.ref.release, 'consistent again: eligible for DCL 1.0.0');
     },
   },

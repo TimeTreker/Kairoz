@@ -11,7 +11,7 @@ import * as rel from '../src/engine/release.ts';
 import { demoState } from '../src/engine/seed.ts';
 import type { State } from '../src/engine/types.ts';
 import * as v from '../src/engine/validation.ts';
-import { answerAll, verifyFeatureOn } from './helpers.ts';
+import { answerAll, carRuns, tspCar, verifyFeatureOn } from './helpers.ts';
 import type { SceneSpec, World } from './world.ts';
 
 export const start = (): State => demoState();
@@ -55,15 +55,16 @@ export const scenes: Record<string, SceneSpec> = {
   PT01: {
     run: (w) => {
       w.as('integration_admin', (c) => fleet.createSimulation(c, { id: 'SIM-111', workspaceId: 'x89-integration', imageId: 'x89-1.1-sim', env: 'testing', pool: 'Vehicle', displayName: '整车 1.1 仿真' }));
+      tspCar(w.engine, 'LSDEMX89000000033', 'X89');
       w.as('resource', (c) => fleet.registerPhysical(c, { id: 'VEH-033', vin: 'LSDEMX89000000033', vehicleModelId: 'X89', env: 'testing', pool: 'Vehicle', displayName: '整车 1.1 测试车' }));
-      w.as('resource', (c) => fleet.confirmIntegration(c, 'VEH-033', { version: '1.1', source: 'DIP 上报' }));
+      carRuns(w.engine, 'VEH-033', '1.1');
       w.as('integration_admin', (c) => fleet.addWorkspaceVehicle(c, 'x89-integration', 'VEH-033'));
       const plan = preview(w, [feature(w, 'steering_return_rate').id]);
       w.eq([w.s.mergePlans[plan]!.targetReleaseId, w.s.mergePlans[plan]!.patch], [set(w, '1.0.0').id, null], 'an ordinary merge goes onto the mainline');
       const cand = freeze(w, plan, 'X89-C2');
       on11(w, cand);
       w.as('release', (c) => rel.promoteCandidate(c, cand, { dclVersion: '1.1.0', vehicleIntegrationVersions: ['1.1'] }));
-      w.as('resource', (c) => fleet.confirmIntegration(c, 'VEH-202', { version: '1.1', source: '整车 OTA 回执 X89-1.1' }));
+      carRuns(w.engine, 'VEH-202', '1.1');
       w.eq(config.mainlineRelease(w.s, 'X89')?.dclVersion, '1.1.0', 'the mainline is 1.1.0');
       w.eq([rel.setInEffect(w.s, 'X89', '1.0')?.dclVersion, rel.releaseFor(w.s, w.s.resources['VEH-202']!).release?.dclVersion], ['1.0.0', '1.1.0'], 'software 1.0 keeps 1.0.0; VEH-202 on 1.1 resolves to 1.1.0');
       w.eq(rel.patchTargets(w.s, 'X89').map((r) => r.dclVersion), ['1.0.0'], '1.0.0 can be patched');

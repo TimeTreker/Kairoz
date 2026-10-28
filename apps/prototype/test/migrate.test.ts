@@ -248,11 +248,14 @@ describe('saved state migration', () => {
     assert.deepEqual(migrated, current);
   });
 
-  test('a schema 10 save gains device software and an empty change log', () => {
+  test('a schema 10 save gains device software (a car runs what was recorded) and an empty change log', () => {
     const current = JSON.parse(JSON.stringify(demoState()));
     const migrated = migrate(schema10(current))!;
     assert.equal(migrated.schema, STATE_SCHEMA);
-    for (const d of Object.values(migrated.devices)) assert.equal(d.software, null);
+    for (const [id, d] of Object.entries(migrated.devices)) {
+      const r = migrated.resources[id]!;
+      assert.equal(d.software, r.type === 'PHYSICAL' ? r.integrationVersion : null, id);
+    }
     assert.deepEqual(migrated.softwareChanges, {});
     assert.deepEqual(migrated, current);
   });

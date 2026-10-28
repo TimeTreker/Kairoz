@@ -12,6 +12,7 @@ import { demoState } from '../src/engine/seed.ts';
 import { advanceClock, completeVehicleSoftware, reportNow, sendReceipt } from '../src/engine/simulator.ts';
 import * as v from '../src/engine/validation.ts';
 import * as vs from '../src/engine/vehicle-software.ts';
+import { tspCar } from '../acceptance/helpers.ts';
 
 const feature = (w: World, name: string) => Object.values(w.s.features).find((f) => f.name === name)!;
 const groupId = (w: World, name: string) => Object.values(w.s.vehicleGroups).find((g) => g.name === name)!.id;
@@ -80,6 +81,7 @@ describe('borrowing', () => {
 
   test('a car nobody uses needs only vehicle resources; a declined or withdrawn request ends', () => {
     const w = new World(demoState());
+    tspCar(w.engine, 'LSDEM0X8900000090', 'X89');
     w.as('resource', (c) => fleet.registerPhysical(c, { id: 'VEH-090', vin: 'LSDEM0X8900000090', vehicleModelId: 'X89', env: 'development', pool: 'ADC', displayName: '公共试验车' }));
     const id = ask(w, 'VEH-090');
     assert.deepEqual(w.s.loans[id]!.lenders, []);
@@ -101,6 +103,7 @@ describe('borrowing', () => {
     const req = (rid: string, over: Partial<{ vehicleGroupId: string; dueDate: string; purpose: string }> = {}) =>
       w.as('workspace_manager', (c) => ln.requestLoan(c, { workspaceId: 'team-brake', resourceId: rid, vehicleGroupId: brake, dueDate: due(w, 7), purpose: '验证', ...over }));
     w.denied('workspace_manager', (c) => ln.requestLoan(c, { workspaceId: 'team-brake', resourceId: 'VEH-201', vehicleGroupId: brake, dueDate: due(w, 7), purpose: '验证' }));
+    tspCar(w.engine, 'LSDEM0X8900000091', 'X89');
     w.as('resource', (c) => fleet.registerPhysical(c, { id: 'VEH-091', vin: 'LSDEM0X8900000091', vehicleModelId: 'X89', env: 'development', pool: 'ADC', displayName: '待报废车' }));
     w.as('resource', (c) => fleet.setResourceStatus(c, 'VEH-091', { status: 'RETIRED', reason: '报废' }));
     w.fails('LOAN_NOT_LENDABLE', () => req('VEH-091'));
@@ -208,6 +211,7 @@ describe('borrowing', () => {
 
   test('a car the workspace can simply add is not borrowed, and a car it already has is not lent to it', () => {
     const w = new World(demoState());
+    tspCar(w.engine, 'LSDEM0X8900000092', 'X89');
     w.as('resource', (c) => fleet.registerPhysical(c, { id: 'VEH-092', vin: 'LSDEM0X8900000092', vehicleModelId: 'X89', env: 'development', pool: 'Chassis', displayName: '底盘公共车' }));
     w.fails('LOAN_NOT_NEEDED', () => ask(w, 'VEH-092'));
     // Steering uses it; brake asks; steering agrees and lets it go; brake then adds it directly.

@@ -10,6 +10,7 @@ import { openCheckForNewSoftware } from './applicability.ts';
 import type { Ctx } from './engine.ts';
 import { softwareKey } from './fleet.ts';
 import { appliesTo, releasesOf } from './release.ts';
+import { noteReportedSoftware } from './software-change.ts';
 import type { DclModule, DclPart, PlmCatalog, PlmVersion, Release, SoftwareVersion, State } from './types.ts';
 
 /** The set a DCL part carries: the release whose configuration has the part's digest (a digest names one release). */
@@ -100,6 +101,12 @@ export function syncPlm(ctx: Ctx, snapshot: PlmCatalog): number {
       }
     }
     openCheckForNewSoftware(ctx, v.vehicleModelId, v.version);
+    // Vehicles already reporting this version waited for PLM: their latest signed report now counts.
+    for (const c of Object.values(ctx.s.softwareChanges).filter((x) => x.status === 'UNRECORDED' && x.toVersion === v.version)) {
+      const latest = ctx.s.clientReports[c.resourceId]?.latest?.payload;
+      if (ctx.s.resources[c.resourceId]?.vehicleModelId !== v.vehicleModelId || latest?.vehicleIntegrationVersion !== v.version) continue;
+      noteReportedSoftware(ctx, c.resourceId, v.version, latest.configuration?.digest ?? null, latest.domains);
+    }
     recorded += 1;
   }
   ctx.s.plmSync = { revision: snapshot.revision, syncedAt: ctx.now };

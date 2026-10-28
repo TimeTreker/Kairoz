@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
-import { carRuns, plmPublish } from '../acceptance/helpers.ts';
+import { carRuns, plmPublish, tspCar } from '../acceptance/helpers.ts';
 import { World } from '../acceptance/world.ts';
 import * as calls from '../src/engine/calls.ts';
 import * as em from '../src/engine/emergency.ts';
@@ -29,6 +29,7 @@ function released(): { w: World; callId: string; set: string } {
   w.as('dcl', (c) => fleet.registerImage(c, { id: 'x89-1.2-sim', vehicleModelId: 'X89', integrationVersion: '1.2', build: 'x89-1.2.0-rc1', digest: 'sha256:mock-x89-1-2-rc1', simulator: 'SimOne 3' }));
   w.as('integration_admin', (c) => fleet.createSimulation(c, { id: 'SIM-112', workspaceId: 'x89-integration', imageId: 'x89-1.2-sim', env: 'testing', pool: 'Vehicle' }));
   // A testing car runs a pre-release build of the working name and says so.
+  tspCar(w.engine, 'LSDEMX89000003200', 'X89');
   w.as('resource', (c) => fleet.registerPhysical(c, { id: 'VEH-032', vin: 'LSDEMX89000003200', vehicleModelId: 'X89', env: 'testing', pool: 'Vehicle' }));
   carRuns(w.engine, 'VEH-032', '1.2');
   w.as('integration_admin', (c) => fleet.addWorkspaceVehicle(c, 'x89-integration', 'VEH-032'));
@@ -87,7 +88,6 @@ describe('working names and the DCL part', () => {
     );
     assert.equal(Object.values(w.s.applicabilityChecks).filter((c) => c.version === '1.2.0').length, 0);
     // The working name is not chosen any more.
-    w.fails('WORKING_NAME_LINKED', () => w.as('resource', (c) => fleet.confirmIntegration(c, 'VEH-031', { version: '1.2', source: '预发布' })));
     w.fails('WORKING_NAME_LINKED', () => w.as('business', (c) => vs.requestVehicleSoftware(c, 'team-brake', 'VEH-001', { version: '1.2', reason: '预发布验证' })));
     w.fails('WORKING_NAME_LINKED', () => deliver(w, '2.5.0'));
   });

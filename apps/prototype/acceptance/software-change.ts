@@ -13,7 +13,7 @@ import { reportNow, simulateSoftwareOta } from '../src/engine/simulator.ts';
 import * as sc from '../src/engine/software-change.ts';
 import type { State } from '../src/engine/types.ts';
 import * as v from '../src/engine/validation.ts';
-import { answerAll, plmPublish } from './helpers.ts';
+import { answerAll, carRuns, plmPublish } from './helpers.ts';
 import type { SceneSpec, World } from './world.ts';
 
 export const start = (): State => demoState();
@@ -43,7 +43,7 @@ export const scenes: Record<string, SceneSpec> = {
       const change = w.as('integration_admin', (c) => sw.switchImage(c, 'SIM-101', 'x89-1.1-sim'));
       w.sys((c) => sw.answerImageChange(c, change, 'APPLIED'));
       w.as('integration_admin', (c) => fleet.startSimulation(c, 'SIM-101'));
-      w.as('resource', (c) => fleet.confirmIntegration(c, 'VEH-031', { version: '1.1', source: 'DIP 上报' }));
+      carRuns(w.engine, 'VEH-031', '1.1');
       answerAll(w, w.as('integration_tester', (c) => ap.dispatchApplicability(c, check, { vehicleGroupIds: [group(w, 'X89 集成测试车组')] })));
       for (const r of ['SIM-101', 'VEH-031']) w.as('integration_tester', (c) => ap.recordApplicabilityTest(c, check, { resourceId: r, result: 'PASS', summary: '1.1 采集回归通过' }));
       w.as('integration_tester', (c) => ap.verifyApplicability(c, check));
@@ -71,13 +71,12 @@ export const scenes: Record<string, SceneSpec> = {
     run: (w) => {
       ota(w, 'VEH-001', '1.3');
       const u = latest(w, 'VEH-001');
-      w.eq([u.status, w.s.resources['VEH-001']!.integrationVersion], ['UNRECORDED', '1.1'], 'an unknown version waits; the record stays');
-      w.eq(sc.unrecordedReports(w.s, w.actor('resource')).map((x) => x.id), [u.id], 'vehicle resources get the to-do');
+      w.eq([u.status, w.s.resources['VEH-001']!.integrationVersion], ['UNRECORDED', '1.1'], 'a version PLM has not published waits; the record stays');
+      w.eq(sc.unrecordedReports(w.s, w.actor('resource')).map((x) => x.id), [u.id], 'vehicle resources see the report wait for PLM');
       const base = w.s.softwareVersions['X89::1.0']!.manifest!;
       const manifest = { signals: base.signals, sources: [...base.sources.filter((s) => !(s.unit === 'ADC' && s.directory === '/var/log')), { unit: 'ADC', directory: '/var/log/chassis' }] };
       plmPublish(w.engine, 'X89', '1.3', { manifest });
-      w.as('resource', (c) => fleet.confirmIntegration(c, 'VEH-001', { version: '1.3', source: '客户端上报' }));
-      w.eq(w.s.softwareChanges[u.id]!.status, 'RESOLVED', 'the report is resolved');
+      w.eq([w.s.softwareChanges[u.id]!.status, w.s.resources['VEH-001']!.integrationVersion], ['RESOLVED', '1.3'], 'once PLM publishes 1.3, the vehicle’s report counts');
       const a = assess(w, 'VEH-001');
       w.eq(a.outcome, 'NO_BASE', 'no policy set applies to 1.3');
       w.eq(a.files.map((f) => [f.name, f.status]), [['制动监测日志', 'SOURCE_MISSING']], 'level 1: the log directory is gone');

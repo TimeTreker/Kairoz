@@ -13,7 +13,7 @@ import * as rel from '../src/engine/release.ts';
 import { demoState } from '../src/engine/seed.ts';
 import { applyNow, reportNow, sendReceipt, setAgent, simulateSoftwareOta } from '../src/engine/simulator.ts';
 import * as v from '../src/engine/validation.ts';
-import { carRuns, plmPublish } from '../acceptance/helpers.ts';
+import { carRuns, plmPublish, tspCar } from '../acceptance/helpers.ts';
 
 function fails(fn: () => unknown, code: string): DomainError {
   try {
@@ -49,8 +49,9 @@ function released12(): Engine {
   e.run('cdc_integrator', (c) => calls.submitDomain(c, callId, 'CDC', {}));
   e.run('dcl', (c) => fleet.registerImage(c, { id: 'x89-1.2-sim', vehicleModelId: 'X89', integrationVersion: '1.2', build: 'x89-1.2.0-rc1', digest: 'sha256:mock-x89-1-2-rc1', simulator: 'SimOne 3' }));
   e.run('integration_admin', (c) => fleet.createSimulation(c, { id: 'SIM-112', workspaceId: 'x89-integration', imageId: 'x89-1.2-sim', env: 'testing', pool: 'Vehicle' }));
+  tspCar(e, 'LSDEMX89000003200', 'X89');
   e.run('resource', (c) => fleet.registerPhysical(c, { id: 'VEH-032', vin: 'LSDEMX89000003200', vehicleModelId: 'X89', env: 'testing', pool: 'Vehicle' }));
-  e.run('resource', (c) => fleet.confirmIntegration(c, 'VEH-032', { version: '1.2', source: '1.2 预发布刷写记录' }));
+  carRuns(e, 'VEH-032', '1.2');
   e.run('integration_admin', (c) => fleet.addWorkspaceVehicle(c, 'x89-integration', 'VEH-032'));
   const plan = e.run('integrator', (c) => calls.previewCall(c, callId));
   e.run('dcl', (c) => integ.confirmProcessing(c, plan, { note: '' }));
@@ -77,8 +78,8 @@ describe('the DCL part in the PLM version (factory configuration)', () => {
     const set101 = emergencySet(e);
     const d = e.run('release', (c) => ota.createOta(c, { releaseId: set101, vehicleGroupIds: [productionGroup(e)], firstWave: 'ALL' }));
     for (const r of ['VEH-201', 'VEH-202']) e.run(null, (c) => sendReceipt(c, d, r, 'APPLIED'));
-    e.run('resource', (c) => fleet.confirmIntegration(c, 'VEH-201', { version: '1.0', source: 'DIP 例行上报' }));
-    e.run('resource', (c) => fleet.reportControllers(c, 'VEH-201', { target: '1.0', source: 'DIP', controllers: [{ name: 'ADC', version: '1.0', status: 'PASS' }] }));
+    carRuns(e, 'VEH-201', '1.0');
+    carRuns(e, 'VEH-201', '1.0');
     assert.equal(runs(e, 'VEH-201'), 'DCL 1.0.1');
   });
 
@@ -96,11 +97,17 @@ describe('the DCL part in the PLM version (factory configuration)', () => {
     assert.ok(!notes.some((n) => n.kind === 'PLM_PART_UNKNOWN'));
   });
 
-  test('a manual confirmation never assumes the factory configuration: only the car’s reported digest counts', () => {
+  test('the factory configuration counts only when the car reports its digest', () => {
     const e = published120();
     const before = e.getState().resources['VEH-201']!.appliedConfigId;
-    e.run('resource', (c) => fleet.confirmIntegration(c, 'VEH-201', { version: '1.2.0', source: '整车 OTA 回执' }));
-    assert.equal(e.getState().resources['VEH-201']!.appliedConfigId, before);
+    // The car runs 1.2.0 but its DCL part did not load: it reports the configuration it had.
+    e.run(null, (c) => {
+      simulateSoftwareOta(c, 'VEH-201', '1.2.0');
+      c.s.devices['VEH-201']!.config = null;
+    });
+    e.run(null, (c) => reportNow(c, 'VEH-201'));
+    const r = e.getState().resources['VEH-201']!;
+    assert.deepEqual([r.integrationVersion, r.appliedConfigId], ['1.2.0', before]);
   });
 
   test('events of a vehicle running its factory configuration belong to the workspace of its vehicle group', () => {

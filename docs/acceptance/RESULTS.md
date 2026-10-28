@@ -1,10 +1,10 @@
 # 验收结果（引擎层逐幕回放）
 
-运行时间：2026-10-28T02:21:48.781Z。由 `npm run acceptance` 生成；每次重新执行，不沿用历史结果。
+运行时间：2026-10-28T02:40:41.250Z。由 `npm run acceptance` 生成；每次重新执行，不沿用历史结果。
 
 状态：PASS 通过；FAIL 失败；GAP 设计要求尚未实现；BLOCKED 前置幕未通过；NOT_APPLICABLE 浏览器原型不适用（如服务端部署）。
 
-合计：PASS 226 · FAIL 0 · GAP 0 · BLOCKED 0 · NOT_APPLICABLE 3 · NOT_WRITTEN 0
+合计：PASS 231 · FAIL 0 · GAP 0 · BLOCKED 0 · NOT_APPLICABLE 3 · NOT_WRITTEN 0
 
 ## 从零启动 · 角色协作
 
@@ -60,16 +60,16 @@
 | E02 建立组织、车型、业务组和工作区 | admin / 平台运维 | PASS |  |
 | E03 创建人员账号并关联九类角色 | admin / 平台运维 | PASS | 适配：Kairoz 要求修改共享处理目录的 DCL 授权覆盖全部工作区与分组（`*`）；本安装中“相关组及两个工作区”即全部，故授予 `*`。 |
 | E04 发布普通文件的默认车端和云端处理 | dcl / DCL 工程 | PASS |  |
-| E05 登记无整车版本研发镜像和团队资源 | dcl → resource → workspace_manager | PASS | 适配：剧本中的模拟 VIN “LSDEMOX89000000901” 是 18 位且含字母 O，不是合法 VIN；平台拒绝后改用合法的 17 位模拟 VIN。车辆组设为“需审批”，对应 E06/E07 的团队测试申请流程。 |
+| E05 登记无整车版本研发镜像和团队资源 | dcl → resource → workspace_manager | PASS | 适配：剧本中的模拟 VIN “LSDEMOX89000000901” 是 18 位且含字母 O，不是合法 VIN；平台拒绝后改用合法的 17 位模拟 VIN，并先由模拟 TSP 收录这辆车。车辆组设为“需审批”，对应 E06/E07 的团队测试申请流程。 |
 | E06 新增业务文件与事件策略并提交 | business / 业务研发 | PASS |  |
 | E07 审批组下发并应用固定配置 | workspace_manager → brake_tester | PASS |  |
 | E08 先仿真，再实车模型验证业务提交 | brake_tester / 业务测试 | PASS |  |
 | E09 收集变更、冲突检查与合并 | integrator / 配置集成 | PASS |  |
 | E10 确认处理集合并冻结首个候选 | dcl → integrator | PASS |  |
-| E11 准备并验证独立集成资源 | resource → integration_tester | PASS | 适配：剧本 VIN “LSDEMOX89000000902” 同 E05 不合规，改用合法的 17 位模拟 VIN；车辆登记后还需由车辆资源“添加车辆”加入 x89-integration。 |
+| E11 准备并验证独立集成资源 | resource → integration_tester | PASS | 适配：剧本 VIN “LSDEMOX89000000902” 同 E05 不合规，改用合法的 17 位模拟 VIN（先由模拟 TSP 收录）；车辆登记后还需由车辆资源“添加车辆”加入 x89-integration。 |
 | E12 登记真实来源的软件版本并正式发布DCL | resource → release | PASS |  |
 | E13 导出首个配置发布材料 | release / 配置发布 | PASS | 适配：签名配置包（ZIP、Ed25519 服务端签名）需要服务端；剧本规定离线页不伪造服务端签名，原型提供“导出配置集合”JSON。 |
-| E14 准备量产目标与首版恢复方案 | resource / 车辆资源 | PASS | 适配：剧本 VIN “LSDEMOX8900000090x” 同 E05 不合规，改用合法模拟 VIN；域控版本上报（reportControllerVersions）在车辆台账“域控”中登记。 |
+| E14 准备量产目标与首版恢复方案 | resource / 车辆资源 | PASS | 适配：剧本 VIN “LSDEMOX8900000090x” 同 E05 不合规，改用合法模拟 VIN；剧本的域控版本上报（reportControllerVersions）由车辆模拟器刷写 1.0 后车端签名上报代替，平台不接受人工录入。 |
 | E15 创建灰度并接收签名Mock回执 | release / 配置发布 | PASS |  |
 | E16 扩量、失败暂停、新attempt重试 | release / 配置发布 | PASS |  |
 | E17 验证数据闭环而不只验证配置安装 | dcl → 业务需求人 | PASS | 适配：业务节点、Parser 与业务需求人的数据确认未接入；以模拟器的合成事件验证配置快照、分片上传、产物与回调，真实环节记为未执行。 |
@@ -315,6 +315,16 @@
 | MM07 X90 量产车的灰度、失败重试与扩量 | resource；x90_admin；x90_release | PASS |  |
 | MM08 每个车型的发布记录只讲自己的事 | x90_release | PASS |  |
 | N01 跨车型操作一律拒绝 | admin；resource；x90_admin；x90_tester | PASS |  |
+
+## 外部系统 · PLM 与 TSP
+
+| 幕 | 执行人 | 状态 | 说明 |
+|---|---|---|---|
+| EX01 PLM 发布 X89 1.2，平台同步 | PLM（模拟）；release / 孙立；business | PASS |  |
+| EX02 PLM 版本带了平台不认识的 DCL 件 | PLM（模拟）；release / 孙立；dcl / 林书涵 | PASS |  |
+| EX03 车辆资源从 TSP 登记车辆 | resource / 刘子衡；车辆模拟器 | PASS |  |
+| EX04 TSP 应为版本与车端实为版本 | TSP（模拟）；车辆模拟器；resource；release | PASS |  |
+| N01 反向：车型不符、重复登记、越权、PLM 版本号重复 | resource；business；PLM（模拟） | PASS |  |
 
 ## 反向用例 T-N01–T-N24
 

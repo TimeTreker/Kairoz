@@ -543,15 +543,20 @@ export interface Resource {
   licensePlate: string | null;
   displayName: string;
   status: 'AVAILABLE' | 'MAINTENANCE' | 'RETIRED';
-  /** Actual whole-vehicle software. NULL means not yet known; never inferred. */
+  /** Actual whole-vehicle software, from the vehicle's own signed report. NULL means not known; never inferred. */
   integrationVersion: string | null;
   integrationSource: string | null;
+  /**
+   * What TSP holds for a physical vehicle (its T-Box, hardware configuration and the version it should
+   * run), as last synced; null for a simulation or a vehicle registered before TSP was connected.
+   */
+  tsp: { tboxId: string; hardware: HardwareItem[]; expectedVersion: string | null; syncedAt: string } | null;
   /**
    * CONSISTENT: every domain controller runs the whole-vehicle version. PARTIAL_FAILURE: some
    * controller updates failed, so no whole-vehicle version is claimed and production is blocked.
    */
   softwareStatus: 'UNKNOWN' | 'CONSISTENT' | 'PARTIAL_FAILURE';
-  /** Last trusted per-controller report (physical vehicles). */
+  /** The controllers of the vehicle's last report when an update left some failed (physical vehicles). */
   controllers: ControllerState[];
   /** Simulation instances run or stop; physical vehicles are null. */
   instance: 'RUNNING' | 'STOPPED' | null;
@@ -1212,10 +1217,12 @@ export interface DeviceState {
   sequence: number;
   clientVersion: string;
   /**
-   * The whole-vehicle software the simulated physical vehicle actually runs, after a simulated
-   * software OTA; null while it runs what the platform recorded.
+   * The whole-vehicle software the simulated physical vehicle actually runs (from the factory: the
+   * version TSP holds for it); null when the vehicle does not know it.
    */
   software: string | null;
+  /** Each controller's software after the last simulated software OTA (from the version's PLM BOM); empty before one. */
+  controllers: ControllerState[];
   /** Reports waiting for a connection; removed only once accepted. */
   outbox: { signed: SignedReport; lastError: string | null }[];
   /** The last report the platform accepted, kept to resend. */
@@ -1386,6 +1393,34 @@ export interface DirectoryPerson {
   status: 'ACTIVE' | 'LEFT';
 }
 
+/** One item of a vehicle's hardware configuration, as TSP holds it (e.g. 激光雷达: 有). */
+export interface HardwareItem {
+  item: string;
+  value: string;
+}
+
+/**
+ * The simulated TSP (prototype only): the company's record of each car — its identity (VIN, UVID,
+ * T-Box), model, plate, hardware configuration and the whole-vehicle version it should run (what
+ * the vehicle OTA program last put it on). The platform reads it when vehicle resources register a
+ * car, and syncs it; the car's own report says what it actually runs.
+ */
+export interface TspCatalog {
+  revision: number;
+  vehicles: TspVehicle[];
+}
+
+export interface TspVehicle {
+  vin: string;
+  uvid: string;
+  tboxId: string;
+  vehicleModelId: string;
+  licensePlate: string | null;
+  hardware: HardwareItem[];
+  /** The version the car should run; null when TSP does not know (e.g. a development car on daily builds). */
+  expectedVersion: string | null;
+}
+
 /**
  * The simulated PLM (prototype only): the company's record of published whole-vehicle integration
  * versions, each mapping every module's version, the DCL part included, to one version number.
@@ -1501,6 +1536,10 @@ export interface State {
   plm: PlmCatalog;
   /** The PLM revision last applied, and when. */
   plmSync: { revision: number; syncedAt: string | null };
+  /** The simulated TSP (the simulator's, not the platform's). */
+  tsp: TspCatalog;
+  /** The TSP revision last applied, and when. */
+  tspSync: { revision: number; syncedAt: string | null };
   personalCaptures: Record<string, PersonalCapture>;
   personalTests: Record<string, PersonalTest>;
   softwareBuilds: Record<string, SoftwareBuild>;
@@ -1579,6 +1618,8 @@ export function emptyState(): State {
     directorySync: { revision: 0, syncedAt: null, log: [] },
     plm: { revision: 0, versions: [] },
     plmSync: { revision: 0, syncedAt: null },
+    tsp: { revision: 0, vehicles: [] },
+    tspSync: { revision: 0, syncedAt: null },
     personalCaptures: {},
     personalTests: {},
     softwareBuilds: {},

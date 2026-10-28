@@ -122,7 +122,7 @@ export function acceptClientReport(ctx: Ctx, signed: SignedReport): 'ACCEPTED' |
     // The newest signed report is what the vehicle actually runs: a software change is noted. The
     // vehicle is on and connected, so the cloud pushes what was dispatched to it, and a vehicle
     // waiting to follow its group gets the group's publication if it fits.
-    noteReportedSoftware(ctx, p.resourceId, p.vehicleIntegrationVersion, p.configuration?.digest ?? null);
+    noteReportedSoftware(ctx, p.resourceId, p.vehicleIntegrationVersion, p.configuration?.digest ?? null, p.domains);
     pushPending(ctx, p.resourceId);
     followGroup(ctx, p.resourceId);
   }
