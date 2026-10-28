@@ -230,6 +230,18 @@ describe('round 5: review of rounds 1–4', () => {
     assert.equal(w.s, before, 'nothing written');
   });
 
+  test('a report a vehicle cannot deliver waits in its queue without the queue being rewritten every step', () => {
+    const w = new World(demoState());
+    // A simulation created without a device key reports, and is refused.
+    w.as('integration_admin', (c) => fleet.createSimulation(c, { id: 'SIM-777', workspaceId: 'x89-integration', imageId: 'x89-1.0-sim', env: 'testing', pool: 'Vehicle' }));
+    w.sys((c) => tick(c));
+    assert.deepEqual(w.s.devices['SIM-777']!.outbox.map((x) => x.lastError), ['DEVICE_NOT_REGISTERED']);
+    w.sys((c) => tick(c));
+    const before = w.s;
+    w.sys((c) => tick(c));
+    assert.equal(w.s, before);
+  });
+
   test('a call moved to another number while a car runs its old working name lets PLM’s version through', () => {
     const { w } = released();
     deliver(w);

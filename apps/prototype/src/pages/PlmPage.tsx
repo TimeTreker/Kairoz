@@ -89,13 +89,10 @@ export function PlmPage() {
         title={L('PLM（模拟）', 'PLM (simulated)')}
         extra={
           <Space wrap>
-            <Tag color={pending ? 'gold' : held.length ? 'orange' : 'green'}>
-              {pending
-                ? L(`待同步：修订 ${state.plm.revision}，平台已同步 ${state.plmSync.revision}`, `To sync: revision ${state.plm.revision}, platform synced ${state.plmSync.revision}`)
-                : held.length
-                  ? L(`平台已同步修订 ${state.plm.revision}，${held.length} 个版本因版本号冲突未同步`, `Platform synced revision ${state.plm.revision}; ${held.length} version(s) held back by a number clash`)
-                  : L(`平台已同步修订 ${state.plm.revision}`, `Platform synced revision ${state.plm.revision}`)}
+            <Tag color={pending ? 'gold' : 'green'}>
+              {pending ? L(`待同步：修订 ${state.plm.revision}，平台已同步 ${state.plmSync.revision}`, `To sync: revision ${state.plm.revision}, platform synced ${state.plmSync.revision}`) : L(`平台已同步修订 ${state.plm.revision}`, `Platform synced revision ${state.plm.revision}`)}
             </Tag>
+            {held.length > 0 && <Tag color="orange">{L(`${held.length} 个版本因版本号冲突未同步`, `${held.length} held back by a number clash`)}</Tag>}
             <Button disabled={!pending && !retry} onClick={() => system((c) => syncPlmIfChanged(c), L('已同步到平台', 'Synced to the platform'))}>
               {L('同步到平台', 'Sync to platform')}
             </Button>
