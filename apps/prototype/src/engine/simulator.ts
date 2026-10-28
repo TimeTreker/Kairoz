@@ -329,6 +329,8 @@ function drain(ctx: Ctx, device: Draft<DeviceState>): { sent: number; waiting: n
     if (refused) remaining.push({ signed: item.signed, lastError: refused });
     else sent += 1;
   }
+  // Nothing went out and every refusal is the one already noted: the queue stays as it is, so an idle step changes nothing.
+  if (sent === 0 && remaining.every((x, i) => x.lastError === device.outbox[i]!.lastError)) return { sent, waiting: remaining.length };
   device.outbox = remaining;
   return { sent, waiting: remaining.length };
 }

@@ -55,10 +55,15 @@ export function syncPlm(ctx: Ctx, snapshot: PlmCatalog): number {
   const before = ctx.s.plmSync.conflicts ?? [];
   const conflicts: PlmConflict[] = [];
   const missingParts = ctx.s.plmSync.missingParts ?? [];
+  const missingBefore = missingParts.length;
   for (const v of snapshot.versions) {
     const key = softwareKey(v.vehicleModelId, v.version);
-    const existing = ctx.s.softwareVersions[key];
-    if (existing?.status === 'RECORDED' || !ctx.s.vehicleModels[v.vehicleModelId]) continue;
+    const raw = ctx.s.softwareVersions[key];
+    if (raw?.status === 'RECORDED' || !ctx.s.vehicleModels[v.vehicleModelId]) continue;
+    // A planned record its call left behind when it moved to another number (a car still runs it)
+    // is no working name any more: PLM's version simply takes its place.
+    const left = !!raw && raw.status === 'PLANNED' && !raw.linkedTo && !!raw.callId && ctx.s.integrationCalls[raw.callId]?.targetVersion !== raw.version;
+    const existing = left ? undefined : raw;
     const release = v.dclPart ? releaseOfDigest(ctx.s, v.vehicleModelId, v.dclPart.digest) : null;
     const module = release ? moduleFor(ctx.s, release, v.dclPart!.digest) : null;
     const part = v.dclPart ? partFor(ctx.s, v.dclPart) : null;
@@ -74,8 +79,9 @@ export function syncPlm(ctx: Ctx, snapshot: PlmCatalog): number {
     if (existing) {
       // PLM kept the working name as its number but left out the part DCL delivered for it: the
       // version is recorded without a factory configuration, and the delivery stays on record.
+      // (A part the platform recognises, even an older delivery, is the version's factory configuration.)
       const delivered = existing.dclPart?.deliveredBy ? existing.dclPart : null;
-      if (delivered && delivered.digest !== part?.digest) missingParts.push({ vehicleModelId: v.vehicleModelId, version: v.version, part: { ...delivered }, at: ctx.now });
+      if (delivered && !release) missingParts.push({ vehicleModelId: v.vehicleModelId, version: v.version, part: { ...delivered }, at: ctx.now });
       // PLM kept the working name as its number: the same record becomes the published version.
       existing.status = 'RECORDED';
       existing.source = 'PLM';
@@ -86,11 +92,12 @@ export function syncPlm(ctx: Ctx, snapshot: PlmCatalog): number {
       existing.dclPart = part;
     } else {
       const w = owner;
+      const manifest = (w ?? raw)?.manifest;
       ctx.s.softwareVersions[key] = {
         vehicleModelId: v.vehicleModelId,
         version: v.version,
         source: 'PLM',
-        manifest: w?.manifest ? { signals: [...w.manifest.signals], sources: w.manifest.sources.map((x) => ({ ...x })) } : null,
+        manifest: manifest ? { signals: [...manifest.signals], sources: manifest.sources.map((x) => ({ ...x })) } : null,
         status: 'RECORDED',
         callId: w?.callId ?? null,
         dclModule: module,
@@ -136,7 +143,9 @@ export function syncPlm(ctx: Ctx, snapshot: PlmCatalog): number {
     }
     recorded += 1;
   }
-  ctx.s.plmSync = { revision: snapshot.revision, syncedAt: ctx.now, conflicts, missingParts };
+  // A retry that settled nothing changes nothing, so an idle simulator step does not rewrite the state.
+  const unchanged = snapshot.revision === ctx.s.plmSync.revision && recorded === 0 && missingParts.length === missingBefore && JSON.stringify(conflicts) === JSON.stringify(before);
+  if (!unchanged) ctx.s.plmSync = { revision: snapshot.revision, syncedAt: ctx.now, conflicts, missingParts };
   return recorded;
 }
 

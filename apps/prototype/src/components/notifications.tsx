@@ -193,8 +193,11 @@ export function useNotificationText() {
           LINKED: L(`TSP 记录的应为版本是工作名，PLM 已把它发布为 ${linked}：请让 TSP 或整车 OTA 改用 ${linked}。`, `The version TSP holds is a working name PLM published as ${linked}: have TSP or the vehicle OTA program use ${linked}.`),
           UNKNOWN: L('PLM 没有这个版本：请与 TSP 或整车 OTA 核对版本号；PLM 发布后再开启适用性确认。', 'PLM has no such version: check the number with TSP or the vehicle OTA program, and open an applicability check once PLM publishes it.'),
         };
+        const workingName = why === 'PLANNED' || why === 'LINKED';
         return {
-          title: L(`${count} 辆量产车将升到 ${s}，它还没有适用的策略集`, `${count} production vehicle(s) are to move to ${s}, which no policy set applies to yet`),
+          title: workingName
+            ? L(`${count} 辆量产车将升到工作名 ${s}`, `${count} production vehicle(s) are to move to working name ${s}`)
+            : L(`${count} 辆量产车将升到 ${s}，它还没有适用的策略集`, `${count} production vehicle(s) are to move to ${s}, which no policy set applies to yet`),
           body: bodies[why ?? ''] ?? bodies.CHECK!,
         };
       }

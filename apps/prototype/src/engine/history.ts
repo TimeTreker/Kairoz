@@ -238,7 +238,8 @@ export function versionHistory(s: State, vehicleModelId: string, version: string
   drafts.push(...stopDrafts(s, touched));
   drafts.push(...rolloutDrafts(s, (id) => s.releases[id]?.vehicleModelId === vehicleModelId, (_rid, software) => software === version));
   for (const c of Object.values(s.softwareChanges)) {
-    if (c.status === 'UNRECORDED' || s.resources[c.resourceId]?.vehicleModelId !== vehicleModelId) continue;
+    // Only changes the platform took: a report that waited for PLM and was resolved left its record alone.
+    if (c.status !== 'APPLIED' || s.resources[c.resourceId]?.vehicleModelId !== vehicleModelId) continue;
     // A vehicle flashed with a bundled DCL module started on its set with the software.
     const bundled = c.configId ? s.resolvedConfigs[c.configId] : undefined;
     const releaseId = bundled?.kind === 'RELEASE' ? bundled.sourceId : null;

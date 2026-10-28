@@ -364,8 +364,13 @@ export function notificationsFor(s: State, actor: Actor, workspaceId: string): N
       const coming = new Map<string, number>();
       for (const r of Object.values(s.resources)) {
         const target = r.tsp?.expectedVersion;
+        // The car's own report counts: one that already reports the version is there (or waits for PLM).
         if (r.vehicleModelId !== ws.vehicleModelId || r.env !== 'production' || r.status === 'RETIRED' || !target || target === r.integrationVersion) continue;
-        if (!setInEffect(s, r.vehicleModelId, target)) coming.set(target, (coming.get(target) ?? 0) + 1);
+        const reported = reportedSoftware(s, r);
+        if (reported && !reported.partial && reported.version === target) continue;
+        // A working name is never production software, whatever set its call released.
+        const planned = s.softwareVersions[softwareKey(r.vehicleModelId, target)]?.status === 'PLANNED';
+        if (planned || !setInEffect(s, r.vehicleModelId, target)) coming.set(target, (coming.get(target) ?? 0) + 1);
       }
       for (const [version, count] of coming) {
         // What release can do about it: a check when PLM published the version; otherwise TSP's number needs a look.

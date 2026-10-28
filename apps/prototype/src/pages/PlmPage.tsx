@@ -30,6 +30,9 @@ export function PlmPage() {
   const errorText = useErrorText();
   const [form, setForm] = useState<Publishing | null>(null);
   const pending = state.plm.revision !== state.plmSync.revision;
+  // Versions the platform held back over a number clash; those waiting on another name's part are tried again by a sync.
+  const held = state.plmSync.conflicts ?? [];
+  const retry = held.some((c) => c.kind === 'OTHER_NAME');
   const models = Object.keys(state.vehicleModels).sort();
 
   const system = <R,>(op: (c: Ctx) => R, ok?: string) => {
@@ -86,10 +89,14 @@ export function PlmPage() {
         title={L('PLM（模拟）', 'PLM (simulated)')}
         extra={
           <Space wrap>
-            <Tag color={pending ? 'gold' : 'green'}>
-              {pending ? L(`待同步：修订 ${state.plm.revision}，平台已同步 ${state.plmSync.revision}`, `To sync: revision ${state.plm.revision}, platform synced ${state.plmSync.revision}`) : L(`平台已同步修订 ${state.plm.revision}`, `Platform synced revision ${state.plm.revision}`)}
+            <Tag color={pending ? 'gold' : held.length ? 'orange' : 'green'}>
+              {pending
+                ? L(`待同步：修订 ${state.plm.revision}，平台已同步 ${state.plmSync.revision}`, `To sync: revision ${state.plm.revision}, platform synced ${state.plmSync.revision}`)
+                : held.length
+                  ? L(`平台已同步修订 ${state.plm.revision}，${held.length} 个版本因版本号冲突未同步`, `Platform synced revision ${state.plm.revision}; ${held.length} version(s) held back by a number clash`)
+                  : L(`平台已同步修订 ${state.plm.revision}`, `Platform synced revision ${state.plm.revision}`)}
             </Tag>
-            <Button disabled={!pending} onClick={() => system((c) => syncPlmIfChanged(c), L('已同步到平台', 'Synced to the platform'))}>
+            <Button disabled={!pending && !retry} onClick={() => system((c) => syncPlmIfChanged(c), L('已同步到平台', 'Synced to the platform'))}>
               {L('同步到平台', 'Sync to platform')}
             </Button>
             <Button type="primary" icon={<PlusOutlined />} disabled={!models.length} onClick={() => start(models[0]!)}>

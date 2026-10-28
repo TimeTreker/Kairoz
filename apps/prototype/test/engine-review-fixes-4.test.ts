@@ -15,8 +15,8 @@ import { publishPlmVersion, syncPlmIfChanged } from '../src/engine/plm.ts';
 import { deliveredPartOutdated, workingNameState } from '../src/engine/plm-sync.ts';
 import * as rel from '../src/engine/release.ts';
 import { demoState } from '../src/engine/seed.ts';
-import { advanceClockHours, devicePublicKey, provisionDevice, reportNow, sendReceipt } from '../src/engine/simulator.ts';
-import { addTspVehicle } from '../src/engine/tsp.ts';
+import { advanceClockHours, devicePublicKey, provisionDevice, reportNow, sendReceipt, tick } from '../src/engine/simulator.ts';
+import { addTspVehicle, syncTspIfChanged, updateTspVehicle } from '../src/engine/tsp.ts';
 import * as v from '../src/engine/validation.ts';
 
 const fid = (w: World, name: string) => Object.values(w.s.features).find((f) => f.name === name)!.id;
@@ -199,5 +199,72 @@ describe('review 4: vehicles', () => {
     const m = new World(s);
     m.sys((c) => reportNow(c, 'VEH-202'));
     assert.equal(m.s.resources['VEH-202']!.softwareStatus, 'PARTIAL_FAILURE');
+  });
+});
+
+describe('round 5: review of rounds 1–4', () => {
+  test('a report that waited for PLM and was left behind is no arrival in the history', () => {
+    const w = new World(demoState());
+    carRuns(w.engine, 'VEH-031', '1.3');
+    carRuns(w.engine, 'VEH-031', '1.0');
+    plmPublish(w.engine, 'X89', '1.3');
+    const arrivals = (version: string) => versionHistory(w.s, 'X89', version).filter((e) => e.kind === 'VEHICLE_ARRIVED' && e.resourceIds?.includes('VEH-031'));
+    assert.equal(arrivals('1.3').length, 0, 'VEH-031 never ran 1.3 on the platform');
+    // A car that waited and then counted arrives once.
+    carRuns(w.engine, 'VEH-003', '1.4');
+    plmPublish(w.engine, 'X89', '1.4');
+    assert.equal(versionHistory(w.s, 'X89', '1.4').filter((e) => e.kind === 'VEHICLE_ARRIVED').length, 1);
+  });
+
+  test('a conflict that cannot settle leaves idle simulator steps without a change', () => {
+    const { w } = released();
+    deliver(w);
+    plmPublish(w.engine, 'X89', '1.2.0', { partOf: '1.2' });
+    w.sys((c) => publishPlmVersion(c, { vehicleModelId: 'X89', version: '1.2', dclPart: null }));
+    w.sys((c) => syncPlmIfChanged(c));
+    assert.deepEqual(w.s.plmSync.conflicts.map((c) => c.kind), ['LINKED']);
+    w.sys((c) => tick(c));
+    const before = w.s;
+    w.sys((c) => tick(c));
+    w.sys((c) => tick(c));
+    assert.equal(w.s, before, 'nothing written');
+  });
+
+  test('a call moved to another number while a car runs its old working name lets PLM’s version through', () => {
+    const { w } = released();
+    deliver(w);
+    const call13 = w.as('integration_admin', (c) => calls.openCall(c, { workspaceId: 'x89-project', targetVersion: '1.3', dueDate: null }));
+    carRuns(w.engine, 'VEH-031', '1.3');
+    plmPublish(w.engine, 'X89', '1.3', { partOf: '1.2' });
+    assert.deepEqual(w.s.plmSync.conflicts.map((c) => c.kind), ['OTHER_NAME']);
+    w.as('integration_admin', (c) => calls.retargetCall(c, call13, '1.4'));
+    w.sys((c) => syncPlmIfChanged(c));
+    const v13 = w.s.softwareVersions['X89::1.3']!;
+    assert.deepEqual([v13.status, v13.workingName, w.s.plmSync.conflicts.length], ['RECORDED', '1.2', 0]);
+    assert.equal(w.s.resources['VEH-031']!.integrationVersion, '1.3');
+  });
+
+  test('PLM shipping an earlier delivery of the part is the factory set, not a part left out', () => {
+    const { w, set } = released();
+    deliver(w);
+    const first = w.s.softwareVersions['X89::1.2']!.dclPart!;
+    const stop = w.as('dcl', (c) => em.requestEmergencyStop(c, { releaseId: set, policyId: 'chassis.steering.return_rate', reason: '回正率误报' }));
+    w.as('release', (c) => em.decideEmergencyStop(c, stop, { decision: 'APPROVED', note: '同意' }));
+    deliver(w);
+    w.sys((c) => publishPlmVersion(c, { vehicleModelId: 'X89', version: '1.2', dclPart: { clientVersion: first.clientVersion, setVersion: first.setVersion, digest: first.digest } }));
+    w.sys((c) => syncPlmIfChanged(c));
+    assert.deepEqual([w.s.softwareVersions['X89::1.2']!.dclModule?.releaseId, w.s.plmSync.missingParts.length], [set, 0]);
+  });
+
+  test('the arrival warning follows the car’s report, and counts a working name TSP holds', () => {
+    const { w } = released();
+    const coming = () => kinds(w, 'release').filter((n) => n.kind === 'EXPECTED_WITHOUT_SET').map((n) => `${n.subject} ${n.detail}`);
+    // VEH-201 is flashed with 1.3, which PLM has not published: TSP follows, the car says 1.3.
+    carRuns(w.engine, 'VEH-201', '1.3');
+    assert.deepEqual(coming(), [], 'the car is there already; it waits for PLM');
+    // TSP holds the working name 1.2 for VEH-202: production never runs a working name.
+    w.sys((c) => updateTspVehicle(c, 'LSDEM0X8900000202', { expectedVersion: '1.2' }));
+    w.sys((c) => syncTspIfChanged(c));
+    assert.deepEqual(coming(), ['X89 1.2 1|PLANNED|']);
   });
 });

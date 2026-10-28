@@ -15,7 +15,7 @@ import { VersionStatusTag } from '../components/plm.tsx';
 import { HardwareTags } from '../components/tsp.tsx';
 import { tspMismatch } from '../engine/tsp-sync.ts';
 import { fitOf } from '../engine/delivery.ts';
-import { openChangeOf, unrecordedReports } from '../engine/software-change.ts';
+import { openChangeOf } from '../engine/software-change.ts';
 import { catalogImages } from '../engine/sim-software.ts';
 import { EnvTag, FeatureName, Hint, LabelTag, Mono, PageHeader, ShortId, configName, when } from '../components/common.tsx';
 import { HoldTag, PauseButton } from '../components/budget.tsx';
@@ -100,6 +100,17 @@ function VehicleTable({ vehicles, extra, workspaceId = '' }: { vehicles: Resourc
         : source.startsWith('image ')
           ? L(`镜像 ${source.slice(6)}`, `Image ${source.slice(6)}`)
           : L(`升级前的记录：${source}`, `Recorded before the upgrade: ${source}`);
+  // The vehicle reported a version PLM has not published (or a working name): its report waits for PLM.
+  const waiting = (r: Resource) => {
+    const c = Object.values(state.softwareChanges).find((x) => x.resourceId === r.id && x.status === 'UNRECORDED');
+    if (!c?.toVersion) return null;
+    const known = state.softwareVersions[softwareKey(r.vehicleModelId, c.toVersion)];
+    return (
+      <Tag color="purple">
+        {L('上报', 'Reported')} {c.toVersion}（{known?.linkedTo ? L(`工作名，PLM 已发布为 ${known.linkedTo}`, `working name; PLM published it as ${known.linkedTo}`) : known ? L('工作名，量产车等 PLM 发布', 'working name; production waits for PLM') : L('PLM 未发布，等 PLM', 'not published by PLM; waits for PLM')}）
+      </Tag>
+    );
+  };
   const actualSoftware = (r: Resource) =>
     r.softwareStatus === 'PARTIAL_FAILURE' ? (
       <Tooltip title={r.controllers.map((c) => `${c.name} ${c.version} ${c.status}`).join(' · ')}>
@@ -173,6 +184,7 @@ function VehicleTable({ vehicles, extra, workspaceId = '' }: { vehicles: Resourc
           render: (_, r) => (
             <Space orientation="vertical" size={2}>
               {actualSoftware(r)}
+              {waiting(r)}
               {r.tsp?.expectedVersion && (
                 <Tooltip title={L('TSP 记录这辆车应运行的版本；实际版本只认车端上报。', 'The version TSP says the car should run; the actual version is the car’s own report.')}>
                   {tspMismatch(state, r) ? (
@@ -805,7 +817,6 @@ function Registry() {
   const [sf] = Form.useForm();
   const pickedVin = Form.useWatch('vin', form);
   const vehicles = managedResources(state, actor);
-  const unrecorded = unrecordedReports(state, actor);
   const releasingDispatch = releasing ? state.deployments[pendingDeploymentOf(state, releasing.id) ?? ''] : undefined;
   return (
     <Card extra={<Button icon={<PlusOutlined />} onClick={() => (form.resetFields(), setRegistering(true))}>{L('登记实车', 'Register vehicle')}</Button>}>
@@ -834,17 +845,6 @@ function Registry() {
           <Typography.Text type="secondary">{L('仅创建人可操作', 'Owner only')}</Typography.Text>
         ) : (
           <Space size={0} wrap>
-            {r.type === 'PHYSICAL' &&
-              (() => {
-                // The vehicle reported a version PLM has not published (or a working name): it waits for PLM.
-                const reported = unrecorded.find((c) => c.resourceId === r.id);
-                const known = reported && state.softwareVersions[softwareKey(r.vehicleModelId, reported.toVersion)];
-                return reported ? (
-                  <Tag color="purple">
-                    {L('上报', 'Reported')} {reported.toVersion}（{known?.linkedTo ? L(`工作名，PLM 已发布为 ${known.linkedTo}`, `working name; PLM published it as ${known.linkedTo}`) : known ? L('工作名，量产车等 PLM 发布', 'working name; production waits for PLM') : L('PLM 未发布，等 PLM', 'not published by PLM; waits for PLM')}）
-                  </Tag>
-                ) : null;
-              })()}
             {r.type === 'SIMULATION' && (
               <Button type="link" size="small" onClick={() => setImageOf(r.id)}>
                 {L('运行镜像', 'Running image')}
