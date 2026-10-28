@@ -320,7 +320,18 @@ function to24(s: Saved): void {
   s.schema = 24;
 }
 
-const STEPS: Record<number, (s: Saved) => void> = { 6: to7, 7: to8, 8: to9, 9: to10, 10: to11, 11: to12, 12: to13, 13: to14, 14: to15, 15: to16, 16: to17, 17: to18, 18: to19, 19: to20, 20: to21, 21: to22, 22: to23, 23: to24 };
+/** Schema 25: schema 23 put every recorded software version into PLM, so each one reads as published by PLM, not recorded by hand. */
+function to25(s: Saved): void {
+  for (const v of Object.values((s.softwareVersions ?? {}) as Record<string, Record<string, unknown>>)) {
+    if (v.status === 'RECORDED' && v.source !== 'PLM') {
+      v.source = 'PLM';
+      v.recordedBy = null;
+    }
+  }
+  s.schema = 25;
+}
+
+const STEPS: Record<number, (s: Saved) => void> = { 6: to7, 7: to8, 8: to9, 9: to10, 10: to11, 11: to12, 12: to13, 13: to14, 14: to15, 15: to16, 16: to17, 17: to18, 18: to19, 19: to20, 20: to21, 21: to22, 22: to23, 23: to24, 24: to25 };
 
 /** Why `migrate` cannot read a save: not a platform state, older than the oldest readable schema, or from a newer version. */
 export function unreadableReason(raw: unknown): 'NOT_STATE' | 'TOO_OLD' | 'NEWER' | null {

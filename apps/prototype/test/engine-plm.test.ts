@@ -6,6 +6,7 @@ import * as calls from '../src/engine/calls.ts';
 import * as em from '../src/engine/emergency.ts';
 import * as fleet from '../src/engine/fleet.ts';
 import * as integ from '../src/engine/integration.ts';
+import { versionHistory } from '../src/engine/history.ts';
 import { migrate } from '../src/engine/migrate.ts';
 import { notificationsFor } from '../src/engine/notifications.ts';
 import { publishPlmVersion, syncPlmIfChanged } from '../src/engine/plm.ts';
@@ -164,7 +165,12 @@ describe('working names and the DCL part', () => {
     delete saved.plm;
     delete saved.plmSync;
     for (const x of Object.values(saved.softwareVersions) as Record<string, unknown>[]) for (const k of ['dclPart', 'workingName', 'linkedTo']) delete x[k];
+    // Versions recorded by hand before PLM: vehicle resources typed them in from the OTA release record.
+    saved.softwareVersions['X89::1.1'].source = '整车 OTA 发布记录';
+    saved.softwareVersions['X89::1.1'].recordedBy = 'resource';
     const s = migrate(saved)!;
+    assert.deepEqual([s.softwareVersions['X89::1.1']!.source, s.softwareVersions['X89::1.1']!.recordedBy], ['PLM', null], 'read as published by PLM');
+    assert.ok(versionHistory(s, 'X89', '1.1').some((e) => e.kind === 'PLM_PUBLISHED') && !versionHistory(s, 'X89', '1.1').some((e) => e.kind === 'SOFTWARE_RECORDED'));
     assert.deepEqual(s.plm.versions.map((x) => [x.version, x.modules, x.dclPart]), [['1.0', [], null], ['1.1', [], null]]);
     assert.equal(s.plmSync.revision, s.plm.revision);
     assert.deepEqual([s.softwareVersions['X89::1.2']!.workingName, s.softwareVersions['X89::1.2']!.linkedTo, s.softwareVersions['X89::1.2']!.dclPart], [null, null, null]);

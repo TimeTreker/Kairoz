@@ -20,6 +20,7 @@ import { advanceClockHours, sendReceipt } from '../src/engine/simulator.ts';
 import { partVersion } from '../src/engine/types.ts';
 import type { State } from '../src/engine/types.ts';
 import * as v from '../src/engine/validation.ts';
+import { requestVehicleSoftware } from '../src/engine/vehicle-software.ts';
 import { carRuns, tspCar, verifyFeatureOn } from './helpers.ts';
 import type { SceneSpec, World } from './world.ts';
 
@@ -174,6 +175,9 @@ export const scenes: Record<string, SceneSpec> = {
       w.eq([v120.status, v120.workingName, w.s.softwareVersions['X89::1.2']!.linkedTo], ['RECORDED', '1.2', '1.2.0'], 'linked by the configuration digest');
       w.eq(rel.setInEffect(w.s, 'X89', '1.2.0')?.id, w.ref.set, '1.1.0 applies to 1.2.0');
       w.eq(Object.values(w.s.applicabilityChecks).filter((c) => c.version === '1.2.0').length, 0, 'no applicability check: the call tested this software');
+      // The working name is 1.2.0 now: no car is put on it, and its part is not exported again.
+      w.fails('WORKING_NAME_LINKED', () => w.as('business', (c) => requestVehicleSoftware(c, 'team-brake', 'VEH-001', { version: '1.2', reason: '预发布验证' })));
+      w.fails('WORKING_NAME_LINKED', () => w.as('dcl', (c) => calls.deliverDclPart(c, { vehicleModelId: 'X89', version: '1.2', clientVersion: '2.4.0' })));
       // The vehicle OTA program flashes VEH-201 with 1.2.0: it reports the bundled set, no push needed.
       w.sys((c) => advanceClockHours(c, 1));
       carRuns(w.engine, 'VEH-201', '1.2.0');

@@ -91,13 +91,22 @@ function VehicleTable({ vehicles, extra, workspaceId = '' }: { vehicles: Resourc
   );
   // The controls stay while a filter is set, even when the list has shrunk since.
   const filtering = !!q || type !== 'ALL' || env !== 'ALL';
+  // Where the record came from: the vehicle's signed report, a simulation's image, or a record kept from before the upgrade.
+  const sourceText = (source: string | null) =>
+    !source
+      ? null
+      : source === 'DCL client report (signed)'
+        ? L('车端签名上报', 'The vehicle’s signed report')
+        : source.startsWith('image ')
+          ? L(`镜像 ${source.slice(6)}`, `Image ${source.slice(6)}`)
+          : L(`升级前的记录：${source}`, `Recorded before the upgrade: ${source}`);
   const actualSoftware = (r: Resource) =>
     r.softwareStatus === 'PARTIAL_FAILURE' ? (
       <Tooltip title={r.controllers.map((c) => `${c.name} ${c.version} ${c.status}`).join(' · ')}>
         <Tag color="red">{L('部分域控失败', 'Partial controller failure')}</Tag>
       </Tooltip>
     ) : r.integrationVersion ? (
-      <Tooltip title={r.integrationSource}>
+      <Tooltip title={sourceText(r.integrationSource)}>
         <span>
           {r.vehicleModelId} {r.integrationVersion}
           {isDerivedImage(state, r.imageId) && <Tag color="purple" style={{ marginLeft: 4 }}>{L('派生镜像', 'Derived image')}</Tag>}
