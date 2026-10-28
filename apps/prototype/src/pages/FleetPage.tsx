@@ -361,6 +361,7 @@ function WorkspaceVehicles() {
             { title: L('类型', 'Type'), render: (_, r) => <LabelTag map={RESOURCE_TYPE_LABELS} value={r.type} color={r.type === 'PHYSICAL' ? 'blue' : 'cyan'} /> },
             { title: L('环境', 'Env'), render: (_, r) => <EnvTag env={r.env} /> },
             { title: L('资源池', 'Pool'), dataIndex: 'pool' },
+            { title: L('硬件（TSP）', 'Hardware (TSP)'), render: (_, r) => (r.tsp?.hardware.length ? <HardwareTags hardware={r.tsp.hardware} /> : '—') },
             {
               title: '',
               render: (_, r) => (
@@ -677,7 +678,8 @@ function VehicleGroups() {
                 options={workspaceVehicles(state, workspace.id)
                   // A vehicle lent to another workspace stays out of this workspace's groups.
                   .filter((r) => !state.groupMembers[r.id] && (activeLoanOf(state, r.id)?.workspaceId ?? workspace.id) === workspace.id)
-                  .map((r) => ({ value: r.id, label: `${r.id} · ${B(RESOURCE_TYPE_LABELS[r.type], r.type)} · ${B(ENV_LABELS[r.env], r.env)}` }))}
+                  // A physical car shows its hardware from TSP, so a group can gather the cars a test needs.
+                  .map((r) => ({ value: r.id, label: [r.id, B(RESOURCE_TYPE_LABELS[r.type], r.type), B(ENV_LABELS[r.env], r.env), ...(r.tsp?.hardware.map((h) => `${h.item} ${h.value}`) ?? [])].join(' · ') }))}
               />
             </Form.Item>
           )}

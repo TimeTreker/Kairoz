@@ -28,7 +28,12 @@ import { baseTarget, vehicleBase } from './validation.ts';
 export function noteReportedSoftware(ctx: Ctx, resourceId: string, reported: string | null, reportedDigest: string | null = null, domains: VersionItem[] = []): void {
   const r = ctx.s.resources[resourceId] as Draft<Resource> | undefined;
   if (!r || r.type !== 'PHYSICAL') return;
-  if (domains.some((d) => d.status === 'FAIL')) {
+  const partial = domains.some((d) => d.status === 'FAIL');
+  // The vehicle moved on: a version it reported earlier and that still waits for PLM is no longer what it runs.
+  for (const c of Object.values(ctx.s.softwareChanges)) {
+    if (c.resourceId === r.id && c.status === 'UNRECORDED' && (partial || c.toVersion !== reported)) c.status = 'RESOLVED';
+  }
+  if (partial) {
     // Never write the expected version as the actual one: a partial update claims none.
     const controllers = domains.map((d) => ({ name: d.id, version: d.version ?? '—', status: d.status === 'FAIL' ? ('FAIL' as const) : ('PASS' as const) }));
     if (r.softwareStatus === 'PARTIAL_FAILURE' && JSON.stringify(r.controllers) === JSON.stringify(controllers)) return;

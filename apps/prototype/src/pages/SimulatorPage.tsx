@@ -663,7 +663,8 @@ export function SimulatorPage() {
           </Typography.Paragraph>
           <Space orientation="vertical" style={{ width: '100%' }}>
             <Typography.Text>{L('整车版本', 'Software version')}</Typography.Text>
-            <Input value={otaVersion} onChange={(e) => setOtaVersion(e.target.value)} placeholder="1.1" aria-label={L('整车版本', 'Software version')} />
+            {/* Failed controllers belong to one version's BOM: a new version starts with none. */}
+            <Input value={otaVersion} onChange={(e) => (setOtaVersion(e.target.value), setOtaFailed([]))} placeholder="1.1" aria-label={L('整车版本', 'Software version')} />
             {(() => {
               const model = otaOf ? state.resources[otaOf]?.vehicleModelId : undefined;
               const modules = state.plm.versions.find((x) => x.vehicleModelId === model && x.version === otaVersion.trim())?.modules ?? [];

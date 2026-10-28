@@ -120,7 +120,12 @@ export function syncPlm(ctx: Ctx, snapshot: PlmCatalog): number {
     // Vehicles already reporting this version waited for PLM: their latest signed report now counts.
     for (const c of Object.values(ctx.s.softwareChanges).filter((x) => x.status === 'UNRECORDED' && x.toVersion === v.version)) {
       const latest = ctx.s.clientReports[c.resourceId]?.latest?.payload;
-      if (ctx.s.resources[c.resourceId]?.vehicleModelId !== v.vehicleModelId || latest?.vehicleIntegrationVersion !== v.version) continue;
+      if (ctx.s.resources[c.resourceId]?.vehicleModelId !== v.vehicleModelId) continue;
+      // The vehicle reported something else since: that report counted, this one no longer waits.
+      if (latest?.vehicleIntegrationVersion !== v.version) {
+        c.status = 'RESOLVED';
+        continue;
+      }
       noteReportedSoftware(ctx, c.resourceId, v.version, latest.configuration?.digest ?? null, latest.domains);
     }
     recorded += 1;

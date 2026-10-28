@@ -33,14 +33,15 @@ export function useCanUpdateSoftware() {
   };
 }
 
-function recordedVersions(s: State, r: Resource): string[] {
+/** Versions the vehicle OTA system can put the vehicle on: PLM's, and working names PLM has not published yet. */
+function targetVersions(s: State, r: Resource): { version: string; planned: boolean }[] {
   return Object.values(s.softwareVersions)
-    .filter((v) => v.vehicleModelId === r.vehicleModelId && v.version !== r.integrationVersion)
-    .map((v) => v.version)
-    .sort(compareVersions);
+    .filter((v) => v.vehicleModelId === r.vehicleModelId && v.version !== r.integrationVersion && !v.linkedTo)
+    .map((v) => ({ version: v.version, planned: v.status === 'PLANNED' }))
+    .sort((a, b) => compareVersions(a.version, b.version));
 }
 
-/** 更新整车版本: choose a recorded version, see how the group's publication fits it, and ask the vehicle OTA system. */
+/** 更新整车版本: choose a version PLM published (or a working name before PLM does), see how the group's publication fits it, and ask the vehicle OTA system. */
 export function UpdateSoftwareModal({ workspaceId, resourceId, onClose }: { workspaceId: string; resourceId: string | null; onClose: () => void }) {
   const state = useEngineState();
   const run = useRun();
@@ -95,7 +96,7 @@ export function UpdateSoftwareModal({ workspaceId, resourceId, onClose }: { work
             placeholder={L('选择目标版本', 'Choose the target version')}
             value={version}
             onChange={setVersion}
-            options={recordedVersions(state, r).map((v) => ({ value: v, label: `${r.vehicleModelId} ${v}` }))}
+            options={targetVersions(state, r).map((v) => ({ value: v.version, label: v.planned ? L(`${r.vehicleModelId} ${v.version}（工作名，预发布软件）`, `${r.vehicleModelId} ${v.version} (working name, pre-release)`) : `${r.vehicleModelId} ${v.version}` }))}
           />
           {preview && (
             <Alert

@@ -170,3 +170,34 @@ describe('working names and the DCL part', () => {
     assert.deepEqual([s.softwareVersions['X89::1.2']!.workingName, s.softwareVersions['X89::1.2']!.linkedTo, s.softwareVersions['X89::1.2']!.dclPart], [null, null, null]);
   });
 });
+
+describe('reports waiting for PLM', () => {
+  const waiting = (w: World, id: string) => Object.values(w.s.softwareChanges).filter((c) => c.resourceId === id && c.status === 'UNRECORDED').map((c) => c.toVersion);
+
+  test('a production car that reported the working name stops waiting once it runs the PLM version', () => {
+    const { w } = released();
+    deliver(w);
+    carRuns(w.engine, 'VEH-201', '1.2');
+    assert.deepEqual(waiting(w, 'VEH-201'), ['1.2'], 'production waits for PLM');
+    plmPublish(w.engine, 'X89', '1.2.0', { partOf: '1.2' });
+    assert.ok(kinds(w, 'resource', 'x89-project').includes('UNRECORDED_SOFTWARE'), 'flash it with 1.2.0');
+    carRuns(w.engine, 'VEH-201', '1.2.0');
+    assert.equal(w.s.resources['VEH-201']!.integrationVersion, '1.2.0');
+    assert.deepEqual(waiting(w, 'VEH-201'), []);
+    assert.ok(!kinds(w, 'resource', 'x89-project').includes('UNRECORDED_SOFTWARE'));
+  });
+
+  test('a car that moved on from a version PLM had not published is not put back on it when PLM publishes it', () => {
+    const w = new World(demoState());
+    carRuns(w.engine, 'VEH-031', '1.3');
+    assert.deepEqual(waiting(w, 'VEH-031'), ['1.3']);
+    carRuns(w.engine, 'VEH-031', '1.0');
+    assert.deepEqual(waiting(w, 'VEH-031'), [], 'its newer report counts');
+    plmPublish(w.engine, 'X89', '1.3');
+    assert.equal(w.s.resources['VEH-031']!.integrationVersion, '1.0');
+    // A partial update or an unknown version also ends the wait.
+    carRuns(w.engine, 'VEH-031', '1.4');
+    carRuns(w.engine, 'VEH-031', '1.3', ['BMS']);
+    assert.deepEqual(waiting(w, 'VEH-031'), []);
+  });
+});
