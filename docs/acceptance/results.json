@@ -1,5 +1,5 @@
 {
-  "runAt": "2026-10-28T02:40:41.250Z",
+  "runAt": "2026-10-28T03:11:27.452Z",
   "layer": "engine",
   "counts": {
     "PASS": 231,
@@ -99,7 +99,7 @@
           "id": "A10",
           "title": "登记VEH-901及唯一VIN，版本留空；接收可信版本上报时另行确认。",
           "actor": "resource / 车辆资源",
-          "adaptation": "演示 VIN 使用合法的 17 位格式（不含 I/O/Q）。",
+          "adaptation": "演示 VIN 使用合法的 17 位格式（不含 I/O/Q）；车辆先由模拟 TSP 收录，再从 TSP 登记。",
           "status": "PASS",
           "detail": null,
           "notes": []
@@ -279,7 +279,7 @@
           "id": "E01",
           "title": "准备正式镜像，确认量产车实际Integration Version、环境与兼容范围。",
           "actor": "resource / 车辆资源",
-          "adaptation": null,
+          "adaptation": "剧本的域控状态登记由车辆模拟器按 PLM BOM 刷写后车端签名上报代替，平台不接受人工录入；版本 1.0 由模拟 PLM 发布。",
           "status": "PASS",
           "detail": null,
           "notes": []
@@ -351,7 +351,7 @@
           "id": "F04",
           "title": "记录真实组件状态；外部OTA继续完成或回滚；恢复后确认可信版本和DCL兼容。",
           "actor": "resource / 车辆资源",
-          "adaptation": null,
+          "adaptation": "部分失败与恢复都由车辆模拟器刷写并由车端上报，平台不接受人工录入域控状态。",
           "status": "PASS",
           "detail": null,
           "notes": []

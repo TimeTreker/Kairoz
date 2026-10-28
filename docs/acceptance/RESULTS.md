@@ -1,6 +1,6 @@
 # 验收结果（引擎层逐幕回放）
 
-运行时间：2026-10-28T02:40:41.250Z。由 `npm run acceptance` 生成；每次重新执行，不沿用历史结果。
+运行时间：2026-10-28T03:11:27.452Z。由 `npm run acceptance` 生成；每次重新执行，不沿用历史结果。
 
 状态：PASS 通过；FAIL 失败；GAP 设计要求尚未实现；BLOCKED 前置幕未通过；NOT_APPLICABLE 浏览器原型不适用（如服务端部署）。
 
@@ -19,7 +19,7 @@
 | A07 建立完整X89项目组织模块树，创建x89-integration，配置团队来源和集成测试人员。 | admin / 平台运维 | PASS |  |
 | A08 发布普通日志/CAN双侧默认模板、敏感审核模板；登记x89-dev-r1及接入接口。 | dcl / DCL 工程 | PASS |  |
 | A09 创建SIM-901，选择仿真、development、x89-dev-r1和暂无整车版本。 | workspace_manager / 工作区管理员 | PASS |  |
-| A10 登记VEH-901及唯一VIN，版本留空；接收可信版本上报时另行确认。 | resource / 车辆资源 | PASS | 适配：演示 VIN 使用合法的 17 位格式（不含 I/O/Q）。 |
+| A10 登记VEH-901及唯一VIN，版本留空；接收可信版本上报时另行确认。 | resource / 车辆资源 | PASS | 适配：演示 VIN 使用合法的 17 位格式（不含 I/O/Q）；车辆先由模拟 TSP 收录，再从 TSP 登记。 |
 | A11 纳入本区，核对预约和可用状态，启动仿真并检查连接。 | workspace_manager / 工作区管理员 | PASS |  |
 | B01 选择本组工作区，创建first_brake，不要求选择Bootstrap。 | business / 业务研发 | PASS |  |
 | B02 登记text_log：ADC、/data/brake、debug.log、制动诊断；点击保存一次。 | business / 业务研发 | PASS |  |
@@ -39,7 +39,7 @@
 | D05 核对最终文件、车云处理、Schema、敏感批准、资源保护，确认集合摘要。 | dcl / DCL 工程 | PASS |  |
 | D06 冻结完整候选与来源清单，移交集成测试。 | integrator / 配置集成 | PASS |  |
 | D07 在SIM-902、VEH-902下发冻结候选，完成整车独立测试。 | integration_tester / 测试验证（集成测试） | PASS |  |
-| E01 准备正式镜像，确认量产车实际Integration Version、环境与兼容范围。 | resource / 车辆资源 | PASS |  |
+| E01 准备正式镜像，确认量产车实际Integration Version、环境与兼容范围。 | resource / 车辆资源 | PASS | 适配：剧本的域控状态登记由车辆模拟器按 PLM BOM 刷写后车端签名上报代替，平台不接受人工录入；版本 1.0 由模拟 PLM 发布。 |
 | E02 核对DCL确认、敏感审批、候选测试摘要和回滚目标，Promote正式DCL集合。 | release / 配置发布 | PASS |  |
 | E03 创建灰度，收到签名回执后更新实际已生效集合。 | release / 配置发布 | PASS |  |
 | E04 扩大目标，监控失败比例；出现异常立即暂停并移交恢复。 | release / 配置发布 | PASS |  |
@@ -47,7 +47,7 @@
 | F01 暂停；显式开始新attempt，接收新PASS；无法修复时兼容回滚。 | release / 配置发布 | PASS |  |
 | F02 恢复失败处理，重传分片、去重回调；旧事件继续旧Parser版本。 | dcl / DCL 工程 | PASS |  |
 | F03 修文件或业务策略形成新提交；DCL按需修流程；重新审核和测试。 | business / 业务研发 | PASS |  |
-| F04 记录真实组件状态；外部OTA继续完成或回滚；恢复后确认可信版本和DCL兼容。 | resource / 车辆资源 | PASS |  |
+| F04 记录真实组件状态；外部OTA继续完成或回滚；恢复后确认可信版本和DCL兼容。 | resource / 车辆资源 | PASS | 适配：部分失败与恢复都由车辆模拟器刷写并由车端上报，平台不接受人工录入域控状态。 |
 | F05 结束任务和预约、停止实例、回收配额、移出闲置资源；不移出占用资源。 | workspace_manager / 工作区管理员 | PASS | 适配：“回收配额”：停止实例后，它占用的仿真运行配额回到工作区（配额由车辆资源按工作区设定，见资源与配额剧本）；解除预约同样释放车辆。 |
 | F06 撤销角色/工作区授权，验证旧会话和直接对象请求。 | admin / 平台运维 | PASS |  |
 | F07 备份并在隔离环境恢复，检查版本、回执、事件和审计；提交运维交接。 | admin / 平台运维 | NOT_APPLICABLE | 隔离环境的数据库与存储备份恢复、恢复窗口与监控交接不属于浏览器原型<br>适配：原型以“导出 / 导入完整状态 JSON”代替数据库与存储备份恢复；监控接手不适用。 |
