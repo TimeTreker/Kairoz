@@ -43,6 +43,7 @@ export function publishPlmVersion(ctx: Ctx, input: { vehicleModelId: string; ver
 
 /** Sends PLM's published versions to the platform when they changed since the last sync. */
 export function syncPlmIfChanged(ctx: Ctx): number {
-  if (ctx.s.plm.revision === ctx.s.plmSync.revision) return 0;
+  // A version held back by a conflict is tried again until people settle it.
+  if (ctx.s.plm.revision === ctx.s.plmSync.revision && !ctx.s.plmSync.conflicts?.length) return 0;
   return syncPlm(ctx, JSON.parse(JSON.stringify(ctx.s.plm)) as PlmCatalog);
 }

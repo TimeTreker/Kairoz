@@ -43,6 +43,7 @@ export const NOTIFICATION_CATEGORY: Record<NotificationKind, string> = {
   DCL_PART_TO_DELIVER: 'RELEASE',
   PLM_PART_UNKNOWN: 'RELEASE',
   PLM_NUMBER_CONFLICT: 'RELEASE',
+  PLM_PART_MISSING: 'RELEASE',
   EXPECTED_WITHOUT_SET: 'RELEASE',
   TSP_MISMATCH: 'VEHICLE',
   UNRECORDED_SOFTWARE: 'VEHICLE',
@@ -160,10 +161,23 @@ export function useNotificationText() {
           title: L(`${s} 的 DCL 件待导出交付 PLM`, `${s}: export the DCL part for PLM`),
           body: L(`策略集 ${d ?? ''} 已发布；DCL 件交给 PLM 后，PLM 才能把它放进这个整车版本。`, `Policy set ${d ?? ''} is released; PLM can put the DCL part into this version once it is handed over.`),
         };
-      case 'PLM_NUMBER_CONFLICT':
+      case 'PLM_NUMBER_CONFLICT': {
+        const [kind, other] = (d ?? '').split(':');
         return {
           title: L(`PLM 版本 ${s} 与工作名冲突，平台没有同步它`, `PLM version ${s} clashes with a working name and was not synced`),
-          body: L(`这个版本号是平台上另一套软件的工作名（${d}）。请与 PLM 核对版本号，或改用别的工作名。`, `The number is the working name of other software here (${d}). Check the number with PLM, or use another working name.`),
+          body:
+            kind === 'LINKED'
+              ? L(`这个版本号是一个工作名，PLM 已把那套软件发布为 ${other}。请与 PLM 核对版本号。`, `The number is a working name whose software PLM already published as ${other}. Check the number with PLM.`)
+              : L(
+                  `这个版本号是平台上另一套软件的工作名，而它带的 DCL 件${other ? `是为工作名 ${other} 交付的` : '属于另一个策略集'}。请与 PLM 核对版本号，或把征集改用别的工作名；改好后平台会自动同步它。`,
+                  `The number is the working name of other software here, while its DCL part ${other ? `was delivered for working name ${other}` : 'belongs to another policy set'}. Check the number with PLM, or retarget the call to another working name; the platform then syncs it by itself.`,
+                ),
+        };
+      }
+      case 'PLM_PART_MISSING':
+        return {
+          title: L(`PLM 版本 ${s} 没有带上交付的 DCL 件`, `PLM version ${s} came without the delivered DCL part`),
+          body: L(`为这个工作名交付的 DCL 件 ${d} 不在 PLM 的 BOM 里：这个版本出厂没有配置，车辆从云端取车辆组的配置。请与 PLM 核对。`, `The DCL part ${d} delivered for this working name is not in PLM's BOM: the version has no factory configuration, and vehicles take their group's configuration from the cloud. Check with PLM.`),
         };
       case 'PLM_PART_UNKNOWN':
         return {

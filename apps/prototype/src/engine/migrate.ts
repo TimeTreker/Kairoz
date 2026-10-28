@@ -304,7 +304,23 @@ function to23(s: Saved): void {
   s.schema = 23;
 }
 
-const STEPS: Record<number, (s: Saved) => void> = { 6: to7, 7: to8, 8: to9, 9: to10, 10: to11, 11: to12, 12: to13, 13: to14, 14: to15, 15: to16, 16: to17, 17: to18, 18: to19, 19: to20, 20: to21, 21: to22, 22: to23 };
+/** Schema 24: PLM conflicts say what clashed instead of an English sentence; working names PLM published without their part are kept. */
+function to24(s: Saved): void {
+  const sync = s.plmSync as { conflicts?: Record<string, unknown>[]; missingParts?: unknown[] } | undefined;
+  if (sync) {
+    sync.conflicts = (sync.conflicts ?? []).map((c) => {
+      if (c.kind) return c;
+      const reason = String(c.reason ?? '');
+      const linked = /is published as (\S+)$/.exec(reason);
+      const other = /delivered for (\S+)$/.exec(reason);
+      return { vehicleModelId: c.vehicleModelId, version: c.version, kind: linked ? 'LINKED' : 'OTHER_NAME', other: linked?.[1] ?? (other && other[1] !== 'set' ? other[1] : null), at: c.at };
+    });
+    sync.missingParts ??= [];
+  }
+  s.schema = 24;
+}
+
+const STEPS: Record<number, (s: Saved) => void> = { 6: to7, 7: to8, 8: to9, 9: to10, 10: to11, 11: to12, 12: to13, 13: to14, 14: to15, 15: to16, 16: to17, 17: to18, 18: to19, 19: to20, 20: to21, 21: to22, 22: to23, 23: to24 };
 
 /** Why `migrate` cannot read a save: not a platform state, older than the oldest readable schema, or from a newer version. */
 export function unreadableReason(raw: unknown): 'NOT_STATE' | 'TOO_OLD' | 'NEWER' | null {

@@ -11,7 +11,7 @@ import type { FileType, Privacy } from '../domain/file-types.ts';
 import type { ReviewControls } from '../domain/intake.ts';
 import type { Domain, Env, GroupPurpose, Role, Scope, WorkspaceKind } from '../domain/vocabulary.ts';
 
-export const STATE_SCHEMA = 23;
+export const STATE_SCHEMA = 24;
 
 export interface Account {
   username: string;
@@ -1431,6 +1431,28 @@ export interface PlmCatalog {
   versions: PlmVersion[];
 }
 
+/**
+ * A PLM version the platform cannot take yet (PLM 版本号冲突). LINKED: its number is a working name PLM
+ * already published under another number (`other`). OTHER_NAME: its number is a working name, but its
+ * DCL part belongs to other software (`other`: the working name the part is for, if any).
+ */
+export interface PlmConflict {
+  vehicleModelId: string;
+  version: string;
+  kind: 'LINKED' | 'OTHER_NAME';
+  other: string | null;
+  at: string;
+}
+
+/** A working name PLM published under its own number without the DCL part delivered for it (recorded anyway). */
+export interface PlmMissingPart {
+  vehicleModelId: string;
+  version: string;
+  /** The part DCL delivered, kept for the record. */
+  part: DclPart;
+  at: string;
+}
+
 export interface PlmVersion {
   vehicleModelId: string;
   version: string;
@@ -1535,10 +1557,11 @@ export interface State {
   /** The simulated PLM (the simulator's, not the platform's). */
   plm: PlmCatalog;
   /**
-   * The PLM revision last applied, and when; and PLM versions the platform could not take because
-   * their number is a working name of other software.
+   * The PLM revision last applied, and when; PLM versions the platform could not take because their
+   * number is a working name of other software (checked again at every sync); and working names PLM
+   * published under their own number without the DCL part delivered for them.
    */
-  plmSync: { revision: number; syncedAt: string | null; conflicts: { vehicleModelId: string; version: string; reason: string; at: string }[] };
+  plmSync: { revision: number; syncedAt: string | null; conflicts: PlmConflict[]; missingParts: PlmMissingPart[] };
   /** The simulated TSP (the simulator's, not the platform's). */
   tsp: TspCatalog;
   /** The TSP revision last applied, and when. */
@@ -1620,7 +1643,7 @@ export function emptyState(): State {
     directory: null,
     directorySync: { revision: 0, syncedAt: null, log: [] },
     plm: { revision: 0, versions: [] },
-    plmSync: { revision: 0, syncedAt: null, conflicts: [] },
+    plmSync: { revision: 0, syncedAt: null, conflicts: [], missingParts: [] },
     tsp: { revision: 0, vehicles: [] },
     tspSync: { revision: 0, syncedAt: null },
     personalCaptures: {},

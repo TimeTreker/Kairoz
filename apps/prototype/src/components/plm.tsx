@@ -6,7 +6,7 @@ import { useState } from 'react';
 import { useCan, useRun } from '../app/hooks.ts';
 import { useEngineState } from '../app/store.ts';
 import { deliverDclPart, reportedClientVersion } from '../engine/calls.ts';
-import { workingNameState } from '../engine/plm-sync.ts';
+import { deliveredPartOutdated, releaseOfDigest, workingNameState } from '../engine/plm-sync.ts';
 import { releaseConfiguration, setInEffect } from '../engine/release.ts';
 import { partVersion } from '../engine/types.ts';
 import type { SoftwareVersion } from '../engine/types.ts';
@@ -64,18 +64,25 @@ export function DclPartCell({ v }: { v: SoftwareVersion }) {
     </Tooltip>
   );
   const deliver = () => {
-    const set = v.dclModule ? state.releases[v.dclModule.releaseId] : undefined;
     const p = run((c) => deliverDclPart(c, { vehicleModelId: v.vehicleModelId, version: v.version, clientVersion: client }), L('已导出 DCL 件，交给 PLM', 'DCL part exported for PLM'));
     if (p === undefined) return;
     setOpen(false);
+    // The part carries the set in effect for the working name, which may be newer than the one first exported.
+    const set = releaseOfDigest(state, v.vehicleModelId, p.digest);
     // What DCL merges into the DCL software: the set's complete configuration, by digest.
     if (set) downloadJson({ name: `DCL_${v.vehicleModelId}_${partVersion(p)}.json`, json: JSON.stringify({ part: { vehicleModelId: v.vehicleModelId, workingName: v.version, ...p }, configuration: releaseConfiguration(state, set.id) }, null, 2) });
   };
 
   if (v.status === 'PLANNED') {
     const state_ = workingNameState(v);
+    const outdated = deliveredPartOutdated(state, v);
     return (
       <Space size={4} wrap>
+        {outdated && (
+          <Tooltip title={L('交付后这个工作名生效的策略集变了（例如紧急停用）：请重新导出，把新的件交给 PLM。', 'The set in effect for this working name changed after the delivery (an emergency stop, say): export again and hand PLM the new part.')}>
+            <Tag color="orange">{L(`需重新导出 · ${setInEffect(state, v.vehicleModelId, v.version)?.dclVersion ?? ''}`, `export again · ${setInEffect(state, v.vehicleModelId, v.version)?.dclVersion ?? ''}`)}</Tag>
+          </Tooltip>
+        )}
         {partTag ?? (v.dclModule ? <Tag color="orange">{L(`待导出 · ${state.releases[v.dclModule.releaseId]?.dclVersion ?? ''}`, `to export · ${state.releases[v.dclModule.releaseId]?.dclVersion ?? ''}`)}</Tag> : '—')}
         {canDeliver && (state_ === 'TO_DELIVER' || state_ === 'DELIVERED') && (
           <Button type="link" size="small" onClick={() => (setClient(reportedClientVersion(state, v.vehicleModelId) ?? ''), setOpen(true))}>
@@ -95,7 +102,15 @@ export function DclPartCell({ v }: { v: SoftwareVersion }) {
       </Space>
     );
   }
-  if (!part) return <>—</>;
+  const missing = (state.plmSync.missingParts ?? []).find((m) => m.vehicleModelId === v.vehicleModelId && m.version === v.version);
+  if (!part)
+    return missing ? (
+      <Tooltip title={L(`PLM 发布这个工作名时没有带上交付的 DCL 件 ${partVersion(missing.part)}：出厂没有配置，车辆从云端取配置。`, `PLM published this working name without the delivered DCL part ${partVersion(missing.part)}: no factory configuration; vehicles take theirs from the cloud.`)}>
+        <Tag color="orange">{L('交付的件未带上', 'delivered part left out')}</Tag>
+      </Tooltip>
+    ) : (
+      <>—</>
+    );
   const bundled = v.dclModule ? state.releases[v.dclModule.releaseId] : undefined;
   const current = setInEffect(state, v.vehicleModelId, v.version);
   return (

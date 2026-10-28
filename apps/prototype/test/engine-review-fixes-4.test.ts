@@ -12,7 +12,7 @@ import * as integ from '../src/engine/integration.ts';
 import { migrate } from '../src/engine/migrate.ts';
 import { notificationsFor } from '../src/engine/notifications.ts';
 import { publishPlmVersion, syncPlmIfChanged } from '../src/engine/plm.ts';
-import { workingNameState } from '../src/engine/plm-sync.ts';
+import { deliveredPartOutdated, workingNameState } from '../src/engine/plm-sync.ts';
 import * as rel from '../src/engine/release.ts';
 import { demoState } from '../src/engine/seed.ts';
 import { advanceClockHours, devicePublicKey, provisionDevice, reportNow, sendReceipt } from '../src/engine/simulator.ts';
@@ -71,7 +71,7 @@ describe('review 4: PLM numbers and working names', () => {
     plmPublish(w.engine, 'X89', '1.3', { partOf: '1.2' });
     assert.equal(w.s.softwareVersions['X89::1.3']!.status, 'PLANNED');
     assert.equal(workingNameState(w.s.softwareVersions['X89::1.2']!), 'DELIVERED');
-    assert.deepEqual(w.s.plmSync.conflicts.map((c) => [c.version, c.reason]), [['1.3', 'the part was delivered for 1.2']]);
+    assert.deepEqual(w.s.plmSync.conflicts.map((c) => [c.version, c.kind, c.other]), [['1.3', 'OTHER_NAME', '1.2']]);
     // PLM corrects its number: the part links its own working name.
     plmPublish(w.engine, 'X89', '1.2.0', { partOf: '1.2' });
     assert.equal(w.s.softwareVersions['X89::1.2']!.linkedTo, '1.2.0');
@@ -97,9 +97,53 @@ describe('review 4: PLM numbers and working names', () => {
     const stop = w.as('dcl', (c) => em.requestEmergencyStop(c, { releaseId: set, policyId: 'chassis.steering.return_rate', reason: '回正率误报' }));
     w.as('release', (c) => em.decideEmergencyStop(c, stop, { decision: 'APPROVED', note: '同意' }));
     assert.deepEqual(toDeliver().map((n) => n.detail), ['1.1.1']);
+    assert.ok(deliveredPartOutdated(w.s, w.s.softwareVersions['X89::1.2']!), 'the console marks the part to export again');
     const part = deliver(w);
     assert.deepEqual([part.clientVersion, part.setVersion], ['2.3.0', '1.1.1']);
     assert.equal(toDeliver().length, 0);
+    assert.ok(!deliveredPartOutdated(w.s, w.s.softwareVersions['X89::1.2']!));
+  });
+});
+
+describe('round 2: PLM conflicts and parts PLM left out', () => {
+  test('a conflict settled on the platform lets the version through at the next sync, and its notice goes', () => {
+    const { w } = released();
+    deliver(w);
+    const call13 = w.as('integration_admin', (c) => calls.openCall(c, { workspaceId: 'x89-project', targetVersion: '1.3', dueDate: null }));
+    plmPublish(w.engine, 'X89', '1.3', { partOf: '1.2' });
+    const conflict = () => kinds(w, 'release').filter((n) => n.kind === 'PLM_NUMBER_CONFLICT');
+    assert.deepEqual(conflict().map((n) => n.detail), ['OTHER_NAME:1.2']);
+    // The call moves to 1.4: nothing changed in PLM, yet the next sync takes PLM's 1.3.
+    w.as('integration_admin', (c) => calls.retargetCall(c, call13, '1.4'));
+    w.sys((c) => syncPlmIfChanged(c));
+    const v13 = w.s.softwareVersions['X89::1.3']!;
+    assert.deepEqual([v13.status, v13.source, v13.workingName], ['RECORDED', 'PLM', '1.2']);
+    assert.equal(w.s.softwareVersions['X89::1.2']!.linkedTo, '1.3');
+    assert.deepEqual([w.s.plmSync.conflicts, conflict()], [[], []]);
+  });
+
+  test('a working name PLM published under its own number without the delivered part is recorded, and the delivery kept', () => {
+    const { w } = released();
+    const part = deliver(w);
+    w.sys((c) => publishPlmVersion(c, { vehicleModelId: 'X89', version: '1.2', dclPart: null }));
+    w.sys((c) => syncPlmIfChanged(c));
+    const sv = w.s.softwareVersions['X89::1.2']!;
+    assert.deepEqual([sv.status, sv.dclPart, sv.dclModule], ['RECORDED', null, null]);
+    assert.deepEqual(w.s.plmSync.missingParts.map((m) => [m.version, m.part.digest]), [['1.2', part.digest]]);
+    assert.ok(versionHistory(w.s, 'X89', '1.2').some((e) => e.kind === 'PART_DELIVERED'), 'the delivery stays in the history');
+    for (const user of ['dcl', 'release']) assert.ok(kinds(w, user).some((n) => n.kind === 'PLM_PART_MISSING' && n.subject === 'X89 1.2'), user);
+    // The sets the working name had still apply: it is the same software.
+    assert.equal(rel.setInEffect(w.s, 'X89', '1.2')?.dclVersion, '1.1.0');
+  });
+
+  test('a save from schema 23 keeps its conflicts, now saying what clashed', () => {
+    const { w } = released();
+    const saved = JSON.parse(JSON.stringify(w.s));
+    saved.schema = 23;
+    saved.plmSync = { revision: saved.plmSync.revision, syncedAt: null, conflicts: [{ vehicleModelId: 'X89', version: '1.2', reason: 'working name 1.2 is published as 1.2.0', at: '2026-10-28T00:00:00.000Z' }, { vehicleModelId: 'X89', version: '1.3', reason: 'the part was delivered for another set', at: '2026-10-28T00:00:00.000Z' }] };
+    const s = migrate(saved)!;
+    assert.deepEqual(s.plmSync.conflicts.map((c) => [c.version, c.kind, c.other]), [['1.2', 'LINKED', '1.2.0'], ['1.3', 'OTHER_NAME', null]]);
+    assert.deepEqual(s.plmSync.missingParts, []);
   });
 });
 

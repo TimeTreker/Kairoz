@@ -20,7 +20,7 @@ import { isConfirmed, isMergeWorkspace, verifiedSources } from './integration.ts
 import { borrowedBy, lentBy, loansToAgree, loansToApprove, managedLoans } from './loans.ts';
 import { orphanedOrgObjects } from './org.ts';
 import { otaRollouts } from './ota.ts';
-import { workingNameState } from './plm-sync.ts';
+import { deliveredPartOutdated, workingNameState } from './plm-sync.ts';
 import { setInEffect } from './release.ts';
 import { tspMismatch } from './tsp-sync.ts';
 import { deploymentNumber, planNumber } from './labels.ts';
@@ -55,6 +55,7 @@ export type NotificationKind =
   | 'DCL_PART_TO_DELIVER'
   | 'PLM_PART_UNKNOWN'
   | 'PLM_NUMBER_CONFLICT'
+  | 'PLM_PART_MISSING'
   | 'EXPECTED_WITHOUT_SET'
   | 'TSP_MISMATCH'
   | 'UNRECORDED_SOFTWARE'
@@ -252,16 +253,17 @@ export function notificationsFor(s: State, actor: Actor, workspaceId: string): N
     // A released call's configuration waits for DCL to merge it into the DCL software and deliver it to
     // PLM; so does a delivered part whose set is no longer the one in effect (an emergency stop since).
     for (const v of Object.values(s.softwareVersions).filter((x) => x.callId && s.integrationCalls[x.callId]?.workspaceId === workspaceId)) {
-      const state = workingNameState(v);
-      const current = state === 'DELIVERED' ? setInEffect(s, v.vehicleModelId, v.version) : null;
-      const outdated = !!current && s.resolvedConfigs[current.resolvedConfigId]?.digest !== v.dclPart!.digest;
-      if (state !== 'TO_DELIVER' && !outdated) continue;
-      const set = outdated ? current! : s.releases[v.dclModule!.releaseId];
+      const outdated = deliveredPartOutdated(s, v);
+      if (workingNameState(v) !== 'TO_DELIVER' && !outdated) continue;
+      const set = outdated ? setInEffect(s, v.vehicleModelId, v.version) : s.releases[v.dclModule!.releaseId];
       add('DCL_ENGINEER', 'DCL_PART_TO_DELIVER', [v.version, set?.id ?? null], { severity: 'WARNING', subject: `${v.vehicleModelId} ${v.version}`, detail: set?.dclVersion ?? null, link: 'release/applicability', at: outdated ? set?.publishedAt ?? null : v.dclModule!.exportedAt });
     }
     if (ws.scopes.includes('Vehicle')) {
       for (const v of unknownParts(s, ws.vehicleModelId)) {
         add('DCL_ENGINEER', 'PLM_PART_UNKNOWN', [v.version, v.dclPart!.digest], { severity: 'WARNING', subject: `${v.vehicleModelId} ${v.version}`, detail: partVersion(v.dclPart!), link: 'release/applicability', at: v.createdAt });
+      }
+      for (const m of (s.plmSync.missingParts ?? []).filter((x) => x.vehicleModelId === ws.vehicleModelId)) {
+        add('DCL_ENGINEER', 'PLM_PART_MISSING', [m.version, m.part.digest], { severity: 'WARNING', subject: `${m.vehicleModelId} ${m.version}`, detail: partVersion(m.part), link: 'release/applicability', at: m.at });
       }
     }
   }
@@ -369,7 +371,10 @@ export function notificationsFor(s: State, actor: Actor, workspaceId: string): N
         add('CONFIG_RELEASE', 'EXPECTED_WITHOUT_SET', [version, count], { severity: 'WARNING', subject: `${ws.vehicleModelId} ${version}`, detail: String(count), link: 'release/applicability', at: null });
       }
       for (const c of (s.plmSync.conflicts ?? []).filter((x) => x.vehicleModelId === ws.vehicleModelId)) {
-        add('CONFIG_RELEASE', 'PLM_NUMBER_CONFLICT', [c.version], { severity: 'WARNING', subject: `${c.vehicleModelId} ${c.version}`, detail: c.reason, link: 'release/applicability', at: c.at });
+        add('CONFIG_RELEASE', 'PLM_NUMBER_CONFLICT', [c.version, c.kind], { severity: 'WARNING', subject: `${c.vehicleModelId} ${c.version}`, detail: `${c.kind}:${c.other ?? ''}`, link: 'release/applicability', at: c.at });
+      }
+      for (const m of (s.plmSync.missingParts ?? []).filter((x) => x.vehicleModelId === ws.vehicleModelId)) {
+        add('CONFIG_RELEASE', 'PLM_PART_MISSING', [m.version, m.part.digest], { severity: 'WARNING', subject: `${m.vehicleModelId} ${m.version}`, detail: partVersion(m.part), link: 'release/applicability', at: m.at });
       }
       for (const v of unknownParts(s, ws.vehicleModelId)) {
         add('CONFIG_RELEASE', 'PLM_PART_UNKNOWN', [v.version, v.dclPart!.digest], { severity: 'WARNING', subject: `${v.vehicleModelId} ${v.version}`, detail: partVersion(v.dclPart!), link: 'release/applicability', at: v.createdAt });

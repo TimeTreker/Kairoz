@@ -9,9 +9,9 @@ import { newId } from '../domain/ids.ts';
 import { openCheckForNewSoftware } from './applicability.ts';
 import type { Ctx } from './engine.ts';
 import { softwareKey } from './fleet.ts';
-import { appliesTo, releasesOf } from './release.ts';
+import { appliesTo, releasesOf, setInEffect } from './release.ts';
 import { noteReportedSoftware } from './software-change.ts';
-import type { DclModule, DclPart, PlmCatalog, PlmVersion, Release, SoftwareVersion, State } from './types.ts';
+import type { DclModule, DclPart, PlmCatalog, PlmConflict, PlmVersion, Release, SoftwareVersion, State } from './types.ts';
 
 /** The set a DCL part carries: the release whose configuration has the part's digest (a digest names one release). */
 export function releaseOfDigest(s: State, vehicleModelId: string, digest: string): Release | null {
@@ -51,6 +51,10 @@ function partFor(s: State, part: NonNullable<PlmVersion['dclPart']>): DclPart {
  */
 export function syncPlm(ctx: Ctx, snapshot: PlmCatalog): number {
   let recorded = 0;
+  // Conflicts are checked afresh every time: one people settled (a call retargeted) lets the version through.
+  const before = ctx.s.plmSync.conflicts ?? [];
+  const conflicts: PlmConflict[] = [];
+  const missingParts = ctx.s.plmSync.missingParts ?? [];
   for (const v of snapshot.versions) {
     const key = softwareKey(v.vehicleModelId, v.version);
     const existing = ctx.s.softwareVersions[key];
@@ -63,13 +67,15 @@ export function syncPlm(ctx: Ctx, snapshot: PlmCatalog): number {
     // name PLM already published under another number, or a part delivered for another name. The
     // platform cannot hold both; it records the conflict for people to settle with PLM.
     if (existing && (existing.linkedTo || (release && owner?.version !== existing.version))) {
-      const conflicts = (ctx.s.plmSync.conflicts ??= []);
-      if (!conflicts.some((c) => c.vehicleModelId === v.vehicleModelId && c.version === v.version)) {
-        conflicts.push({ vehicleModelId: v.vehicleModelId, version: v.version, reason: existing.linkedTo ? `working name ${existing.version} is published as ${existing.linkedTo}` : `the part was delivered for ${owner?.version ?? 'another set'}`, at: ctx.now });
-      }
+      const at = before.find((c) => c.vehicleModelId === v.vehicleModelId && c.version === v.version)?.at ?? ctx.now;
+      conflicts.push(existing.linkedTo ? { vehicleModelId: v.vehicleModelId, version: v.version, kind: 'LINKED', other: existing.linkedTo, at } : { vehicleModelId: v.vehicleModelId, version: v.version, kind: 'OTHER_NAME', other: owner?.version ?? null, at });
       continue;
     }
     if (existing) {
+      // PLM kept the working name as its number but left out the part DCL delivered for it: the
+      // version is recorded without a factory configuration, and the delivery stays on record.
+      const delivered = existing.dclPart?.deliveredBy ? existing.dclPart : null;
+      if (delivered && delivered.digest !== part?.digest) missingParts.push({ vehicleModelId: v.vehicleModelId, version: v.version, part: { ...delivered }, at: ctx.now });
       // PLM kept the working name as its number: the same record becomes the published version.
       existing.status = 'RECORDED';
       existing.source = 'PLM';
@@ -130,8 +136,15 @@ export function syncPlm(ctx: Ctx, snapshot: PlmCatalog): number {
     }
     recorded += 1;
   }
-  ctx.s.plmSync = { revision: snapshot.revision, syncedAt: ctx.now, conflicts: ctx.s.plmSync.conflicts ?? [] };
+  ctx.s.plmSync = { revision: snapshot.revision, syncedAt: ctx.now, conflicts, missingParts };
   return recorded;
+}
+
+/** A working name's delivered part no longer carries the set in effect for it (an emergency stop since): DCL exports it again. */
+export function deliveredPartOutdated(s: State, v: SoftwareVersion): boolean {
+  if (workingNameState(v) !== 'DELIVERED') return false;
+  const current = setInEffect(s, v.vehicleModelId, v.version);
+  return !!current && s.resolvedConfigs[current.resolvedConfigId]?.digest !== v.dclPart!.digest;
 }
 
 /**
