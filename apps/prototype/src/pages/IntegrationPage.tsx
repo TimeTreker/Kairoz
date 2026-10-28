@@ -808,7 +808,7 @@ function CandidateDetail({ candidate: c }: { candidate: Candidate }) {
     .map((r) => {
       const problems = candidateVehicleProblems(state, c, r.id);
       const blocked = problems.some((p) => p.endsWith('software version unknown'))
-        ? L('非首版候选需要已确认整车版本的车辆', 'a candidate on a release needs vehicles with known software')
+        ? L('非首版候选需要整车版本已知（车端已上报）的车辆', 'a candidate on a release needs vehicles whose software is known (reported by the vehicle)')
         : problems.length
           ? problems.map((p) => B(issueLabel(p), p)).join(L('；', '; '))
           : undefined;

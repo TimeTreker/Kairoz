@@ -411,6 +411,8 @@ function flash(ctx: Ctx, r: Resource, version: string, failed: string[]): void {
   if (t && t.expectedVersion !== version) {
     t.expectedVersion = version;
     ctx.s.tsp.revision += 1;
+    // The OTA system tells TSP at once, so the platform's TSP mirror follows without waiting for a tick.
+    syncTspIfChanged(ctx);
   }
   if (failed.length || r.env !== 'production') return;
   installBundled(ctx, r, device, version);

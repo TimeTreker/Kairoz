@@ -29,7 +29,7 @@ import { mismatchesFor } from '../engine/delivery.ts';
 import { borrowedBy, loansToAgree, managedLoans } from '../engine/loans.ts';
 import { otaRollouts } from '../engine/ota.ts';
 import { patchesOf, releaseFor } from '../engine/release.ts';
-import { isOverdue, managedResources, pendingDeploymentOf, vehicleGroupsOf, workspaceVehicles } from '../engine/fleet.ts';
+import { isOverdue, managedResources, pendingDeploymentOf, softwareKey, vehicleGroupsOf, workspaceVehicles } from '../engine/fleet.ts';
 import { referenceRequestsFor } from '../engine/references.ts';
 import { candidateTestStatus, featureTestStatus, testRequestsOf } from '../engine/validation.ts';
 import type { Feature } from '../engine/types.ts';
@@ -412,15 +412,25 @@ export function WorkbenchPage() {
             </Button>
           ) : null;
         })()}
-        {unrecordedReports(state, actor).map((c) => (
-          <Row2 key={c.id} onClick={() => navigate('fleet/registry')}>
-            <Space>
-              <Typography.Text type="warning">{L('上报了未登记的软件版本', 'Reported an unrecorded software version')}</Typography.Text>
-              <Mono>{`${c.resourceId} · ${c.toVersion}`}</Mono>
-            </Space>
-            <Typography.Text type="secondary">{L('先登记版本，再确认', 'Record the version, then confirm')}</Typography.Text>
-          </Row2>
-        ))}
+        {unrecordedReports(state, actor).map((c) => {
+          // A version PLM has not published waits for PLM; a working name on a production car waits for its PLM version.
+          const known = state.softwareVersions[softwareKey(state.resources[c.resourceId]?.vehicleModelId ?? '', c.toVersion)];
+          return (
+            <Row2 key={c.id} onClick={() => navigate('fleet/registry')}>
+              <Space>
+                <Typography.Text type="warning">{known ? L('上报了工作名', 'Reported a working name') : L('上报了 PLM 未发布的软件版本', 'Reported a version PLM has not published')}</Typography.Text>
+                <Mono>{`${c.resourceId} · ${c.toVersion}`}</Mono>
+              </Space>
+              <Typography.Text type="secondary">
+                {known?.linkedTo
+                  ? L(`PLM 已发布为 ${known.linkedTo}，请为车辆刷写它`, `PLM published it as ${known.linkedTo}; flash the vehicle with it`)
+                  : known
+                    ? L('量产车等 PLM 发布', 'Production waits for PLM')
+                    : L('PLM 发布并同步后，这份上报即生效', 'Takes effect once PLM publishes it and the platform syncs')}
+              </Typography.Text>
+            </Row2>
+          );
+        })}
       </Card>,
     );
   }

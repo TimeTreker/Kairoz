@@ -229,7 +229,7 @@ Object.assign(ERROR_LABELS, {
   ENV_MISMATCH: b('车辆环境与车辆组不一致', 'The vehicle’s environment differs from the group'),
   GROUP_HAS_MEMBERS: b('请先移出全部车辆', 'Move all vehicles out first'),
   SIMULATION_SOFTWARE_FROM_IMAGE: b('仿真车的软件版本由镜像决定', 'A simulation’s software comes from its image'),
-  UNKNOWN_SOFTWARE_VERSION: b('该软件版本尚未登记', 'That software version is not recorded'),
+  UNKNOWN_SOFTWARE_VERSION: b('平台没有这个软件版本（PLM 未发布）', 'The platform has no such software version (PLM has not published it)'),
   INVALID_VIN: b('VIN 为 17 位，不含 I、O、Q', 'A VIN has 17 characters without I, O or Q'),
   RECEIPT_CONFLICT: b('该尝试已有不同的回执', 'A different receipt exists for this attempt'),
   STALE_ATTEMPT: b('回执的尝试次数已过期', 'The receipt is for an old attempt'),
@@ -774,7 +774,7 @@ export const CHANGE_OUTCOME_LABELS: Record<string, Bilingual> = {
   CANNOT_CHECK: b('新软件没有软件清单，无法检查', 'The new software has no manifest; cannot check'),
   PRODUCTION: b('量产车按适用的策略集处理', 'Production: the set in effect applies'),
   NOT_PUBLISHED: b('车辆组没有发布 Feature', 'No Feature published to its group'),
-  UNRECORDED: b('上报的版本尚未登记', 'Reported version not recorded yet'),
+  UNRECORDED: b('上报的版本 PLM 未发布', 'Reported version not published by PLM'),
 };
 export const CHANGE_OUTCOME_COLORS: Record<string, string> = {
   NONE: 'green',
@@ -827,7 +827,7 @@ Object.assign(ERROR_LABELS, {
   SOFTWARE_UPDATE_PENDING: b('车辆正在等待整车软件更新，请等待结果或撤回', 'The vehicle is waiting for a software update; wait for it or withdraw it'),
   NOT_IN_TEAM_GROUP: b('车辆不在业务组的车辆组中，请由工作区管理员更新', 'The vehicle is in no business group’s vehicle group; ask the workspace admin'),
   PRODUCTION_SOFTWARE: b('量产车只能通过整车 OTA 计划更换软件', 'Production vehicles change software only through the vehicle OTA program'),
-  SOFTWARE_NOT_RECORDED: b('该整车软件版本尚未登记', 'This software version is not recorded'),
+  SOFTWARE_NOT_RECORDED: b('该整车软件版本 PLM 未发布', 'PLM has not published this software version'),
   SAME_SOFTWARE: b('车辆已经运行这个版本', 'The vehicle already runs this version'),
 });
 export const SOFTWARE_REQUEST_STATUS_LABELS: Record<string, Bilingual> = {

@@ -91,10 +91,13 @@ export function ClientReportDrawer({ resourceId, workspaceId, onClose }: { resou
                 <Descriptions.Item label={L('实际整车版本', 'Actual software')}>
                   <Space wrap>
                     <span>{latest.vehicleIntegrationVersion ?? L('未知', 'unknown')}</span>
+                    {view.comparison.software.partial && <Tag color="red">{L('部分域控失败', 'Partial controller failure')}</Tag>}
                     <Match same={view.comparison.software.same} />
                     {!view.comparison.software.same && (
                       <Typography.Text type="secondary">
-                        {L('平台记录：', 'platform: ')}{view.comparison.software.recorded ?? L('未知', 'unknown')}
+                        {L('平台记录：', 'platform: ')}
+                        {view.comparison.software.recorded ??
+                          (view.comparison.software.recordedStatus === 'PARTIAL_FAILURE' ? L('部分域控失败', 'partial controller failure') : L('未知', 'unknown'))}
                       </Typography.Text>
                     )}
                   </Space>

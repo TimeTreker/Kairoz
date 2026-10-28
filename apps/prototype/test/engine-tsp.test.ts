@@ -2,14 +2,14 @@ import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import { carRuns, tspCar } from '../acceptance/helpers.ts';
 import { World } from '../acceptance/world.ts';
-import { registerDeviceKey } from '../src/engine/client-report.ts';
+import { clientReportView, registerDeviceKey } from '../src/engine/client-report.ts';
 import * as fleet from '../src/engine/fleet.ts';
 import { productionDistribution } from '../src/engine/history.ts';
 import { migrate } from '../src/engine/migrate.ts';
 import { notificationsFor } from '../src/engine/notifications.ts';
 import * as rel from '../src/engine/release.ts';
 import { demoState } from '../src/engine/seed.ts';
-import { devicePublicKey, provisionDevice, reportNow, tick } from '../src/engine/simulator.ts';
+import { devicePublicKey, provisionDevice, reportNow, simulateSoftwareOta, tick } from '../src/engine/simulator.ts';
 import { addTspVehicle, syncTspIfChanged, updateTspVehicle } from '../src/engine/tsp.ts';
 import { tspMismatch } from '../src/engine/tsp-sync.ts';
 
@@ -69,12 +69,22 @@ describe('cars come from TSP', () => {
       { name: 'VCU', version: '1.9.0', status: 'PASS' },
     ]);
     assert.match(rel.releaseFor(w.s, r()).problem!, /partial software update/);
+    // The car names 1.1 with BMS failed: its client state reads a partial update, as the registry does.
+    const view = w.engine.read('resource', (s, a) => clientReportView(s, a, 'VEH-202', null))!;
+    assert.deepEqual(view.comparison!.software, { reported: '1.1', partial: true, recorded: null, recordedStatus: 'PARTIAL_FAILURE', same: true });
     w.fails('UNKNOWN_CONTROLLER', () => carRuns(w.engine, 'VEH-202', '1.1', ['LIDAR']));
     carRuns(w.engine, 'VEH-202', '1.1');
     assert.deepEqual([r().softwareStatus, r().integrationVersion, r().controllers], ['CONSISTENT', '1.1', []]);
     // A car that cannot tell its version makes it unknown.
     carRuns(w.engine, 'VEH-202', null);
     assert.deepEqual([r().softwareStatus, r().integrationVersion], ['UNKNOWN', null]);
+  });
+
+  test('a simulated vehicle OTA tells TSP at once; the platform’s mirror follows without a tick', () => {
+    const w = new World(demoState());
+    w.sys((c) => simulateSoftwareOta(c, 'VEH-201', '1.1'));
+    const r = w.s.resources['VEH-201']!;
+    assert.deepEqual([r.tsp!.expectedVersion, r.integrationVersion, w.s.tspSync.revision], ['1.1', '1.0', w.s.tsp.revision]);
   });
 
   test('hardware changes in TSP reach the vehicle with the next sync', () => {

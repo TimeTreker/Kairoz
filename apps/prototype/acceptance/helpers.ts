@@ -7,7 +7,7 @@ import { membersOf, setSoftwareManifest } from '../src/engine/fleet.ts';
 import { registerDeviceKey } from '../src/engine/client-report.ts';
 import { publishPlmVersion, syncPlmIfChanged } from '../src/engine/plm.ts';
 import { devicePublicKey, provisionDevice, reportNow, sendReceipt, simulateSoftwareOta } from '../src/engine/simulator.ts';
-import { addTspVehicle, syncTspIfChanged } from '../src/engine/tsp.ts';
+import { addTspVehicle } from '../src/engine/tsp.ts';
 import type { HardwareItem, PlmVersion } from '../src/engine/types.ts';
 import * as v from '../src/engine/validation.ts';
 import type { World } from './world.ts';
@@ -36,8 +36,6 @@ export function carRuns(e: Engine, resourceId: string, version: string | null, f
   }
   e.run(null, (c) => simulateSoftwareOta(c, resourceId, version, failed));
   e.run(null, (c) => reportNow(c, resourceId));
-  // TSP records the target as the version the car should run.
-  e.run(null, (c) => syncTspIfChanged(c));
 }
 
 /** TSP knows the car (simulated), so vehicle resources can register it. */

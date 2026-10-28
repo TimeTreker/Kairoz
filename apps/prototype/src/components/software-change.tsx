@@ -51,7 +51,7 @@ export function SoftwareChangeDrawer({ changeId, onClose }: { changeId: string |
     CANNOT_CHECK: L('新软件没有登记软件清单，无法逐条检查；请车辆资源补录清单。', 'The new software has no recorded manifest, so nothing can be checked; ask vehicle resources to record it.'),
     PRODUCTION: L('量产车没有 Feature：按新软件版本当前适用的策略集运行，没有适用策略集时由配置发布处理。', 'Production cars run no Features: they take the set in effect for the new software, and config release handles versions without one.'),
     NOT_PUBLISHED: L('车辆组没有下发 Feature，没有需要检查的本组内容。', 'Nothing is dispatched to the vehicle’s group, so there is nothing of a team to check.'),
-    UNRECORDED: L('车辆上报的版本平台尚未登记；车辆资源登记该版本并确认后再检查。', 'The platform has not recorded the reported version; vehicle resources record and confirm it first.'),
+    UNRECORDED: L('车辆上报的版本 PLM 尚未发布；PLM 发布并同步后，这份上报即生效，再做检查。', 'PLM has not published the reported version; once PLM publishes it and the platform syncs, the report takes effect and is checked.'),
   };
   // The two choices when the software does not fit: adapt the policies, or update the vehicle.
   const mismatch = ['FIX', 'REPUBLISH', 'NEW_FEATURE', 'NO_BASE', 'CANNOT_CHECK'].includes(a.outcome);

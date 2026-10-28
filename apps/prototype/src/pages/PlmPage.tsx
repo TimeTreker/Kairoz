@@ -49,7 +49,12 @@ export function PlmPage() {
     .map((v) => ({ model: v.vehicleModelId, workingName: v.version, part: v.dclPart!, usedIn: state.plm.versions.filter((x) => x.dclPart?.digest === v.dclPart!.digest).map((x) => x.version) }));
   // What a new version may carry: a received part, or one already in a version's BOM.
   const choices = new Map<string, { model: string; part: Part; label: string }>();
-  for (const r of received) choices.set(r.part.digest, { model: r.model, part: r.part, label: L(`DCL ${partVersion(r.part)} · 工作名 ${r.workingName}`, `DCL ${partVersion(r.part)} · working name ${r.workingName}`) });
+  for (const r of received) {
+    const label = r.usedIn.length
+      ? L(`DCL ${partVersion(r.part)} · 工作名 ${r.workingName} · 已用于 ${r.usedIn.join('、')}`, `DCL ${partVersion(r.part)} · working name ${r.workingName} · in ${r.usedIn.join(', ')}`)
+      : L(`DCL ${partVersion(r.part)} · 工作名 ${r.workingName}`, `DCL ${partVersion(r.part)} · working name ${r.workingName}`);
+    choices.set(r.part.digest, { model: r.model, part: r.part, label });
+  }
   for (const v of state.plm.versions) {
     if (v.dclPart && !choices.has(v.dclPart.digest)) choices.set(v.dclPart.digest, { model: v.vehicleModelId, part: v.dclPart, label: L(`DCL ${partVersion(v.dclPart)} · 同 ${v.version}`, `DCL ${partVersion(v.dclPart)} · as in ${v.version}`) });
   }

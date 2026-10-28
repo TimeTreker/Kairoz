@@ -205,7 +205,10 @@ export function clientReportView(s: State, actor: Actor, resourceId: string, wor
         recordedLabel: applied?.label ?? null,
         same: (latest.configuration?.digest ?? null) === (applied?.digest ?? null),
       },
-      software: { reported: latest.vehicleIntegrationVersion, recorded: r.integrationVersion, same: latest.vehicleIntegrationVersion === r.integrationVersion },
+      // A report with a failed controller claims no whole version, whatever version it names.
+      software: latest.domains.some((d) => d.status === 'FAIL')
+        ? { reported: latest.vehicleIntegrationVersion, partial: true, recorded: r.integrationVersion, recordedStatus: r.softwareStatus, same: r.softwareStatus === 'PARTIAL_FAILURE' }
+        : { reported: latest.vehicleIntegrationVersion, partial: false, recorded: r.integrationVersion, recordedStatus: r.softwareStatus, same: latest.vehicleIntegrationVersion === r.integrationVersion },
     },
   };
 }

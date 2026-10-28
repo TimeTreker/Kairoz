@@ -132,11 +132,12 @@ function VehicleTable({ vehicles, extra, workspaceId = '' }: { vehicles: Resourc
       rowKey="id"
       dataSource={shown}
       pagination={{ pageSize: 20, hideOnSinglePage: true }}
-      scroll={{ x: 1000 }}
+      scroll={{ x: 1240 }}
       locale={{ emptyText: L('没有车辆', 'No vehicles') }}
       columns={[
         {
           title: L('车辆', 'Vehicle'),
+          width: 120,
           render: (_, r) => (
             <Space orientation="vertical" size={0}>
               <Mono>{r.id}</Mono>
@@ -148,6 +149,7 @@ function VehicleTable({ vehicles, extra, workspaceId = '' }: { vehicles: Resourc
         { title: L('类型', 'Type'), render: (_, r) => <LabelTag map={RESOURCE_TYPE_LABELS} value={r.type} color={r.type === 'PHYSICAL' ? 'blue' : 'cyan'} /> },
         {
           title: L('VIN / 车牌 / TSP', 'VIN / plate / TSP'),
+          width: 170,
           render: (_, r) => (
             <Space orientation="vertical" size={0}>
               <Mono>{r.vin ?? r.uvid ?? '—'}</Mono>
@@ -174,7 +176,7 @@ function VehicleTable({ vehicles, extra, workspaceId = '' }: { vehicles: Resourc
             </Space>
           ),
         },
-        { title: L('已生效配置', 'Applied configuration'), render: (_, r) => <Mono>{B(configName(state, r.appliedConfigId))}</Mono> },
+        { title: L('已生效配置', 'Applied configuration'), width: 180, render: (_, r) => <Mono>{B(configName(state, r.appliedConfigId))}</Mono> },
         {
           title: L('车辆组 / 下发', 'Group / dispatch'),
           render: (_, r) => {
@@ -197,7 +199,8 @@ function VehicleTable({ vehicles, extra, workspaceId = '' }: { vehicles: Resourc
           },
         },
         { title: L('状态', 'Status'), render: (_, r) => (r.personal && r.status === 'RETIRED' ? L('已释放', 'Released') : B(RESOURCE_STATUS_LABELS[r.status])) },
-        ...(extra ? [{ title: '', render: (_: unknown, r: Resource) => extra(r) }] : []),
+        // Actions wrap inside a fixed width, so a row of buttons never squeezes the other columns.
+        ...(extra ? [{ title: '', width: 200, render: (_: unknown, r: Resource) => extra(r) }] : []),
       ]}
     />
     </Space>
@@ -819,7 +822,7 @@ function Registry() {
         extra={(r) => r.personal ? (
           <Typography.Text type="secondary">{L('仅创建人可操作', 'Owner only')}</Typography.Text>
         ) : (
-          <Space size={0}>
+          <Space size={0} wrap>
             {r.type === 'PHYSICAL' &&
               (() => {
                 // The vehicle reported a version PLM has not published (or a working name): it waits for PLM.
@@ -1062,7 +1065,7 @@ function Catalogs() {
                       {L('补录清单', 'Add manifest')}
                     </Button>
                   ) : (
-                    <Tag color="orange">{L('未登记', 'not recorded')}</Tag>
+                    <Tag color="orange">{L('清单未补录', 'no manifest yet')}</Tag>
                   ),
               },
             ]}

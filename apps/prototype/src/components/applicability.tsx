@@ -99,7 +99,7 @@ export function SoftwareVersionsCard({ modelId }: { modelId: string }) {
                   <Tag>{L(`信号 ${v.manifest.signals.length} · 数据源 ${v.manifest.sources.length}`, `${v.manifest.signals.length} signals · ${v.manifest.sources.length} sources`)}</Tag>
                 </Tooltip>
               ) : (
-                <Tag color="orange">{L('未登记', 'not recorded')}</Tag>
+                <Tag color="orange">{L('清单未补录', 'no manifest yet')}</Tag>
               ),
           },
           {

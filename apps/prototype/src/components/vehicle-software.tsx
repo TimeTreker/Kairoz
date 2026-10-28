@@ -69,8 +69,8 @@ export function UpdateSoftwareModal({ workspaceId, resourceId, onClose }: { work
     >
       <Hint>
         {L(
-          '不修改策略，而是请整车 OTA 系统把这辆车刷到另一个已登记的版本。车辆重启后上报版本，平台据此更新记录；如果车辆组的配置适用于新版本，云端会推送它。',
-          'Instead of changing the policies, the vehicle OTA system puts this vehicle on another recorded version. The vehicle restarts and reports it, and the platform records it; if the group’s configuration fits the new version, the cloud pushes it.',
+          '不修改策略，而是请整车 OTA 系统把这辆车刷到另一个 PLM 已发布的版本。车辆重启后上报版本，平台据此更新记录；如果车辆组的配置适用于新版本，云端会推送它。',
+          'Instead of changing the policies, the vehicle OTA system puts this vehicle on another version PLM has published. The vehicle restarts and reports it, and the platform records it; if the group’s configuration fits the new version, the cloud pushes it.',
         )}
       </Hint>
       <Descriptions size="small" column={1} bordered style={{ marginBottom: 12 }}>
@@ -165,7 +165,7 @@ export function GroupFitDrawer({ resourceId, onClose }: { resourceId: string | n
     FIX: L('本组有文件或策略在这辆车的软件上不可用。修改策略（在 Feature 中先改文件、再改依赖它的策略，提交后下发），或把车辆更新到策略可用的版本。', 'Some of the group’s files or policies do not work on this vehicle’s software. Adapt the policies (in the Feature, fix the files and then the policies that depend on them, commit and dispatch), or update the vehicle to a version they fit.'),
     NEW_FEATURE: L('这辆车的软件对应的策略集改动了本组内容。在新基线上新建 Feature，或把车辆更新到车辆组的版本。', 'The policy set for this vehicle’s software changed the group. Start a Feature on that base, or update the vehicle to the group’s version.'),
     NO_BASE: L('这辆车的软件没有适用的策略集。把车辆更新到有策略集的版本，或由工作区管理员为车辆组指定显式基线。', 'No policy set applies to this vehicle’s software. Update the vehicle to a version that has one, or have the workspace admin give the group an explicit base.'),
-    UNKNOWN_SOFTWARE: L('这辆车的整车软件版本未知，无法检查。把车辆更新到已登记的版本，或请车辆资源确认它的版本；确认并下发会使用初始研发配置。', 'The vehicle’s software is unknown, so nothing can be checked. Update it to a recorded version, or have vehicle resources confirm its version; confirming and dispatching uses the initial configuration.'),
+    UNKNOWN_SOFTWARE: L('这辆车的整车软件版本未知，无法检查。把车辆更新到 PLM 已发布的版本，或等车辆上报它的版本；确认并下发会使用初始研发配置。', 'The vehicle’s software is unknown, so nothing can be checked. Update it to a version PLM has published, or wait for the vehicle to report its version; confirming and dispatching uses the initial configuration.'),
     CANNOT_CHECK: L('这辆车的软件没有登记软件清单，无法逐条检查。请车辆资源补录清单，或确认并下发。', 'The vehicle’s software has no recorded manifest, so nothing can be checked. Ask vehicle resources to record it, or confirm and dispatch.'),
   };
   return (
