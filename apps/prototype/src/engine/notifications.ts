@@ -5,7 +5,7 @@
 
 import { authorize } from '../domain/authz.ts';
 import type { Role } from '../domain/vocabulary.ts';
-import { blockedProductionVehicles } from './applicability.ts';
+import { blockedProductionVehicles, isOpenCheck } from './applicability.ts';
 import { callPhase, callProblems, callsFor, isOverdueCall, moduleName, waitingModules } from './calls.ts';
 import { usageOf } from './budget.ts';
 import { DAY_MS, nowOf } from './clock.ts';
@@ -22,7 +22,7 @@ import { orphanedOrgObjects } from './org.ts';
 import { otaRollouts } from './ota.ts';
 import { deliveredPartOutdated, workingNameState } from './plm-sync.ts';
 import { setInEffect } from './release.ts';
-import { tspMismatch } from './tsp-sync.ts';
+import { reportedSoftware, tspMismatch } from './tsp-sync.ts';
 import { deploymentNumber, planNumber } from './labels.ts';
 import { referenceRequestsFor } from './references.ts';
 import { assessSoftwareChange, softwareChangesFor, unrecordedReports } from './software-change.ts';
@@ -368,7 +368,11 @@ export function notificationsFor(s: State, actor: Actor, workspaceId: string): N
         if (!setInEffect(s, r.vehicleModelId, target)) coming.set(target, (coming.get(target) ?? 0) + 1);
       }
       for (const [version, count] of coming) {
-        add('CONFIG_RELEASE', 'EXPECTED_WITHOUT_SET', [version, count], { severity: 'WARNING', subject: `${ws.vehicleModelId} ${version}`, detail: String(count), link: 'release/applicability', at: null });
+        // What release can do about it: a check when PLM published the version; otherwise TSP's number needs a look.
+        const sv = s.softwareVersions[softwareKey(ws.vehicleModelId, version)];
+        const open = Object.values(s.applicabilityChecks).some((c) => c.vehicleModelId === ws.vehicleModelId && c.version === version && isOpenCheck(c));
+        const why = !sv ? 'UNKNOWN' : sv.linkedTo ? 'LINKED' : sv.status === 'PLANNED' ? 'PLANNED' : open ? 'OPEN' : 'CHECK';
+        add('CONFIG_RELEASE', 'EXPECTED_WITHOUT_SET', [version, count, why], { severity: 'WARNING', subject: `${ws.vehicleModelId} ${version}`, detail: `${count}|${why}|${sv?.linkedTo ?? ''}`, link: 'release/applicability', at: null });
       }
       for (const c of (s.plmSync.conflicts ?? []).filter((x) => x.vehicleModelId === ws.vehicleModelId)) {
         add('CONFIG_RELEASE', 'PLM_NUMBER_CONFLICT', [c.version, c.kind], { severity: 'WARNING', subject: `${c.vehicleModelId} ${c.version}`, detail: `${c.kind}:${c.other ?? ''}`, link: 'release/applicability', at: c.at });
@@ -383,8 +387,10 @@ export function notificationsFor(s: State, actor: Actor, workspaceId: string): N
   }
   if (has('VEHICLE_RESOURCE')) {
     // TSP says the car should run another version than it reports: not updated yet, or the update failed.
-    for (const r of managedResources(s, actor).filter(tspMismatch)) {
-      add('VEHICLE_RESOURCE', 'TSP_MISMATCH', [r.id, r.tsp!.expectedVersion, r.integrationVersion, r.softwareStatus], { severity: 'INFO', subject: r.id, detail: `${r.tsp!.expectedVersion} · ${r.softwareStatus === 'PARTIAL_FAILURE' ? 'PARTIAL' : (r.integrationVersion ?? '')}`, link: 'fleet/registry', at: r.updatedAt });
+    for (const r of managedResources(s, actor).filter((x) => tspMismatch(s, x))) {
+      const reported = reportedSoftware(s, r)!;
+      const actual = reported.partial ? 'PARTIAL' : (reported.version ?? '');
+      add('VEHICLE_RESOURCE', 'TSP_MISMATCH', [r.id, r.tsp!.expectedVersion, actual], { severity: 'INFO', subject: r.id, detail: `${r.tsp!.expectedVersion} · ${actual}`, link: 'fleet/registry', at: r.updatedAt });
     }
     for (const c of unrecordedReports(s, actor)) {
       // A production vehicle reporting a working name waits for PLM; once PLM published it, the

@@ -43,18 +43,18 @@ describe('cars come from TSP', () => {
     w.sys((c) => updateTspVehicle(c, 'LSDEM0X8900000201', { expectedVersion: '1.1' }));
     w.sys((c) => syncTspIfChanged(c));
     const r = () => w.s.resources['VEH-201']!;
-    assert.deepEqual([r().tsp!.expectedVersion, r().integrationVersion, tspMismatch(r())], ['1.1', '1.0', true]);
+    assert.deepEqual([r().tsp!.expectedVersion, r().integrationVersion, tspMismatch(w.s, r())], ['1.1', '1.0', true]);
     assert.ok(kinds(w, 'resource', 'x89-project').some((n) => n.kind === 'TSP_MISMATCH' && n.subject === 'VEH-201'));
     // 1.1 has no policy set: release is told before the car arrives there.
     const coming = kinds(w, 'release', 'x89-project').find((n) => n.kind === 'EXPECTED_WITHOUT_SET')!;
-    assert.deepEqual([coming.subject, coming.detail], ['X89 1.1', '1']);
+    assert.deepEqual([coming.subject, coming.detail], ['X89 1.1', '1|CHECK|']);
     assert.deepEqual(productionDistribution(w.s, 'X89').map((x) => [x.version, x.vehicles, x.expected]), [['1.0', 2, 1], ['1.1', 0, 1]]);
     // A wrong TSP record: the car still runs 1.0, and says so.
     w.sys((c) => reportNow(c, 'VEH-201'));
     assert.equal(r().integrationVersion, '1.0');
     // Once the car is updated, the two agree.
     carRuns(w.engine, 'VEH-201', '1.1');
-    assert.deepEqual([r().integrationVersion, tspMismatch(r())], ['1.1', false]);
+    assert.deepEqual([r().integrationVersion, tspMismatch(w.s, r())], ['1.1', false]);
   });
 
   test('a partial update comes from the car: a failed controller keeps its software and no version is claimed', () => {
@@ -116,5 +116,44 @@ describe('cars come from TSP', () => {
     assert.deepEqual(s.resources['VEH-201']!.tsp, { tboxId: 'TBOX-8900000201', hardware: [], expectedVersion: '1.0', syncedAt: s.resources['VEH-201']!.updatedAt });
     assert.deepEqual([s.devices['VEH-201']!.software, s.devices['VEH-002']!.software, s.devices['SIM-021']!.software], ['1.0', null, null]);
     assert.equal(s.tspSync.revision, s.tsp.revision);
+  });
+});
+
+describe('round 3: TSP against the car’s own report', () => {
+  const notes = (w: World, user: string, kind: string) => w.engine.read(user, (s, a) => notificationsFor(s, a, 'x89-project')).filter((n) => n.kind === kind);
+
+  test('a car that never reported is not flagged; once it reports another version than TSP holds, it is', () => {
+    const w = new World(demoState());
+    tspCar(w.engine, 'LSDEMX89000009900', 'X89', { expectedVersion: '1.1' });
+    w.as('resource', (c) => fleet.registerPhysical(c, { id: 'VEH-099', vin: 'LSDEMX89000009900', env: 'development', pool: 'Chassis' }));
+    const r = () => w.s.resources['VEH-099']!;
+    assert.equal(tspMismatch(w.s, r()), false, 'unknown until it reports');
+    assert.ok(!notes(w, 'resource', 'TSP_MISMATCH').some((n) => n.subject === 'VEH-099'));
+    // The car is flashed with 1.0 (TSP follows), then TSP is told 1.1 again: the car still says 1.0.
+    carRuns(w.engine, 'VEH-099', '1.0');
+    assert.equal(tspMismatch(w.s, r()), false);
+    w.sys((c) => updateTspVehicle(c, 'LSDEMX89000009900', { expectedVersion: '1.1' }));
+    w.sys((c) => syncTspIfChanged(c));
+    assert.equal(tspMismatch(w.s, r()), true);
+    assert.deepEqual(notes(w, 'resource', 'TSP_MISMATCH').filter((n) => n.subject === 'VEH-099').map((n) => n.detail), ['1.1 · 1.0']);
+  });
+
+  test('a car on a version PLM has not published agrees with TSP; it waits for PLM instead', () => {
+    const w = new World(demoState());
+    carRuns(w.engine, 'VEH-031', '1.3');
+    const r = w.s.resources['VEH-031']!;
+    assert.deepEqual([r.integrationVersion, r.tsp!.expectedVersion, tspMismatch(w.s, r)], ['1.0', '1.3', false]);
+    assert.ok(notes(w, 'resource', 'UNRECORDED_SOFTWARE').some((n) => n.subject === 'VEH-031'));
+  });
+
+  test('the arrival warning says what release can do about TSP’s number', () => {
+    const w = new World(demoState());
+    const why = () => notes(w, 'release', 'EXPECTED_WITHOUT_SET').map((n) => n.detail);
+    w.sys((c) => updateTspVehicle(c, 'LSDEM0X8900000201', { expectedVersion: '1.5' }));
+    w.sys((c) => syncTspIfChanged(c));
+    assert.deepEqual(why(), ['1|UNKNOWN|'], 'PLM has no 1.5');
+    w.sys((c) => updateTspVehicle(c, 'LSDEM0X8900000201', { expectedVersion: '1.1' }));
+    w.sys((c) => syncTspIfChanged(c));
+    assert.deepEqual(why(), ['1|CHECK|']);
   });
 });

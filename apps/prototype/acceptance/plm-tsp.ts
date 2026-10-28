@@ -61,14 +61,14 @@ export const scenes: Record<string, SceneSpec> = {
       w.sys((c) => syncTspIfChanged(c));
       w.sys((c) => reportNow(c, 'VEH-201'));
       const r = () => w.s.resources['VEH-201']!;
-      w.eq([r().tsp?.expectedVersion, r().integrationVersion, tspMismatch(r())], ['1.1', '1.0', true], 'TSP says 1.1, the car says 1.0: the car counts');
+      w.eq([r().tsp?.expectedVersion, r().integrationVersion, tspMismatch(w.s, r())], ['1.1', '1.0', true], 'TSP says 1.1, the car says 1.0: the car counts');
       w.check(notes(w, 'resource').some((n) => n.kind === 'TSP_MISMATCH' && n.subject === 'VEH-201'), 'vehicle resources see the difference');
       w.check(notes(w, 'release').some((n) => n.kind === 'EXPECTED_WITHOUT_SET' && n.subject === 'X89 1.1'), 'release is told 1.1 has no set before the car gets there');
       // The update fails on one controller: still no whole-vehicle version.
       carRuns(w.engine, 'VEH-201', '1.1', ['BMS']);
       w.eq([r().softwareStatus, r().integrationVersion], ['PARTIAL_FAILURE', null], 'a partial update, reported by the car');
       carRuns(w.engine, 'VEH-201', '1.1');
-      w.eq([r().softwareStatus, r().integrationVersion, tspMismatch(r())], ['CONSISTENT', '1.1', false], 'updated: TSP and the car agree');
+      w.eq([r().softwareStatus, r().integrationVersion, tspMismatch(w.s, r())], ['CONSISTENT', '1.1', false], 'updated: TSP and the car agree');
     },
   },
   N01: {

@@ -166,7 +166,7 @@ function VehicleTable({ vehicles, extra, workspaceId = '' }: { vehicles: Resourc
               {actualSoftware(r)}
               {r.tsp?.expectedVersion && (
                 <Tooltip title={L('TSP 记录这辆车应运行的版本；实际版本只认车端上报。', 'The version TSP says the car should run; the actual version is the car’s own report.')}>
-                  {tspMismatch(r) ? (
+                  {tspMismatch(state, r) ? (
                     <Tag color="orange">{L(`TSP 应为 ${r.tsp.expectedVersion}`, `TSP expects ${r.tsp.expectedVersion}`)}</Tag>
                   ) : (
                     <Typography.Text type="secondary">{L(`TSP 应为 ${r.tsp.expectedVersion}`, `TSP expects ${r.tsp.expectedVersion}`)}</Typography.Text>

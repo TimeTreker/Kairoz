@@ -12,6 +12,7 @@ import { Hint, Mono, PageHeader } from '../components/common.tsx';
 import { HardwareTags } from '../components/tsp.tsx';
 import type { Ctx } from '../engine/engine.ts';
 import { addTspVehicle, syncTspIfChanged, updateTspVehicle } from '../engine/tsp.ts';
+import { reportedSoftware } from '../engine/tsp-sync.ts';
 import type { HardwareItem, TspVehicle } from '../engine/types.ts';
 import { useI18n } from '../i18n/i18n.tsx';
 
@@ -102,10 +103,17 @@ export function TspPage() {
               title: L('平台', 'Platform'),
               render: (_, v) => {
                 const r = registered(v.vin);
+                const reported = r ? reportedSoftware(state, r) : null;
                 return r ? (
                   <Space size={4} wrap>
                     <Mono>{r.id}</Mono>
-                    <Typography.Text type="secondary">{L(`车端上报 ${r.integrationVersion ?? '未知'}`, `reports ${r.integrationVersion ?? 'unknown'}`)}</Typography.Text>
+                    <Typography.Text type="secondary">
+                      {!reported
+                        ? L('尚未上报', 'not reported yet')
+                        : reported.partial
+                          ? L('车端上报部分域控失败', 'reports a partial update')
+                          : L(`车端上报 ${reported.version ?? '未知'}`, `reports ${reported.version ?? 'unknown'}`)}
+                    </Typography.Text>
                   </Space>
                 ) : (
                   <Typography.Text type="secondary">{L('未登记', 'not registered')}</Typography.Text>

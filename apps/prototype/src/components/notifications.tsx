@@ -184,11 +184,20 @@ export function useNotificationText() {
           title: L(`PLM 版本 ${s} 的 DCL 件无法识别`, `The DCL part of PLM version ${s} is unknown`),
           body: L(`件 ${d}：配置摘要不属于任何策略集。刷这个版本的车不会被认作运行某个策略集，请与 PLM 核对。`, `Part ${d}: its configuration digest matches no policy set. Vehicles flashed with this version are not taken as running a set; check with PLM.`),
         };
-      case 'EXPECTED_WITHOUT_SET':
-        return {
-          title: L(`${d} 辆量产车将升到 ${s}，它还没有适用的策略集`, `${d} production vehicle(s) are to move to ${s}, which no policy set applies to yet`),
-          body: L('TSP 记录的应为版本：车辆升级后会被阻止，提前开启适用性确认。', 'The version TSP says they should run: they will be blocked once updated; open an applicability check ahead.'),
+      case 'EXPECTED_WITHOUT_SET': {
+        const [count, why, linked] = (d ?? '').split('|');
+        const bodies: Record<string, string> = {
+          CHECK: L('TSP 记录的应为版本：车辆升级后会被阻止，提前开启适用性确认。', 'The version TSP says they should run: they will be blocked once updated; open an applicability check ahead.'),
+          OPEN: L('TSP 记录的应为版本：适用性确认已开启，确认适用后车辆到达即可下发。', 'The version TSP says they should run: an applicability check is open; once it is confirmed, the vehicles get a set on arrival.'),
+          PLANNED: L('TSP 记录的应为版本是一个工作名：PLM 还没发布它，量产车不会运行它。请与 TSP 或整车 OTA 核对版本号。', 'The version TSP holds is a working name PLM has not published; production vehicles never run it. Check the number with TSP or the vehicle OTA program.'),
+          LINKED: L(`TSP 记录的应为版本是工作名，PLM 已把它发布为 ${linked}：请让 TSP 或整车 OTA 改用 ${linked}。`, `The version TSP holds is a working name PLM published as ${linked}: have TSP or the vehicle OTA program use ${linked}.`),
+          UNKNOWN: L('PLM 没有这个版本：请与 TSP 或整车 OTA 核对版本号；PLM 发布后再开启适用性确认。', 'PLM has no such version: check the number with TSP or the vehicle OTA program, and open an applicability check once PLM publishes it.'),
         };
+        return {
+          title: L(`${count} 辆量产车将升到 ${s}，它还没有适用的策略集`, `${count} production vehicle(s) are to move to ${s}, which no policy set applies to yet`),
+          body: bodies[why ?? ''] ?? bodies.CHECK!,
+        };
+      }
       case 'TSP_MISMATCH': {
         const [expected, actual] = d.split(' · ');
         return {
