@@ -12,6 +12,7 @@ import { useEngineState } from '../app/store.ts';
 import { Hint, LabelTag, Mono, PageHeader, day, when } from '../components/common.tsx';
 import { LineTag } from '../components/patch.tsx';
 import { PromoteModal } from '../components/promote.tsx';
+import { DclPartCell, VersionStatusTag } from '../components/plm.tsx';
 import { PARENT_IN_TEST, callPhase, callsOf, closeUnchanged, cancelCall, defaultModules, excludeModule, isOverdueCall, isStale, moduleName, openCall, openRound, previewCall, remindModules, retargetCall, returnModules, submitDomain, submitGroup, waitingModules } from '../engine/calls.ts';
 import type { CallPhase } from '../engine/calls.ts';
 import { displayName } from '../engine/config.ts';
@@ -29,7 +30,6 @@ import {
   CANDIDATE_STATUS_LABELS,
   PLAN_STATUS_LABELS,
   ROUND_OUTCOME_LABELS,
-  SOFTWARE_STATUS_LABELS,
   setName,
 } from '../i18n/vocab.ts';
 
@@ -100,8 +100,8 @@ function CallList() {
     <Space orientation="vertical" size={16} style={{ width: '100%' }}>
       <Hint>
         {L(
-          '像整车软件集成一样发布整车集成版本：集成管理员为目标版本发起征集，叶子模块（业务组）由本组研发提交已验证的版本，上层模块（域集成）由域工作区管理员或配置集成提交子系统发布；收齐后合并、经 DCL 处理确认送测，每一轮是一个测试集成版本；通过的一轮由配置发布发布为策略集，并记录与目标整车集成版本的对应关系。',
-          'Whole-vehicle integration versions are released the way vehicle software is integrated: integration opens a call for a target version; leaf modules (business groups) submit their Verified version through their developers, upper modules (domain integration) submit their subsystem release through the domain workspace’s admin or integration; the complete list is merged, confirmed by DCL and sent to testing, each round a test integration version; configuration release publishes the passing round as a policy set related to the target version.',
+          '像整车软件集成一样发布整车集成版本：集成管理员为目标版本（自己起的工作名，PLM 尚无版本号）发起征集，叶子模块（业务组）由本组研发提交已验证的版本，上层模块（域集成）由域工作区管理员或配置集成提交子系统发布；收齐后合并、经 DCL 处理确认送测，每一轮是一个测试集成版本；通过的一轮由配置发布发布为策略集。DCL 导出 DCL 件交给 PLM，PLM 发布整车版本后，平台按配置摘要把工作名关联到 PLM 版本。',
+          'Whole-vehicle integration versions are released the way vehicle software is integrated: integration opens a call for a target version (a working name of its own; PLM has no number yet); leaf modules (business groups) submit their Verified version through their developers, upper modules (domain integration) submit their subsystem release through the domain workspace’s admin or integration; the complete list is merged, confirmed by DCL and sent to testing, each round a test integration version; configuration release publishes the passing round as a policy set. DCL exports the DCL part for PLM; once PLM publishes the version, the platform links the working name to it by the configuration digest.',
         )}
       </Hint>
       {mine.length > 0 && (
@@ -215,9 +215,9 @@ function OpenCallModal({ onClose, parentCallId }: { onClose: () => void; parentC
           <>
             <Form.Item
               name="targetVersion"
-              label={L('目标整车集成版本', 'Target whole-vehicle integration version')}
+              label={L('目标版本（工作名）', 'Target version (working name)')}
               rules={[{ required: true }]}
-              extra={L('软件还没有发布时，平台建一个规划版本；第一轮送测前可以改名，送测后固定。', 'If the software is not released yet, the platform plans the version; it can change until the first round is sent to testing.')}
+              extra={L('PLM 要到集成开始后才有版本号，这里用自己起的工作名，平台建一个规划版本；第一轮送测前可以改名，送测后固定。PLM 发布后按 DCL 件的配置摘要自动关联。', 'PLM numbers a version only once integration starts, so this is a working name of your own, planned by the platform; it can change until the first round is sent to testing. It is linked to the PLM version by the DCL part’s digest once PLM publishes.')}
             >
               <Input placeholder={L('例如 1.2', 'e.g. 1.2')} />
             </Form.Item>
@@ -329,7 +329,7 @@ function CallDetail({ callId }: { callId: string }) {
           <Descriptions.Item label={L('目标整车集成版本', 'Target version')}>
             <Space size={4} wrap>
               <Mono>{`${call.vehicleModelId} ${call.targetVersion}`}</Mono>
-              {sv && <Tag color={sv.status === 'PLANNED' ? 'gold' : 'green'}>{B(SOFTWARE_STATUS_LABELS[sv.status])}</Tag>}
+              {sv && <VersionStatusTag v={sv} />}
             </Space>
           </Descriptions.Item>
           <Descriptions.Item label={L('范围', 'Scope')}>{scopeText(L, call.scope)}</Descriptions.Item>
@@ -363,8 +363,15 @@ function CallDetail({ callId }: { callId: string }) {
             </Descriptions.Item>
           )}
           {call.releaseId && sv?.dclModule && (
-            <Descriptions.Item label={L('OTA 包内配置模块', 'DCL module in the OTA package')}>
-              {L(`${B(setName(state.releases[sv.dclModule.releaseId]!.dclVersion))}：刷 ${call.vehicleModelId} ${call.targetVersion} 的量产车随软件生效，不依赖网络`, `${B(setName(state.releases[sv.dclModule.releaseId]!.dclVersion))}: production vehicles flashed with ${call.vehicleModelId} ${call.targetVersion} run it with the software, no network needed`)}
+            <Descriptions.Item label={L('DCL 件与 PLM', 'DCL part and PLM')}>
+              <Space orientation="vertical" size={4}>
+                <DclPartCell v={sv} />
+                <Typography.Text type="secondary">
+                  {sv.linkedTo
+                    ? L(`PLM 已发布为 ${call.vehicleModelId} ${sv.linkedTo}：刷这个版本的车随软件运行出厂配置 ${state.releases[sv.dclModule.releaseId]!.dclVersion}，不依赖网络。`, `PLM published it as ${call.vehicleModelId} ${sv.linkedTo}: vehicles flashed with it run the factory configuration ${state.releases[sv.dclModule.releaseId]!.dclVersion} with the software, no network needed.`)
+                    : L('DCL 导出 DCL 件交给 PLM；PLM 发布带这个件的整车版本后，平台按配置摘要自动关联工作名。', 'DCL exports the DCL part for PLM; once PLM publishes a version carrying it, the platform links the working name by the configuration digest.')}
+                </Typography.Text>
+              </Space>
             </Descriptions.Item>
           )}
           {call.subsystemReleaseId && <Descriptions.Item label={L('发布结果', 'Result')}>{state.subsystemReleases[call.subsystemReleaseId]?.label}</Descriptions.Item>}
@@ -445,7 +452,7 @@ function CallDetail({ callId }: { callId: string }) {
               render: (_, m) => (
                 <Space size={4} wrap>
                   <LabelTag map={CALL_MODULE_STATUS_LABELS} value={m.status} color={CALL_MODULE_STATUS_COLORS[m.status]} />
-                  {isStale(state, m) && <Tag color="red">{L('提交已失效，需重新提交', 'changed since: submit again')}</Tag>}
+                  {call.status === 'OPEN' && isStale(state, m) && <Tag color="red">{L('提交已失效，需重新提交', 'changed since: submit again')}</Tag>}
                   {m.remindedAt && (m.status === 'WAITING' || m.status === 'RETURNED') && <Tooltip title={when(m.remindedAt)}><Tag color="orange">{L('已催办', 'reminded')}</Tag></Tooltip>}
                 </Space>
               ),
@@ -765,7 +772,7 @@ function VersionHistory({ selected }: { selected?: string }) {
                 render: (_, v) => (
                   <Space size={4}>
                     <Mono>{`${model} ${v.version}`}</Mono>
-                    {v.status === 'PLANNED' && <Tag color="gold">{B(SOFTWARE_STATUS_LABELS.PLANNED)}</Tag>}
+                    <VersionStatusTag v={v} />
                   </Space>
                 ),
               },
@@ -785,20 +792,17 @@ function VersionHistory({ selected }: { selected?: string }) {
           <Descriptions size="small" column={1} bordered style={{ marginBottom: 16 }}>
             <Descriptions.Item label={L('状态', 'Status')}>
               <Space size={4} wrap>
-                <Tag color={current.status === 'PLANNED' ? 'gold' : 'green'}>{B(SOFTWARE_STATUS_LABELS[current.status])}</Tag>
+                <VersionStatusTag v={current} />
                 {current.callId && state.integrationCalls[current.callId] && (
                   <a href={`#/versions/calls/${current.callId}`}>{L(`集成征集 ${state.integrationCalls[current.callId]!.title}`, `Integration call ${state.integrationCalls[current.callId]!.title}`)}</a>
                 )}
-                {current.status === 'RECORDED' && !current.callId && current.source && <Typography.Text type="secondary">{current.source}</Typography.Text>}
+                {current.status === 'RECORDED' && !current.callId && current.source && current.source !== 'PLM' && <Typography.Text type="secondary">{current.source}</Typography.Text>}
               </Space>
             </Descriptions.Item>
             <Descriptions.Item label={L('当前生效策略集', 'Set in effect now')}>{inEffect ? B(setName(inEffect.dclVersion)) : L('无', 'none')}</Descriptions.Item>
-            <Descriptions.Item label={L('OTA 包内配置模块', 'DCL module in the OTA package')}>
-              {current.dclModule ? (
-                <Space size={4} wrap>
-                  <Tag color={current.dclModule.releaseId === inEffect?.id ? 'green' : 'orange'}>{B(setName(state.releases[current.dclModule.releaseId]!.dclVersion))}</Tag>
-                  {current.dclModule.releaseId !== inEffect?.id && <Typography.Text type="warning">{L('不是当前生效的策略集：新刷的车会先跑包内版本，再由配置 OTA 补到最新', 'Not the set in effect: newly flashed vehicles start on it and get the newest by configuration OTA')}</Typography.Text>}
-                </Space>
+            <Descriptions.Item label={L('DCL 件（出厂配置）', 'DCL part (factory configuration)')}>
+              {current.dclPart || current.dclModule ? (
+                <DclPartCell v={current} />
               ) : (
                 <Typography.Text type="secondary">{L('无：刷这个版本的车要等云端推送配置', 'None: vehicles flashed with it wait for a cloud push')}</Typography.Text>
               )}
@@ -946,9 +950,15 @@ function useEntryText(): (e: HistoryEntry) => ReactNode {
       case 'CALL_OPENED':
         return L(`发起集成征集「${e.reason}」`, `Integration call “${e.reason}” opened`);
       case 'SOFTWARE_PLANNED':
-        return L(`规划整车集成版本 ${v}（软件尚未发布）`, `Integration version ${v} planned (software not released)`);
+        return L(`规划工作名 ${v}（PLM 尚未发布）`, `Working name ${v} planned (not published by PLM yet)`);
       case 'SOFTWARE_RECORDED':
         return e.callId ? L(`生成整车集成版本 ${v}（集成征集发布）`, `Integration version ${v} recorded by the call’s release`) : L(`登记整车集成版本 ${v}${reason}`, `Integration version ${v} recorded${reasonEn}`);
+      case 'PLM_PUBLISHED':
+        return e.reason ? L(`PLM 发布整车集成版本 ${v}，BOM 含 DCL 件 ${e.reason}`, `PLM published ${v}; its BOM carries DCL part ${e.reason}`) : L(`PLM 发布整车集成版本 ${v}（不带 DCL 件）`, `PLM published ${v} (no DCL part)`);
+      case 'PART_DELIVERED':
+        return L(`DCL 导出 DCL 件 ${e.reason}，交给 PLM`, `DCL exported DCL part ${e.reason} for PLM`);
+      case 'LINKED':
+        return L(`按配置摘要关联：工作名 ${e.reason} 即 PLM 版本 ${v}`, `Linked by the configuration digest: working name ${e.reason} is PLM version ${v}`);
       case 'MODULE_SUBMITTED':
         return L(`${mod(e.module)} 提交 ${submissionText(state, { featureId: e.featureId, commitId: null, subsystemReleaseId: e.subsystemReleaseId })}${reason}`, `${mod(e.module)} submitted ${submissionText(state, { featureId: e.featureId, commitId: null, subsystemReleaseId: e.subsystemReleaseId })}${reasonEn}`);
       case 'MODULE_NO_CHANGE':
@@ -977,7 +987,7 @@ function useEntryText(): (e: HistoryEntry) => ReactNode {
       case 'PATCHED':
         return L(`发布补丁 ${set(e.releaseId)}`, `Patch ${set(e.releaseId)} published`);
       case 'CHECK_OPENED':
-        return e.by ? L(`开启适用性确认：${set(e.releaseId)} 用于 ${v}`, `Applicability check opened: ${set(e.releaseId)} for ${v}`) : L(`登记软件后自动开启适用性确认：${set(e.releaseId)} 用于 ${v}`, `Applicability check opened on recording: ${set(e.releaseId)} for ${v}`);
+        return e.by ? L(`开启适用性确认：${set(e.releaseId)} 用于 ${v}`, `Applicability check opened: ${set(e.releaseId)} for ${v}`) : L(`PLM 发布新版本后自动开启适用性确认：${set(e.releaseId)} 用于 ${v}`, `Applicability check opened when PLM published the version: ${set(e.releaseId)} for ${v}`);
       case 'CHECK_VERIFIED':
         return L(`适用性测试通过：${set(e.releaseId)} 用于 ${v}`, `Applicability verified: ${set(e.releaseId)} for ${v}`);
       case 'CHECK_CONFIRMED':
@@ -987,7 +997,9 @@ function useEntryText(): (e: HistoryEntry) => ReactNode {
       case 'CHECK_SUPERSEDED':
         return L('适用性确认被更新的确认取代', 'Applicability check superseded');
       case 'APPLICABILITY_ADDED':
-        return L(`${set(e.releaseId)} 追加适用 ${v}`, `${set(e.releaseId)} added for ${v}`);
+        return e.reason?.startsWith('working name ') && !e.checkId
+          ? L(`${set(e.releaseId)} 随工作名 ${e.reason.slice(13)} 适用 ${v}`, `${set(e.releaseId)} applies to ${v} with working name ${e.reason.slice(13)}`)
+          : L(`${set(e.releaseId)} 追加适用 ${v}`, `${set(e.releaseId)} added for ${v}`);
       case 'APPLICABILITY_WITHDRAWN':
         return L(`${set(e.releaseId)} 撤销适用 ${v}${reason}`, `${set(e.releaseId)} withdrawn from ${v}${reasonEn}`);
       case 'IN_EFFECT':
@@ -1024,10 +1036,10 @@ function useEntryText(): (e: HistoryEntry) => ReactNode {
         return L(`${cars(e.resourceIds)} 的软件换到 ${e.reason ?? '未知'}，退出本次配置 OTA`, `${cars(e.resourceIds)} moved to software ${e.reason ?? 'unknown'} and left the rollout`);
       case 'VEHICLE_ARRIVED':
         return e.releaseId
-          ? L(`${cars(e.resourceIds)} 的软件从 ${e.reason ?? '—'} 换到 ${v}，随 OTA 包生效 ${set(e.releaseId)}`, `${cars(e.resourceIds)} moved from ${e.reason ?? '—'} to ${v}, running ${set(e.releaseId)} from the OTA package`)
+          ? L(`${cars(e.resourceIds)} 的软件从 ${e.reason ?? '—'} 换到 ${v}，车端上报运行出厂配置 ${set(e.releaseId)}`, `${cars(e.resourceIds)} moved from ${e.reason ?? '—'} to ${v} and reports the factory configuration ${set(e.releaseId)}`)
           : L(`${cars(e.resourceIds)} 的软件从 ${e.reason ?? '—'} 换到 ${v}`, `${cars(e.resourceIds)} moved from ${e.reason ?? '—'} to ${v}`);
       case 'MODULE_EXPORTED':
-        return L(`${set(e.releaseId)} 导出为 ${v} 的 OTA 包内配置模块`, `${set(e.releaseId)} exported as the DCL module of ${v}’s OTA package`);
+        return L(`${set(e.releaseId)} 的配置随 ${v} 的发布导出，待 DCL 合入 DCL 件`, `${set(e.releaseId)}’s configuration exported with ${v}’s release, for DCL to merge into the DCL part`);
       case 'VEHICLE_LEFT':
         return L(`${cars(e.resourceIds)} 的软件换到 ${e.reason}`, `${cars(e.resourceIds)} moved to ${e.reason}`);
       default:

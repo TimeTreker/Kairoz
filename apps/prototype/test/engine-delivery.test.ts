@@ -6,6 +6,7 @@ import * as fleet from '../src/engine/fleet.ts';
 import { demoState } from '../src/engine/seed.ts';
 import { reportNow, sendReceipt, setAgent, simulateSoftwareOta, tick } from '../src/engine/simulator.ts';
 import * as v from '../src/engine/validation.ts';
+import { plmPublish } from '../acceptance/helpers.ts';
 
 const feature = (w: World, name: string) => Object.values(w.s.features).find((f) => f.name === name)!;
 const groupId = (w: World, name: string) => Object.values(w.s.vehicleGroups).find((g) => g.name === name)!.id;
@@ -86,7 +87,7 @@ describe('dispatch and push', () => {
     const w = new World(demoState());
     const vg = groupId(w, '制动研发车组');
     const base = Object.values(w.s.releases).find((r) => r.dclVersion === '1.0.0')!;
-    w.as('resource', (c) => fleet.recordSoftwareVersion(c, { vehicleModelId: 'X89', version: '1.3', source: 'OTA 1.3', manifest: MANIFEST_13 }));
+    plmPublish(w.engine, 'X89', '1.3', { manifest: MANIFEST_13 });
     w.as('workspace_manager', (c) => fleet.setGroupBase(c, vg, base.id));
     w.sys((c) => simulateSoftwareOta(c, 'VEH-003', '1.3'));
     w.sys((c) => reportNow(c, 'VEH-003'));

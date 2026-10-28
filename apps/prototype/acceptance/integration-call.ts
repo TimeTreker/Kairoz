@@ -12,12 +12,15 @@ import * as fleet from '../src/engine/fleet.ts';
 import { versionHistory, setsOverTime } from '../src/engine/history.ts';
 import * as integ from '../src/engine/integration.ts';
 import { answerConfigRequest } from '../src/engine/ota.ts';
+import { publishPlmVersion, syncPlmIfChanged } from '../src/engine/plm.ts';
+import { workingNameState } from '../src/engine/plm-sync.ts';
 import * as rel from '../src/engine/release.ts';
 import { demoState } from '../src/engine/seed.ts';
-import { sendReceipt } from '../src/engine/simulator.ts';
+import { advanceClockHours, sendReceipt } from '../src/engine/simulator.ts';
+import { partVersion } from '../src/engine/types.ts';
 import type { State } from '../src/engine/types.ts';
 import * as v from '../src/engine/validation.ts';
-import { verifyFeatureOn } from './helpers.ts';
+import { carRuns, verifyFeatureOn } from './helpers.ts';
 import type { SceneSpec, World } from './world.ts';
 
 export const start = (): State => demoState();
@@ -144,29 +147,71 @@ export const scenes: Record<string, SceneSpec> = {
       const set = w.as('release', (c) => rel.promoteCandidate(c, w.ref.t2!, { dclVersion: '1.1.0', vehicleIntegrationVersions: ['1.2'], notes: 'X89 1.2 集成发布' }));
       w.ref.set = set;
       const sv = w.s.softwareVersions['X89::1.2']!;
-      w.eq([sv.status, sv.dclModule?.releaseId, call(w).status, call(w).releaseId], ['RECORDED', set, 'RELEASED', set], 'version recorded, set related, module exported');
-      w.eq(w.s.releases[set]!.vehicleIntegrationVersions, ['1.2'], 'the set ↔ version relation');
-      // The vehicle OTA program flashes 1.2: the set comes with it, no configuration push needed.
-      w.as('resource', (c) => fleet.confirmIntegration(c, 'VEH-201', { version: '1.2', source: '整车 OTA 回执' }));
-      const config = w.s.releases[set]!.resolvedConfigId;
-      w.eq(w.s.resources['VEH-201']!.appliedConfigId, config, 'VEH-201 runs 1.1.0 with the software');
-      w.eq(answerConfigRequest(w.s, 'VEH-201').configId, config, 'nothing more to push');
+      w.eq([sv.status, sv.dclModule?.releaseId, call(w).status, call(w).releaseId], ['PLANNED', set, 'RELEASED', set], 'working name still planned, set related, configuration exported');
+      w.eq(w.s.releases[set]!.vehicleIntegrationVersions, ['1.2'], 'the set ↔ working name relation');
+      // Production runs only what PLM published.
+      w.fails('PLANNED_VERSION_IN_PRODUCTION', () => w.as('resource', (c) => fleet.confirmIntegration(c, 'VEH-201', { version: '1.2', source: '整车 OTA 回执' })));
       w.eq(rel.releaseFor(w.s, w.s.resources['VEH-202']!).release?.dclVersion, '1.0.0', 'VEH-202 on 1.0 keeps 1.0.0');
     },
   },
   IC08: {
     needs: ['IC07'],
     run: (w) => {
-      const history = versionHistory(w.s, 'X89', '1.2');
+      w.denied('release', (c) => calls.deliverDclPart(c, { vehicleModelId: 'X89', version: '1.2', clientVersion: '2.3.0' }));
+      const part = w.as('dcl', (c) => calls.deliverDclPart(c, { vehicleModelId: 'X89', version: '1.2', clientVersion: '2.3.0' }));
+      const digest = w.s.resolvedConfigs[w.s.releases[w.ref.set!]!.resolvedConfigId]!.digest;
+      w.eq([partVersion(part), part.digest], ['2.3.0+1.1.0', digest], 'the part names the client and the set, and carries the configuration digest');
+      w.eq(workingNameState(w.s.softwareVersions['X89::1.2']!), 'DELIVERED', 'handed to PLM, waiting for PLM to publish');
+    },
+  },
+  IC09: {
+    needs: ['IC08'],
+    run: (w) => {
+      // PLM publishes the software a day later under its own number, the DCL part in its BOM.
+      w.sys((c) => advanceClockHours(c, 24));
+      const part = w.s.softwareVersions['X89::1.2']!.dclPart!;
+      w.sys((c) => publishPlmVersion(c, { vehicleModelId: 'X89', version: '1.2.0', dclPart: { clientVersion: part.clientVersion, setVersion: part.setVersion, digest: part.digest } }));
+      w.sys((c) => syncPlmIfChanged(c));
+      const v120 = w.s.softwareVersions['X89::1.2.0']!;
+      w.eq([v120.status, v120.workingName, w.s.softwareVersions['X89::1.2']!.linkedTo], ['RECORDED', '1.2', '1.2.0'], 'linked by the configuration digest');
+      w.eq(rel.setInEffect(w.s, 'X89', '1.2.0')?.id, w.ref.set, '1.1.0 applies to 1.2.0');
+      w.eq(Object.values(w.s.applicabilityChecks).filter((c) => c.version === '1.2.0').length, 0, 'no applicability check: the call tested this software');
+      // The vehicle OTA program flashes VEH-201 with 1.2.0: it reports the bundled set, no push needed.
+      w.sys((c) => advanceClockHours(c, 1));
+      carRuns(w.engine, 'VEH-201', '1.2.0');
+      const config = w.s.releases[w.ref.set!]!.resolvedConfigId;
+      w.eq(w.s.resources['VEH-201']!.appliedConfigId, config, 'VEH-201 runs 1.1.0 from the package');
+      w.eq(w.s.clientReports['VEH-201']!.latest!.payload.configuration?.digest, part.digest, 'its own report says so');
+      w.eq(answerConfigRequest(w.s, 'VEH-201').configId, config, 'nothing more to push');
+    },
+  },
+  IC10: {
+    needs: ['IC09'],
+    run: (w) => {
+      const history = versionHistory(w.s, 'X89', '1.2.0');
       const kinds = history.map((e) => e.kind);
       w.eq(kinds[0], 'CALL_OPENED', 'it starts with the call');
       w.eq(
-        kinds.filter((k) => k.startsWith('ROUND_') || ['MODULE_RETURNED', 'SOFTWARE_RECORDED', 'MODULE_EXPORTED', 'PUBLISHED', 'VEHICLE_ARRIVED'].includes(k)),
-        ['ROUND_FROZEN', 'MODULE_RETURNED', 'ROUND_CANCELLED', 'ROUND_FROZEN', 'ROUND_PASSED', 'SOFTWARE_RECORDED', 'PUBLISHED', 'MODULE_EXPORTED', 'VEHICLE_ARRIVED'],
-        'rounds, the return, the release, the module and the vehicle in order',
+        kinds.filter((k) => k.startsWith('ROUND_') || ['MODULE_RETURNED', 'PUBLISHED', 'MODULE_EXPORTED', 'PART_DELIVERED', 'PLM_PUBLISHED', 'LINKED', 'APPLICABILITY_ADDED', 'VEHICLE_ARRIVED'].includes(k)),
+        ['ROUND_FROZEN', 'MODULE_RETURNED', 'ROUND_CANCELLED', 'ROUND_FROZEN', 'ROUND_PASSED', 'PUBLISHED', 'MODULE_EXPORTED', 'PART_DELIVERED', 'PLM_PUBLISHED', 'LINKED', 'APPLICABILITY_ADDED', 'VEHICLE_ARRIVED'],
+        'rounds, the return, the release, the part, PLM and the vehicle in order',
       );
-      w.eq(setsOverTime(history), [w.ref.set!], '1.1.0 is the only set 1.2 ever had');
+      w.eq(setsOverTime(history), [w.ref.set!], '1.1.0 is the only set 1.2.0 ever had');
       w.eq(history.find((e) => e.kind === 'VEHICLE_ARRIVED')!.releaseId, w.ref.set, 'VEH-201 started on the bundled set');
+    },
+  },
+  IC11: {
+    needs: ['IC10'],
+    run: (w) => {
+      // PLM publishes 1.2.1 (another module fixed) with the same DCL part.
+      const part = w.s.softwareVersions['X89::1.2.0']!.dclPart!;
+      w.sys((c) => publishPlmVersion(c, { vehicleModelId: 'X89', version: '1.2.1', dclPart: { clientVersion: part.clientVersion, setVersion: part.setVersion, digest: part.digest } }));
+      w.sys((c) => syncPlmIfChanged(c));
+      const v121 = w.s.softwareVersions['X89::1.2.1']!;
+      w.eq([v121.dclModule?.releaseId, v121.workingName], [w.ref.set, null], 'factory configuration 1.1.0, no working name');
+      w.eq(rel.setInEffect(w.s, 'X89', '1.2.1'), null, 'no set applies yet');
+      const checks = Object.values(w.s.applicabilityChecks).filter((c) => c.version === '1.2.1');
+      w.eq(checks.map((c) => [c.releaseId, c.auto]), [[w.ref.set, true]], 'an applicability check opens for 1.1.0 on 1.2.1');
     },
   },
   N01: {

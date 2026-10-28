@@ -2,10 +2,39 @@
 // does it (simulation first, then physical), with the simulator answering for the vehicles.
 
 import * as config from '../src/engine/config.ts';
-import { membersOf } from '../src/engine/fleet.ts';
-import { sendReceipt } from '../src/engine/simulator.ts';
+import type { Engine } from '../src/engine/engine.ts';
+import { membersOf, setSoftwareManifest } from '../src/engine/fleet.ts';
+import { registerDeviceKey } from '../src/engine/client-report.ts';
+import { publishPlmVersion, syncPlmIfChanged } from '../src/engine/plm.ts';
+import { devicePublicKey, provisionDevice, reportNow, sendReceipt, simulateSoftwareOta } from '../src/engine/simulator.ts';
+import type { PlmVersion } from '../src/engine/types.ts';
 import * as v from '../src/engine/validation.ts';
 import type { World } from './world.ts';
+
+/**
+ * PLM publishes a whole-vehicle version (with the DCL part of a working name when `partOf` names one),
+ * the platform syncs it, and vehicle resources add the mock manifest when one is given.
+ */
+export function plmPublish(e: Engine, vehicleModelId: string, version: string, o: { manifest?: { signals: string[]; sources: { unit: string; directory: string }[] } | null; partOf?: string; modules?: PlmVersion['modules'] } = {}): void {
+  const part = o.partOf ? e.getState().softwareVersions[`${vehicleModelId}::${o.partOf}`]?.dclPart : null;
+  if (o.partOf && !part) throw new Error(`no DCL part was handed over for ${vehicleModelId} ${o.partOf}`);
+  e.run(null, (c) => publishPlmVersion(c, { vehicleModelId, version, modules: o.modules, dclPart: part ? { clientVersion: part.clientVersion, setVersion: part.setVersion, digest: part.digest } : null }));
+  e.run(null, (c) => syncPlmIfChanged(c));
+  if (o.manifest) e.run('resource', (c) => setSoftwareManifest(c, { vehicleModelId, version, manifest: o.manifest! }));
+}
+
+/**
+ * The vehicle is flashed with `version` (the simulator's software OTA) and says so in its next signed
+ * report; vehicle resources register its device key first when it has none.
+ */
+export function carRuns(e: Engine, resourceId: string, version: string): void {
+  if (!e.getState().resources[resourceId]!.deviceKey) {
+    const key = e.run(null, (c) => (provisionDevice(c, resourceId), devicePublicKey(c.s, resourceId)!));
+    e.run('resource', (c) => registerDeviceKey(c, resourceId, key));
+  }
+  e.run(null, (c) => simulateSoftwareOta(c, resourceId, version));
+  e.run(null, (c) => reportNow(c, resourceId));
+}
 
 export const CONTROLS = {
   purposeConfirmed: true,

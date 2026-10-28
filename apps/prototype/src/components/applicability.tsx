@@ -7,7 +7,6 @@ import { useState } from 'react';
 import { useCan, useRun } from '../app/hooks.ts';
 import { navigate } from '../app/router.ts';
 import { useEngineState } from '../app/store.ts';
-import { exportDclModule } from '../engine/calls.ts';
 import {
   blockedProductionVehicles,
   cancelApplicabilityCheck,
@@ -24,21 +23,23 @@ import {
   withdrawApplicability,
 } from '../engine/applicability.ts';
 import { ungroupedVehicles, vehicleGroupsOf } from '../engine/fleet.ts';
-import { appliesTo, applicableVersions, compareVersions, releaseConfiguration, releaseDiff, releasesOf, setInEffect, takeOverProblem } from '../engine/release.ts';
-import type { ApplicabilityCheck, Release } from '../engine/types.ts';
+import { appliesTo, applicableVersions, compareVersions, releaseDiff, releasesOf, setInEffect, takeOverProblem } from '../engine/release.ts';
+import type { ApplicabilityCheck, ApplicabilityRecord, Release } from '../engine/types.ts';
 import { cancelDeployment } from '../engine/validation.ts';
 import { useI18n } from '../i18n/i18n.tsx';
 import { issueLabel } from '../i18n/issues.ts';
-import { CHECK_STATUS_COLORS, CHECK_STATUS_LABELS, COMPATIBILITY_LABELS, SOFTWARE_STATUS_LABELS, setName } from '../i18n/vocab.ts';
+import { CHECK_STATUS_COLORS, CHECK_STATUS_LABELS, COMPATIBILITY_LABELS, setName } from '../i18n/vocab.ts';
 import { Hint, Mono, when } from './common.tsx';
-import { downloadJson } from './JsonExport.tsx';
 import { DiffView } from './DiffView.tsx';
 import { DeploymentsTable, DispatchModal, RecordTestModal, TargetsTable } from './testing.tsx';
+import { DclPartCell, VersionStatusTag } from './plm.tsx';
 
 /** Every software version of a model with the set in effect for it and how that came to be. */
 export function SoftwareVersionsCard({ modelId }: { modelId: string }) {
   const state = useEngineState();
   const { L, B } = useI18n();
+  // A PLM version takes over its working name's sets: the record says so in words.
+  const recordReason = (a: ApplicabilityRecord) => (a.checkId === null && a.reason.startsWith('working name ') ? L(`由工作名 ${a.reason.slice(13)} 关联`, `linked from working name ${a.reason.slice(13)}`) : a.reason);
   const can = useCan();
   const run = useRun();
   const [opening, setOpening] = useState<string | null>(null);
@@ -52,13 +53,6 @@ export function SoftwareVersionsCard({ modelId }: { modelId: string }) {
     releases.filter((r) => !appliesTo(state, r, version) && !takeOverProblem(state, r, version)).sort((a, b) => (a.patchOf === null ? 0 : 1) - (b.patchOf === null ? 0 : 1) || b.sequence - a.sequence);
   const testWs = Object.values(state.workspaces).find((w) => w.kind === 'INTEGRATION' && w.vehicleModelId === modelId && w.scopes.includes('Vehicle'));
   const canConfirm = can('applicability.confirm', { workspaceId: testWs?.id ?? '*', scope: 'Vehicle' });
-  const projectWs = Object.values(state.workspaces).find((w) => w.kind === 'PROJECT' && w.vehicleModelId === modelId && w.scopes.includes('Vehicle'));
-  const canExport = can('release.promote', { workspaceId: projectWs?.id ?? '*', scope: 'Vehicle' });
-  // The module goes to the vehicle OTA program: its set and complete configuration, by digest.
-  const exportModule = (version: string) => {
-    const m = run((c) => exportDclModule(c, { vehicleModelId: modelId, version }), L('已导出为 OTA 包内的配置模块', 'Exported as the OTA package’s DCL module'));
-    if (m !== undefined) downloadJson({ name: `DCL_${modelId}_${version}_ota_module.json`, json: JSON.stringify({ module: { vehicleModelId: modelId, softwareVersion: version, ...m }, configuration: releaseConfiguration(state, m.releaseId) }, null, 2) });
-  };
   const versions = Object.values(state.softwareVersions)
     .filter((v) => v.vehicleModelId === modelId)
     .sort((a, b) => compareVersions(b.version, a.version));
@@ -93,11 +87,7 @@ export function SoftwareVersionsCard({ modelId }: { modelId: string }) {
             render: (_, v) => (
               <Space size={4} wrap>
                 <Mono>{`${modelId} ${v.version}`}</Mono>
-                {v.status === 'PLANNED' && (
-                  <Tooltip title={L('集成征集的目标版本，软件尚未发布；只能由该征集的发布列入。', 'An integration call’s target, not released yet; only that call’s release lists it.')}>
-                    <Tag color="gold">{B(SOFTWARE_STATUS_LABELS.PLANNED)}</Tag>
-                  </Tooltip>
-                )}
+                <VersionStatusTag v={v} />
               </Space>
             ),
           },
@@ -133,7 +123,7 @@ export function SoftwareVersionsCard({ modelId }: { modelId: string }) {
                   .filter((a) => a.vehicleModelId === modelId && a.version === v.version)
                   .sort((a, b) => a.seq - b.seq)
                   .map((a) => (
-                    <Tooltip key={a.id} title={`${a.reason} · ${state.accounts[a.by]?.displayName ?? a.by} · ${when(a.at)}`}>
+                    <Tooltip key={a.id} title={`${recordReason(a)} · ${a.by ? (state.accounts[a.by]?.displayName ?? a.by) : L('平台', 'Platform')} · ${when(a.at)}`}>
                       <Tag color={a.action === 'ADD' ? 'blue' : 'red'}>
                         {a.action === 'ADD' ? L(`追加 ${state.releases[a.releaseId]?.dclVersion}`, `added ${state.releases[a.releaseId]?.dclVersion}`) : L(`撤销 ${state.releases[a.releaseId]?.dclVersion}`, `withdrew ${state.releases[a.releaseId]?.dclVersion}`)}
                       </Tag>
@@ -143,30 +133,8 @@ export function SoftwareVersionsCard({ modelId }: { modelId: string }) {
             ),
           },
           {
-            title: L('OTA 包内配置模块', 'DCL module in OTA package'),
-            render: (_, v) => {
-              const set = setInEffect(state, modelId, v.version);
-              const m = v.dclModule;
-              return (
-                <Space size={4} wrap>
-                  {m ? (
-                    <Tooltip title={L('刷这个版本的量产车随软件生效，不依赖网络', 'Production vehicles flashed with it run it with the software, no network needed')}>
-                      <Tag color={m.releaseId === set?.id ? 'green' : 'orange'}>
-                        {B(setName(state.releases[m.releaseId]!.dclVersion))}
-                        {m.releaseId === set?.id ? '' : L(' · 非当前', ' · not current')}
-                      </Tag>
-                    </Tooltip>
-                  ) : (
-                    '—'
-                  )}
-                  {canExport && v.status === 'RECORDED' && set && m?.releaseId !== set.id && (
-                    <Button type="link" size="small" onClick={() => exportModule(v.version)}>
-                      {m ? L(`更新为 ${set.dclVersion}`, `Update to ${set.dclVersion}`) : L('导出到 OTA 包', 'Export to OTA package')}
-                    </Button>
-                  )}
-                </Space>
-              );
-            },
+            title: L('DCL 件（出厂配置）', 'DCL part (factory configuration)'),
+            render: (_, v) => <DclPartCell v={v} />,
           },
           {
             title: L('量产车', 'Production vehicles'),
@@ -197,7 +165,7 @@ export function SoftwareVersionsCard({ modelId }: { modelId: string }) {
                     <Tooltip
                       title={
                         v.status === 'PLANNED'
-                          ? L('规划版本的策略集来自它的集成征集，不做适用性确认。', 'A planned version’s set comes from its integration call; it takes no applicability check.')
+                          ? L('工作名的策略集来自它的集成征集，不做适用性确认；PLM 发布后在 PLM 版本上确认。', 'A working name’s set comes from its integration call; it takes no applicability check. Checks run on the PLM version once PLM publishes.')
                           : eligible(v.version).length === 0
                           ? L('没有可以接管这个软件版本的策略集：补丁只服务本线的软件；主线只有在补丁的修复合入（或写明不合入）后才能接管补丁服务的软件。', 'No policy set may take this software over: a patch only serves its own line’s software, and the mainline takes over from a patch only once the patch’s fixes reached it (or were closed for it).')
                           : undefined
@@ -334,7 +302,7 @@ function CheckCard({ check }: { check: ApplicabilityCheck }) {
       }
     >
       <Descriptions size="small" column={{ xs: 1, md: 3 }}>
-        <Descriptions.Item label={L('开启', 'Opened')}>{`${state.accounts[check.openedBy]?.displayName ?? check.openedBy} · ${when(check.openedAt)}`}</Descriptions.Item>
+        <Descriptions.Item label={L('开启', 'Opened')}>{`${check.openedBy ? (state.accounts[check.openedBy]?.displayName ?? check.openedBy) : L('平台（PLM 发布新版本）', 'Platform (PLM published a version)')} · ${when(check.openedAt)}`}</Descriptions.Item>
         <Descriptions.Item label={L('测试工作区', 'Test workspace')}>{state.workspaces[check.testWorkspaceId]?.name}</Descriptions.Item>
         <Descriptions.Item label={L('集成验证', 'Verified')}>{check.verifiedBy ? `${state.accounts[check.verifiedBy]?.displayName} · ${when(check.verifiedAt)}` : '—'}</Descriptions.Item>
         {check.decidedBy && <Descriptions.Item label={L('决定', 'Decided')}>{`${state.accounts[check.decidedBy]?.displayName} · ${when(check.decidedAt)}`}</Descriptions.Item>}

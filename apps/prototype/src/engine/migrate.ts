@@ -257,7 +257,26 @@ function to22(s: Saved): void {
   s.schema = 22;
 }
 
-const STEPS: Record<number, (s: Saved) => void> = { 6: to7, 7: to8, 8: to9, 9: to10, 10: to11, 11: to12, 12: to13, 13: to14, 14: to15, 15: to16, 16: to17, 17: to18, 18: to19, 19: to20, 20: to21, 21: to22 };
+/**
+ * Schema 23: whole-vehicle versions come from PLM. Every version an earlier save recorded is taken as
+ * published by PLM (the simulated PLM gets the same list, so nothing is synced again); a planned one
+ * is a working name not linked yet. Applicability records and checks may now be the platform's own.
+ */
+function to23(s: Saved): void {
+  const versions: Record<string, unknown>[] = [];
+  for (const v of Object.values((s.softwareVersions ?? {}) as Rows)) {
+    v.dclPart ??= null;
+    v.workingName ??= v.status === 'RECORDED' && v.callId ? v.version : null;
+    v.linkedTo ??= null;
+    if (v.status === 'RECORDED') versions.push({ vehicleModelId: v.vehicleModelId, version: v.version, modules: [], dclPart: null, publishedAt: v.createdAt });
+  }
+  const revision = versions.length ? 1 : 0;
+  s.plm ??= { revision, versions };
+  s.plmSync ??= { revision, syncedAt: null };
+  s.schema = 23;
+}
+
+const STEPS: Record<number, (s: Saved) => void> = { 6: to7, 7: to8, 8: to9, 9: to10, 10: to11, 11: to12, 12: to13, 13: to14, 14: to15, 15: to16, 16: to17, 17: to18, 18: to19, 19: to20, 20: to21, 21: to22, 22: to23 };
 
 /** Why `migrate` cannot read a save: not a platform state, older than the oldest readable schema, or from a newer version. */
 export function unreadableReason(raw: unknown): 'NOT_STATE' | 'TOO_OLD' | 'NEWER' | null {

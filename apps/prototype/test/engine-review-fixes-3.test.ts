@@ -4,7 +4,7 @@
 
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
-import { simpleFeature, verifyFeatureOn } from '../acceptance/helpers.ts';
+import { carRuns, simpleFeature, verifyFeatureOn } from '../acceptance/helpers.ts';
 import { World } from '../acceptance/world.ts';
 import * as calls from '../src/engine/calls.ts';
 import * as config from '../src/engine/config.ts';
@@ -179,7 +179,7 @@ describe('rollouts losing vehicles', () => {
     const d = w.as('release', (c) => ota.createOta(c, { releaseId: set101, vehicleGroupIds: [productionGroup(w)], firstWave: ['VEH-201'] }));
     w.sys((c) => sendReceipt(c, d, 'VEH-201', 'FAILED'));
     assert.equal(w.s.deployments[d]!.status, 'PAUSED');
-    w.as('resource', (c) => fleet.confirmIntegration(c, 'VEH-201', { version: '1.2', source: '整车 OTA 回执' }));
+    carRuns(w.engine, 'VEH-201', '1.1');
     const t = w.s.deployments[d]!.targets.find((x) => x.resourceId === 'VEH-201')!;
     assert.equal(t.status, 'CANCELLED');
     assert.equal(t.history.at(-1)!.status, 'FAILED');
@@ -193,7 +193,7 @@ describe('rollouts losing vehicles', () => {
     const w = new World(demoState());
     const set101 = twoSets(w);
     const d = w.as('release', (c) => ota.createOta(c, { releaseId: set101, vehicleGroupIds: [productionGroup(w)], firstWave: 'ALL' }));
-    for (const r of ['VEH-201', 'VEH-202']) w.as('resource', (c) => fleet.confirmIntegration(c, r, { version: '1.2', source: '整车 OTA 回执' }));
+    for (const r of ['VEH-201', 'VEH-202']) carRuns(w.engine, r, '1.1');
     assert.equal(w.s.deployments[d]!.status, 'CANCELLED');
     assert.deepEqual(w.s.deployments[d]!.log!.map((l) => l.kind), ['STARTED', 'DROPPED', 'DROPPED', 'CANCELLED']);
   });

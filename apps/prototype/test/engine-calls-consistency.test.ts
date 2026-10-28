@@ -129,25 +129,25 @@ describe('archiving', () => {
 });
 
 describe('release history keeps every step', () => {
-  test('every module export, and the planned and recorded moments of a call’s version', () => {
-    const e = new Engine(demoState());
-    e.run('release', (c) => calls.exportDclModule(c, { vehicleModelId: 'X89', version: '1.0' }));
-    const kinds = h.versionHistory(e.getState(), 'X89', '1.0').filter((x) => x.kind === 'MODULE_EXPORTED');
-    assert.equal(kinds.length, 1);
+  test('the planned moment of a call’s working name', () => {
     const { e: e2, callId } = opened();
     const planned = h.versionHistory(e2.getState(), 'X89', '1.2').map((x) => x.kind);
     assert.ok(planned.includes('SOFTWARE_PLANNED'));
     assert.equal(e2.getState().integrationCalls[callId]!.targetVersion, '1.2');
   });
 
-  test('a schema 21 save keeps its module as the first export and its planned time', () => {
+  test('a schema 21 save gets its planned time, and PLM records the versions it had', () => {
     const { e } = opened();
-    e.run('release', (c) => calls.exportDclModule(c, { vehicleModelId: 'X89', version: '1.0' }));
     const current = JSON.parse(JSON.stringify(e.getState()));
     const saved = JSON.parse(JSON.stringify(current));
     saved.schema = 21;
-    for (const x of Object.values(saved.softwareVersions) as any[]) for (const k of ['moduleLog', 'plannedBy', 'plannedAt']) delete x[k];
-    assert.deepEqual(migrate(saved), current);
+    delete saved.plm;
+    delete saved.plmSync;
+    for (const x of Object.values(saved.softwareVersions) as any[]) for (const k of ['moduleLog', 'plannedBy', 'plannedAt', 'dclPart', 'workingName', 'linkedTo']) delete x[k];
+    const migrated = migrate(saved)!;
+    assert.deepEqual(migrated.softwareVersions, current.softwareVersions);
+    assert.deepEqual(migrated.plm.versions.map((v) => v.version), ['1.0', '1.1']);
+    assert.equal(migrated.plmSync.revision, migrated.plm.revision);
   });
 
   test('a migrated schema 20 rollout keeps the software its vehicles ran when it was sent', () => {

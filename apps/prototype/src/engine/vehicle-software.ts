@@ -9,7 +9,7 @@ import { conflict, notFound, rule } from '../domain/errors.ts';
 import { newId } from '../domain/ids.ts';
 import type { Ctx } from './engine.ts';
 import { groupPublicationBase } from './delivery.ts';
-import { assertIdle, assertNotLentAway, getResource, pendingSoftwareUpdateOf, softwareKey } from './fleet.ts';
+import { assertIdle, assertNotLentAway, assertNotLinked, getResource, pendingSoftwareUpdateOf, softwareKey } from './fleet.ts';
 import { assessPublicationOn } from './software-change.ts';
 import type { PublicationCheck } from './software-change.ts';
 import type { Resource, State, VehicleGroup, VehicleSoftwareRequest } from './types.ts';
@@ -49,6 +49,7 @@ export function requestVehicleSoftware(ctx: Ctx, workspaceId: string, resourceId
   if (r.status === 'RETIRED') throw rule('VEHICLE_UNAVAILABLE', `${r.id} is retired`);
   const version = input.version.trim();
   if (!ctx.s.softwareVersions[softwareKey(r.vehicleModelId, version)]) throw rule('SOFTWARE_NOT_RECORDED', `${r.vehicleModelId} ${version} is not a recorded software version`);
+  assertNotLinked(ctx.s, r.vehicleModelId, version);
   if (version === r.integrationVersion) throw rule('SAME_SOFTWARE', `${r.id} already runs ${version}`);
   if (!input.reason.trim()) throw rule('REASON_REQUIRED', 'say why the vehicle needs this version');
   if (pendingSoftwareUpdateOf(ctx.s, r.id)) throw conflict('SOFTWARE_UPDATE_PENDING', `${r.id} is already waiting for a software update`);

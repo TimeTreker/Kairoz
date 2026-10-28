@@ -1,5 +1,5 @@
-// Prototype tools: reset to demo / clean installation, export / import the whole state, and the
-// vehicle simulator. These are not part of the product; they drive and inspect the prototype.
+// Prototype tools: reset to demo / clean installation, export / import the whole state, the
+// vehicle simulator and the simulated external systems (PLM). These are not part of the product; they drive and inspect the prototype.
 
 import { ExperimentOutlined } from '@ant-design/icons';
 import { App, Badge, Button, Dropdown, Input, Modal, Space } from 'antd';
@@ -66,6 +66,7 @@ export function PrototypeMenu({ compact = false }: { compact?: boolean }) {
                 ]
               : []),
             { key: 'sim', label: L('车辆模拟器', 'Vehicle simulator'), onClick: () => navigate('simulator') },
+            { key: 'plm', label: L('PLM（模拟）', 'PLM (simulated)'), onClick: () => navigate('plm') },
             { key: 'guide', label: L('场景手册', 'Scenario guide'), onClick: () => navigate('guide') },
             { key: 'acceptance', label: L('流程验收（逐幕）', 'Acceptance replay'), onClick: () => navigate('acceptance') },
             { type: 'divider' },

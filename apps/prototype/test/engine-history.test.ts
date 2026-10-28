@@ -10,6 +10,7 @@ import * as rel from '../src/engine/release.ts';
 import { demoState } from '../src/engine/seed.ts';
 import { sendReceipt } from '../src/engine/simulator.ts';
 import * as v from '../src/engine/validation.ts';
+import { plmPublish } from '../acceptance/helpers.ts';
 
 const MANIFEST = {
   signals: ['brake_pressure', 'steering_angle_rate', 'steering_return_rate', 'vehicle_deceleration', 'vehicle_speed'],
@@ -42,15 +43,15 @@ describe('release history', () => {
     const s = demoState();
     const r100 = rel.releasesOf(s, 'X89')[0]!;
     const history = h.versionHistory(s, 'X89', '1.0');
-    assert.deepEqual(kinds(history), ['SOFTWARE_RECORDED', 'PUBLISHED', 'OTA_STARTED', 'OTA_COMPLETED']);
-    assert.equal(history[0]!.by, 'resource');
+    assert.deepEqual(kinds(history), ['PLM_PUBLISHED', 'PUBLISHED', 'OTA_STARTED', 'OTA_COMPLETED']);
+    assert.equal(history[0]!.by, null, 'PLM published it; the platform synced it');
     assert.deepEqual([history[1]!.by, history[1]!.releaseId, history[1]!.changed, history[1]!.inEffect], ['release', r100.id, true, r100.id]);
     assert.deepEqual(history[2]!.resourceIds, ['VEH-201', 'VEH-202']);
     assert.equal(history[3]!.by, null, 'the last receipt completes a rollout');
     assert.deepEqual(h.setsOverTime(history), [r100.id]);
 
     const later = h.versionHistory(s, 'X89', '1.1');
-    assert.deepEqual(kinds(later), ['SOFTWARE_RECORDED']);
+    assert.deepEqual(kinds(later), ['PLM_PUBLISHED']);
     assert.equal(later[0]!.inEffect, null);
     assert.deepEqual(h.softwareVersionsOf(s, 'X89').map((x) => x.version), ['1.1', '1.0']);
     assert.deepEqual(h.vehiclesRunning(s, r100).map((x) => x.id).sort(), ['VEH-201', 'VEH-202']);
@@ -108,7 +109,7 @@ describe('release history', () => {
   test('applicability checks and records, and vehicles moving software, show on the version', () => {
     const e = new Engine(demoState());
     const r100 = rel.releasesOf(e.getState(), 'X89')[0]!.id;
-    e.run('resource', (c) => fleet.recordSoftwareVersion(c, { vehicleModelId: 'X89', version: '1.2', source: '整车 OTA 发布记录 X89-1.2', manifest: MANIFEST }));
+    plmPublish(e, 'X89', '1.2', { manifest: MANIFEST });
     e.run('resource', (c) => fleet.confirmIntegration(c, 'VEH-202', { version: '1.2', source: '整车 OTA 回执' }));
     const check = Object.values(e.getState().applicabilityChecks).find((c) => c.version === '1.2')!;
     e.run('dcl', (c) => fleet.registerImage(c, { id: 'x89-1.2-sim', vehicleModelId: 'X89', integrationVersion: '1.2', build: 'x89-1.2.0', digest: 'sha256:mock-x89-1-2', simulator: 'SimOne 3' }));
@@ -128,7 +129,7 @@ describe('release history', () => {
     const version = h.versionHistory(s, 'X89', '1.2');
     assert.deepEqual(
       kinds(version).filter((k) => k !== 'VEHICLE_ARRIVED'),
-      ['SOFTWARE_RECORDED', 'CHECK_OPENED', 'CHECK_VERIFIED', 'CHECK_CONFIRMED', 'APPLICABILITY_ADDED', 'APPLICABILITY_WITHDRAWN'],
+      ['PLM_PUBLISHED', 'CHECK_OPENED', 'CHECK_VERIFIED', 'CHECK_CONFIRMED', 'APPLICABILITY_ADDED', 'APPLICABILITY_WITHDRAWN'],
     );
     assert.equal(version.find((x) => x.kind === 'CHECK_OPENED')!.by, null, 'opened by recording the software');
     const added = version.find((x) => x.kind === 'APPLICABILITY_ADDED')!;
@@ -151,10 +152,10 @@ describe('release history', () => {
 
   test('software versions belong to one vehicle model', () => {
     const e = new Engine(demoState());
-    e.run('resource', (c) => fleet.recordSoftwareVersion(c, { vehicleModelId: 'X90', version: '1.0', source: '整车 OTA 发布记录 X90-1.0', manifest: MANIFEST }));
+    plmPublish(e, 'X90', '1.0', { manifest: MANIFEST });
     const s = e.getState();
-    assert.deepEqual(kinds(h.versionHistory(s, 'X90', '1.0')), ['SOFTWARE_RECORDED']);
-    assert.deepEqual(kinds(h.versionHistory(s, 'X89', '1.0')), ['SOFTWARE_RECORDED', 'PUBLISHED', 'OTA_STARTED', 'OTA_COMPLETED']);
+    assert.deepEqual(kinds(h.versionHistory(s, 'X90', '1.0')), ['PLM_PUBLISHED']);
+    assert.deepEqual(kinds(h.versionHistory(s, 'X89', '1.0')), ['PLM_PUBLISHED', 'PUBLISHED', 'OTA_STARTED', 'OTA_COMPLETED']);
     assert.equal(h.versionHistory(s, 'X90', '1.0')[0]!.inEffect, null);
   });
 });

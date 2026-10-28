@@ -9,7 +9,8 @@ import { createAccount, createGrantRule, installAdmin } from './identity.ts';
 import { createGroup, createOrgUnit, createProject, createVehicleModel, createWorkspace } from './org.ts';
 import { createPipeline, createTemplate } from './processing.ts';
 import { requestReference } from './references.ts';
-import { addGroupMember, addWorkspaceVehicle, confirmIntegration, createSimulation, createVehicleGroup, recordSoftwareVersion, registerImage, registerPhysical } from './fleet.ts';
+import { addGroupMember, addWorkspaceVehicle, confirmIntegration, createSimulation, createVehicleGroup, registerImage, registerPhysical, setSoftwareManifest } from './fleet.ts';
+import { publishPlmVersion, syncPlmIfChanged } from './plm.ts';
 import { registerDeviceKey } from './client-report.ts';
 import { connectDirectory, hirePerson, syncIfChanged } from './company-directory.ts';
 import { captureEvent, processEvent } from './events.ts';
@@ -307,8 +308,16 @@ export function demoState(): State {
   as('adc_parking', (c) => submitFeature(c, parking, { message: '环视视频首版' }));
 
   // Vehicles: recorded software versions, simulation images, physical vehicles, a brake simulation.
-  as('resource', (c) => recordSoftwareVersion(c, { vehicleModelId: 'X89', version: '1.0', source: '整车 OTA 发布记录 X89-1.0', manifest: X89_MANIFEST }));
-  as('resource', (c) => recordSoftwareVersion(c, { vehicleModelId: 'X89', version: '1.1', source: '整车 OTA 发布记录 X89-1.1', manifest: X89_MANIFEST }));
+  // Whole-vehicle versions come from PLM; vehicle resources add their (mock) manifest.
+  const bom = {
+    '1.0': [{ name: 'ADC', version: '3.2.0' }, { name: 'CDC', version: '5.1.0' }, { name: 'BMS', version: '2.0.4' }, { name: 'VCU', version: '1.8.1' }],
+    '1.1': [{ name: 'ADC', version: '3.3.0' }, { name: 'CDC', version: '5.1.2' }, { name: 'BMS', version: '2.0.4' }, { name: 'VCU', version: '1.9.0' }],
+  };
+  for (const version of ['1.0', '1.1'] as const) {
+    engine.run(null, (c) => publishPlmVersion(c, { vehicleModelId: 'X89', version, modules: bom[version], dclPart: null }));
+    engine.run(null, (c) => syncPlmIfChanged(c));
+    as('resource', (c) => setSoftwareManifest(c, { vehicleModelId: 'X89', version, manifest: X89_MANIFEST }));
+  }
   const digest = (text: string) => `sha256:${sha256Hex(text)}`;
   as('dcl', (c) => registerImage(c, { id: 'x89-dev-sim', vehicleModelId: 'X89', integrationVersion: null, build: 'x89-dev-2026.10', digest: digest('x89-dev-sim'), simulator: 'SimOne 3' }));
   as('dcl', (c) => registerImage(c, { id: 'x89-1.0-sim', vehicleModelId: 'X89', integrationVersion: '1.0', build: 'x89-1.0.4', digest: digest('x89-1.0-sim'), simulator: 'SimOne 3' }));

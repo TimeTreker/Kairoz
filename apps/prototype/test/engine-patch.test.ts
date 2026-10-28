@@ -9,6 +9,7 @@ import * as rel from '../src/engine/release.ts';
 import { demoState } from '../src/engine/seed.ts';
 import { commitSnapshot } from '../src/engine/snapshots.ts';
 import { ANGLE, ON_10, ON_11, angleFix, feature, freeze, mainline110, patch101, planOf, preview, promote, set, testCandidate } from './patch-fixtures.ts';
+import { plmPublish } from '../acceptance/helpers.ts';
 
 describe('same-software patches', () => {
   test('a patch targets an older set still in effect and keeps that set’s other content', () => {
@@ -155,7 +156,7 @@ describe('same-software patches', () => {
     w.eq(w.s.features[id]!.baseReleaseId, set(w, '1.1.0').id, 'the default base is the mainline head');
     w.eq(commitSnapshot(w.s, set(w, '1.1.0').groups.steering!), w.s.features[id]!.draft, 'and the draft starts from it');
     const manifest = w.s.softwareVersions['X89::1.0']!.manifest!;
-    w.as('resource', (c) => fleet.recordSoftwareVersion(c, { vehicleModelId: 'X89', version: '1.2', source: '整车 OTA 发布记录 X89-1.2', manifest }));
+    plmPublish(w.engine, 'X89', '1.2', { manifest });
     const check = Object.values(w.s.applicabilityChecks).find((c) => c.version === '1.2')!;
     assert.equal(w.s.releases[check.releaseId]!.dclVersion, '1.1.0', 'new software is checked against the mainline');
   });

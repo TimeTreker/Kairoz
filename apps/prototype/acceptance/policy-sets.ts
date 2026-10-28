@@ -12,7 +12,7 @@ import * as rel from '../src/engine/release.ts';
 import { demoState } from '../src/engine/seed.ts';
 import type { State } from '../src/engine/types.ts';
 import * as v from '../src/engine/validation.ts';
-import { answerAll, simpleFeature } from './helpers.ts';
+import { answerAll, simpleFeature, plmPublish } from './helpers.ts';
 import type { SceneSpec, World } from './world.ts';
 
 export const start = (): State => demoState();
@@ -34,7 +34,7 @@ export const scenes: Record<string, SceneSpec> = {
   P01: {
     run: (w) => {
       const manifest = w.s.softwareVersions['X89::1.0']!.manifest!;
-      w.as('resource', (c) => fleet.recordSoftwareVersion(c, { vehicleModelId: 'X89', version: '1.2', source: '整车 OTA 发布记录 X89-1.2', manifest }));
+      plmPublish(w.engine, 'X89', '1.2', { manifest });
       const check = checkFor(w, '1.2');
       w.eq([check.status, check.auto, w.s.releases[check.releaseId]!.dclVersion], ['OPEN', true, '1.0.0'], 'recording 1.2 opened a check for the newest set');
       w.as('resource', (c) => fleet.confirmIntegration(c, 'VEH-202', { version: '1.2', source: '整车 OTA 回执 X89-1.2' }));
@@ -78,7 +78,7 @@ export const scenes: Record<string, SceneSpec> = {
     run: (w) => {
       const base = w.s.softwareVersions['X89::1.0']!.manifest!;
       const manifest = { ...base, signals: base.signals.map((x) => (x === 'steering_angle_rate' ? 'steering_wheel_rate' : x)) };
-      w.as('resource', (c) => fleet.recordSoftwareVersion(c, { vehicleModelId: 'X89', version: '1.3', source: '整车 OTA 发布记录 X89-1.3', manifest }));
+      plmPublish(w.engine, 'X89', '1.3', { manifest });
       const check = checkFor(w, '1.3');
       const angle = ap.compatibilityOf(w.s, check.releaseId, '1.3').find((c) => c.policyId === 'chassis.steering.angle_jump')!;
       w.eq([angle.status, angle.missingSignals], ['MISSING', ['steering_angle_rate']], 'the policy needs a signal 1.3 renamed');

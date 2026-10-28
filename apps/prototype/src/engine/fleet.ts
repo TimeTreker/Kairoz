@@ -9,7 +9,6 @@ import { conflict, notFound, rule } from '../domain/errors.ts';
 import { newId } from '../domain/ids.ts';
 import { WILDCARD } from '../domain/vocabulary.ts';
 import type { Env, Scope } from '../domain/vocabulary.ts';
-import { openCheckForNewSoftware } from './applicability.ts';
 import { appliesTo, releaseFor } from './release.ts';
 import type { Actor, Ctx } from './engine.ts';
 import { getWorkspace } from './org.ts';
@@ -19,14 +18,19 @@ import { todayOf } from './clock.ts';
 
 const RESOURCE_ID = /^[A-Z][A-Z0-9-]{2,40}$/;
 const VIN = /^[A-HJ-NPR-Z0-9]{17}$/;
-const VERSION = /^[0-9]+(\.[0-9]+){0,3}$/;
 
 type ManifestInput = { signals: string[]; sources: { unit: string; directory: string }[] };
 
 export const softwareKey = (vehicleModelId: string, version: string) => `${vehicleModelId}::${version}`;
 
-/** Whether a version is an integration call's planned target, not released yet. */
+/** Whether a version is an integration call's working name, not published by PLM yet (or linked to the PLM version that was). */
 export const isPlanned = (s: State, vehicleModelId: string, version: string) => s.softwareVersions[softwareKey(vehicleModelId, version)]?.status === 'PLANNED';
+
+/** A working name PLM has published is not chosen any more: the PLM version stands for it. */
+export function assertNotLinked(s: State, vehicleModelId: string, version: string): void {
+  const linked = s.softwareVersions[softwareKey(vehicleModelId, version)]?.linkedTo;
+  if (linked) throw rule('WORKING_NAME_LINKED', `${vehicleModelId} ${version} is published by PLM as ${linked}; use ${linked}`);
+}
 
 export function getResource(s: State, id: string): Resource {
   const r = s.resources[id];
@@ -117,38 +121,9 @@ function assertRemovable(s: State, resourceId: string): void {
 // ---------------------------------------------------------------------------
 
 /**
- * Records a whole-vehicle software version from a trusted source, with what it provides when known.
- * A version no policy set applies to opens an applicability check as a to-do for configuration release.
- * A planned version (an integration call's target) released outside the call becomes recorded.
+ * Adds the manifest of a version without one (mock signals and data sources; PLM's versions come
+ * without). A recorded manifest is never replaced. Versions themselves come from PLM (`syncPlm`).
  */
-export function recordSoftwareVersion(ctx: Ctx, input: { vehicleModelId: string; version: string; source: string; manifest?: ManifestInput | null }): string {
-  ctx.allow('softwareVersion.record', { type: 'softwareVersion', id: input.version, scope: 'Vehicle' });
-  if (!ctx.s.vehicleModels[input.vehicleModelId]) throw notFound('vehicle model', input.vehicleModelId);
-  if (!VERSION.test(input.version)) throw rule('INVALID_VERSION', 'versions look like 1.0 or 1.2.3');
-  if (!input.source.trim()) throw rule('SOURCE_REQUIRED', 'name the trusted source of this version');
-  const key = softwareKey(input.vehicleModelId, input.version);
-  const planned = ctx.s.softwareVersions[key];
-  if (planned && planned.status !== 'PLANNED') throw conflict('VERSION_EXISTS', `version ${input.version} is already recorded`);
-  const manifest = input.manifest ? normalizeManifest(input.manifest) : (planned?.manifest ?? null);
-  ctx.s.softwareVersions[key] = {
-    vehicleModelId: input.vehicleModelId,
-    version: input.version,
-    source: input.source.trim(),
-    manifest,
-    status: 'RECORDED',
-    callId: planned?.callId ?? null,
-    dclModule: planned?.dclModule ?? null,
-    moduleLog: planned?.moduleLog ?? [],
-    plannedBy: planned?.plannedBy ?? null,
-    plannedAt: planned?.plannedAt ?? null,
-    recordedBy: ctx.user().username,
-    createdAt: ctx.now,
-  };
-  openCheckForNewSoftware(ctx, input.vehicleModelId, input.version);
-  return key;
-}
-
-/** Adds the manifest of a version recorded without one. A recorded manifest is never replaced. */
 export function setSoftwareManifest(ctx: Ctx, input: { vehicleModelId: string; version: string; manifest: ManifestInput }): void {
   ctx.allow('softwareVersion.record', { type: 'softwareVersion', id: input.version, scope: 'Vehicle' });
   const v = ctx.s.softwareVersions[softwareKey(input.vehicleModelId, input.version)];
@@ -270,6 +245,7 @@ export function confirmIntegration(ctx: Ctx, resourceId: string, input: { versio
   if (input.version !== null && !ctx.s.softwareVersions[softwareKey(r.vehicleModelId, input.version)]) {
     throw rule('UNKNOWN_SOFTWARE_VERSION', `${r.vehicleModelId} ${input.version} is not a recorded software version`);
   }
+  if (input.version !== null) assertNotLinked(ctx.s, r.vehicleModelId, input.version);
   if (input.version !== null && r.env === 'production' && isPlanned(ctx.s, r.vehicleModelId, input.version)) {
     throw rule('PLANNED_VERSION_IN_PRODUCTION', `${r.vehicleModelId} ${input.version} is planned, not released; production vehicles run released software only`);
   }
@@ -288,23 +264,23 @@ export function confirmIntegration(ctx: Ctx, resourceId: string, input: { versio
  * What follows a physical vehicle's software change (`previous` is the version it had). Only a real
  * change counts: confirming the version a vehicle already runs changes nothing it runs.
  */
-export function afterSoftwareChange(ctx: Ctx, r: Draft<Resource>, previous: string | null, changeId: string | null): void {
+export function afterSoftwareChange(ctx: Ctx, r: Draft<Resource>, previous: string | null, changeId: string | null, reportedDigest: string | null = null): void {
   if (r.integrationVersion === previous) return;
-  applyBundledModule(ctx, r, changeId);
+  applyBundledModule(ctx, r, changeId, reportedDigest);
   dropStaleRolloutTargets(ctx, r);
 }
 
 /**
- * The DCL configuration module bundled into the vehicle OTA package: a production vehicle flashed
- * with a version that carries one runs the module's set from then on, without waiting for a cloud
- * push (weak or no signal included). The package carries the module as it was exported, even when
- * another set has taken the version over since; release is told so (MODULE_OUTDATED) and brings
- * such vehicles up to date by configuration OTA.
+ * The DCL part of a version's BOM (its factory configuration, 出厂配置): a production vehicle flashed
+ * with the version runs the part's set from then on, without waiting for a cloud push (weak or no
+ * signal included). The platform never assumes it: the vehicle's own signed report says which
+ * configuration it runs, and only a reported digest equal to the part's is taken as the set. Later
+ * sets reach such vehicles by configuration OTA.
  */
-function applyBundledModule(ctx: Ctx, r: Draft<Resource>, changeId: string | null): void {
-  if (r.type !== 'PHYSICAL' || r.env !== 'production' || !r.integrationVersion || r.softwareStatus !== 'CONSISTENT') return;
+function applyBundledModule(ctx: Ctx, r: Draft<Resource>, changeId: string | null, reportedDigest: string | null): void {
+  if (r.type !== 'PHYSICAL' || r.env !== 'production' || !r.integrationVersion || r.softwareStatus !== 'CONSISTENT' || !reportedDigest) return;
   const m = ctx.s.softwareVersions[softwareKey(r.vehicleModelId, r.integrationVersion)]?.dclModule;
-  if (!m || r.appliedConfigId === m.resolvedConfigId) return;
+  if (!m || m.digest !== reportedDigest || r.appliedConfigId === m.resolvedConfigId) return;
   r.appliedConfigId = m.resolvedConfigId;
   if (changeId) ctx.s.softwareChanges[changeId]!.configId = m.resolvedConfigId;
 }
@@ -390,6 +366,7 @@ export function reportControllers(ctx: Ctx, resourceId: string, input: { target:
   if (input.controllers.length === 0 || input.controllers.some((c) => !c.name.trim() || !c.version.trim())) {
     throw rule('CONTROLLERS_REQUIRED', 'report every domain controller with its version and result');
   }
+  assertNotLinked(ctx.s, r.vehicleModelId, input.target);
   if (r.env === 'production' && isPlanned(ctx.s, r.vehicleModelId, input.target)) {
     throw rule('PLANNED_VERSION_IN_PRODUCTION', `${r.vehicleModelId} ${input.target} is planned, not released; production vehicles run released software only`);
   }

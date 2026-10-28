@@ -9,6 +9,7 @@ import * as rel from '../src/engine/release.ts';
 import { demoState } from '../src/engine/seed.ts';
 import { sendReceipt } from '../src/engine/simulator.ts';
 import * as v from '../src/engine/validation.ts';
+import { plmPublish } from '../acceptance/helpers.ts';
 
 function fails(fn: () => unknown, code: string): DomainError {
   try {
@@ -28,7 +29,7 @@ const MANIFEST_12 = {
 const MANIFEST_13 = { ...MANIFEST_12, signals: MANIFEST_12.signals.map((s) => (s === 'steering_angle_rate' ? 'steering_wheel_rate' : s)) };
 
 function record(e: Engine, version: string, manifest: typeof MANIFEST_12 | null) {
-  e.run('resource', (c) => fleet.recordSoftwareVersion(c, { vehicleModelId: 'X89', version, source: `整车 OTA 发布记录 X89-${version}`, manifest }));
+  plmPublish(e, 'X89', version, { manifest });
 }
 
 /** A simulation and a physical testing vehicle on `version`, in the integration workspace, routing through no group. */

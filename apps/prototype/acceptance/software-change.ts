@@ -13,7 +13,7 @@ import { reportNow, simulateSoftwareOta } from '../src/engine/simulator.ts';
 import * as sc from '../src/engine/software-change.ts';
 import type { State } from '../src/engine/types.ts';
 import * as v from '../src/engine/validation.ts';
-import { answerAll } from './helpers.ts';
+import { answerAll, plmPublish } from './helpers.ts';
 import type { SceneSpec, World } from './world.ts';
 
 export const start = (): State => demoState();
@@ -75,7 +75,7 @@ export const scenes: Record<string, SceneSpec> = {
       w.eq(sc.unrecordedReports(w.s, w.actor('resource')).map((x) => x.id), [u.id], 'vehicle resources get the to-do');
       const base = w.s.softwareVersions['X89::1.0']!.manifest!;
       const manifest = { signals: base.signals, sources: [...base.sources.filter((s) => !(s.unit === 'ADC' && s.directory === '/var/log')), { unit: 'ADC', directory: '/var/log/chassis' }] };
-      w.as('resource', (c) => fleet.recordSoftwareVersion(c, { vehicleModelId: 'X89', version: '1.3', source: '整车 OTA 发布记录 X89-1.3', manifest }));
+      plmPublish(w.engine, 'X89', '1.3', { manifest });
       w.as('resource', (c) => fleet.confirmIntegration(c, 'VEH-001', { version: '1.3', source: '客户端上报' }));
       w.eq(w.s.softwareChanges[u.id]!.status, 'RESOLVED', 'the report is resolved');
       const a = assess(w, 'VEH-001');

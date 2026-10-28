@@ -22,7 +22,7 @@ import { baseTarget, vehicleBase } from './validation.ts';
  * version the platform knows changes the vehicle's record; an unknown one waits for vehicle
  * resources to record it, and the record stays as it was.
  */
-export function noteReportedSoftware(ctx: Ctx, resourceId: string, reported: string | null): void {
+export function noteReportedSoftware(ctx: Ctx, resourceId: string, reported: string | null, reportedDigest: string | null = null): void {
   const r = ctx.s.resources[resourceId] as Draft<Resource> | undefined;
   if (!r || r.type !== 'PHYSICAL' || !reported || reported === r.integrationVersion) return;
   // A production vehicle runs released software only: a planned version it reports waits, like an
@@ -48,7 +48,7 @@ export function noteReportedSoftware(ctx: Ctx, resourceId: string, reported: str
     r.softwareStatus = 'CONSISTENT';
     r.controllers = [];
     r.updatedAt = ctx.now;
-    afterSoftwareChange(ctx, r, previous, changeId);
+    afterSoftwareChange(ctx, r, previous, changeId, reportedDigest);
     return;
   }
   if (Object.values(ctx.s.softwareChanges).some((c) => c.resourceId === r.id && c.status === 'UNRECORDED' && c.toVersion === reported)) return;

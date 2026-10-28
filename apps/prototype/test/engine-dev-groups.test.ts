@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
-import { answerAll, simpleFeature } from '../acceptance/helpers.ts';
+import { answerAll, simpleFeature, plmPublish } from '../acceptance/helpers.ts';
 import { World } from '../acceptance/world.ts';
 import { configurationContents } from '../src/engine/client-report.ts';
 import { capturablePolicies, captureEvent } from '../src/engine/events.ts';
@@ -67,7 +67,7 @@ describe('development vehicle groups', () => {
   test('software no set applies to needs an explicit base; vehicles on different bases get separate dispatches', () => {
     const w = new World(demoState());
     const vg = groupId(w, '制动研发车组');
-    w.as('resource', (c) => fleet.recordSoftwareVersion(c, { vehicleModelId: 'X89', version: '1.2', source: '整车 OTA 发布记录 X89-1.2' }));
+    plmPublish(w.engine, 'X89', '1.2');
     w.as('resource', (c) => fleet.confirmIntegration(c, 'VEH-001', { version: '1.2', source: 'DIP 上报' }));
     assert.equal(answerConfigRequest(w.s, 'VEH-001').reason, 'NO_BASE');
     const blocked = w.fails('DISPATCH_BLOCKED', () => dispatchBrake(w));

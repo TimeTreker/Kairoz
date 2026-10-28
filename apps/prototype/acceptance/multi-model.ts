@@ -14,7 +14,7 @@ import { demoState } from '../src/engine/seed.ts';
 import { sendReceipt } from '../src/engine/simulator.ts';
 import type { State } from '../src/engine/types.ts';
 import * as v from '../src/engine/validation.ts';
-import { answerAll, simpleFeature, verifyFeatureOn } from './helpers.ts';
+import { answerAll, simpleFeature, verifyFeatureOn, plmPublish } from './helpers.ts';
 import type { SceneSpec, World } from './world.ts';
 
 export const start = (): State => demoState();
@@ -65,7 +65,7 @@ export const scenes: Record<string, SceneSpec> = {
     needs: ['MM01'],
     run: (w) => {
       // X90's own software and images; its first physical car's software is still unknown.
-      w.as('resource', (c) => fleet.recordSoftwareVersion(c, { vehicleModelId: 'X90', version: '1.0', source: 'X90 整车软件集成 1.0' }));
+      plmPublish(w.engine, 'X90', '1.0');
       w.check(w.s.softwareVersions['X90::1.0'] && w.s.softwareVersions['X89::1.0'], 'X90 1.0 and X89 1.0 are two versions');
       w.as('dcl', (c) => fleet.registerImage(c, { id: 'x90-dev-sim', vehicleModelId: 'X90', integrationVersion: null, build: 'x90-dev', digest: 'sha256:mock-x90-dev', simulator: 'SimOne 3' }));
       w.as('dcl', (c) => fleet.registerImage(c, { id: 'x90-1.0-sim', vehicleModelId: 'X90', integrationVersion: '1.0', build: 'x90-1.0.0', digest: 'sha256:mock-x90-1-0', simulator: 'SimOne 3' }));

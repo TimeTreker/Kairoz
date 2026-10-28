@@ -11,7 +11,7 @@ import type { FileType, Privacy } from '../domain/file-types.ts';
 import type { ReviewControls } from '../domain/intake.ts';
 import type { Domain, Env, GroupPurpose, Role, Scope, WorkspaceKind } from '../domain/vocabulary.ts';
 
-export const STATE_SCHEMA = 22;
+export const STATE_SCHEMA = 23;
 
 export interface Account {
   username: string;
@@ -300,10 +300,11 @@ export interface ApplicabilityRecord {
   vehicleModelId: string;
   version: string;
   action: 'ADD' | 'WITHDRAW';
-  /** The check whose evidence the record rests on (ADD). */
+  /** The check whose evidence the record rests on (ADD); null for a working name's link to its PLM version. */
   checkId: string | null;
   reason: string;
-  by: string;
+  /** null: the platform (a PLM version inherits its working name's sets). */
+  by: string | null;
   at: string;
 }
 
@@ -321,7 +322,8 @@ export interface ApplicabilityCheck {
   status: 'OPEN' | 'TESTING' | 'VERIFIED' | 'CONFIRMED' | 'SUPERSEDED' | 'CANCELLED';
   /** Opened by recording a software version no set applies to. */
   auto: boolean;
-  openedBy: string;
+  /** null: opened by the platform when PLM published the version. */
+  openedBy: string | null;
   openedAt: string;
   verifiedBy: string | null;
   verifiedAt: string | null;
@@ -350,17 +352,23 @@ export interface EmergencyStop {
 // Vehicles and validation
 // ---------------------------------------------------------------------------
 
-/** A whole-vehicle software version of a model, recorded from a trusted external source. */
+/**
+ * A whole-vehicle software version of a model. A recorded version is one PLM (the company's record of
+ * published versions) has published; a planned version is an integration call's working name (工作名)
+ * until PLM publishes the software under its own number and the platform links the two.
+ */
 export interface SoftwareVersion {
   vehicleModelId: string;
   version: string;
+  /** Where the record came from: PLM for synced versions; older saves keep their own text. */
   source: string;
   /** The signals and data sources the software provides (mock); null when not known. */
   manifest: SoftwareManifest | null;
   /**
-   * PLANNED: the target of an integration call (规划版本), not released yet. Development and testing
-   * vehicles may run its pre-release builds; production vehicles never do, and only that call's
-   * release may list it. RECORDED: a released version from a trusted source or a call's release.
+   * PLANNED: an integration call's working name (工作名, 规划版本). Development and testing vehicles
+   * may run its pre-release builds; production vehicles never do, and only that call's release may
+   * list it. It stays planned after the release and is linked once PLM publishes the software.
+   * RECORDED: a version PLM published.
    */
   status: 'PLANNED' | 'RECORDED';
   /** The integration call that planned (and, once released, produced) it; null when recorded from outside. */
@@ -372,10 +380,36 @@ export interface SoftwareVersion {
   /** Who planned it for an integration call, and when; null when it was recorded from outside. */
   plannedBy: string | null;
   plannedAt: string | null;
-  /** Who recorded it (or planned it, while planned), and when. */
-  recordedBy: string;
+  /** Who recorded it (or planned it, while planned), and when; null when PLM sync recorded it. */
+  recordedBy: string | null;
   createdAt: string;
+  /**
+   * A working name: the DCL part delivered to PLM for it (DCL merged the exported configuration into
+   * the DCL software). A PLM version: the DCL part its BOM carries, as PLM published it.
+   */
+  dclPart: DclPart | null;
+  /** A PLM version linked from an integration call's working name: that name (itself when PLM kept it). */
+  workingName: string | null;
+  /** A working name PLM has published: the PLM version it is linked to. */
+  linkedTo: string | null;
 }
+
+/**
+ * The DCL part (DCL 件) of a whole-vehicle version's BOM: the DCL software with a published policy
+ * set merged in, delivered to PLM as one part before PLM publishes. Its version names both; the
+ * digest says which set it carries, so the platform recognises the set without being told.
+ */
+export interface DclPart {
+  clientVersion: string;
+  setVersion: string;
+  digest: string;
+  /** Who delivered it to PLM, and when; null when PLM published a part the platform never delivered. */
+  deliveredBy: string | null;
+  deliveredAt: string | null;
+}
+
+/** The part version PLM shows: `<DCL client version>+<policy set version>`. */
+export const partVersion = (p: Pick<DclPart, 'clientVersion' | 'setVersion'>) => `${p.clientVersion}+${p.setVersion}`;
 
 /**
  * A DCL configuration module (DCL 配置模块): a published policy set exported into a whole-vehicle
@@ -1352,6 +1386,26 @@ export interface DirectoryPerson {
   status: 'ACTIVE' | 'LEFT';
 }
 
+/**
+ * The simulated PLM (prototype only): the company's record of published whole-vehicle integration
+ * versions, each mapping every module's version, the DCL part included, to one version number.
+ * The platform reads it only by syncing.
+ */
+export interface PlmCatalog {
+  revision: number;
+  versions: PlmVersion[];
+}
+
+export interface PlmVersion {
+  vehicleModelId: string;
+  version: string;
+  /** The version's BOM: each module (domain controller software) and its version. */
+  modules: { name: string; version: string }[];
+  /** The DCL part in the version's BOM; null when the version carries none. */
+  dclPart: Pick<DclPart, 'clientVersion' | 'setVersion' | 'digest'> | null;
+  publishedAt: string;
+}
+
 /** The company directory (prototype only, like HR or LDAP). The platform reads it only by syncing. */
 export interface CompanyDirectory {
   revision: number;
@@ -1443,6 +1497,10 @@ export interface State {
   /** The simulated company directory (the simulator's, not the platform's); null when none is connected. */
   directory: CompanyDirectory | null;
   directorySync: DirectorySync;
+  /** The simulated PLM (the simulator's, not the platform's). */
+  plm: PlmCatalog;
+  /** The PLM revision last applied, and when. */
+  plmSync: { revision: number; syncedAt: string | null };
   personalCaptures: Record<string, PersonalCapture>;
   personalTests: Record<string, PersonalTest>;
   softwareBuilds: Record<string, SoftwareBuild>;
@@ -1519,6 +1577,8 @@ export function emptyState(): State {
     grantRules: {},
     directory: null,
     directorySync: { revision: 0, syncedAt: null, log: [] },
+    plm: { revision: 0, versions: [] },
+    plmSync: { revision: 0, syncedAt: null },
     personalCaptures: {},
     personalTests: {},
     softwareBuilds: {},

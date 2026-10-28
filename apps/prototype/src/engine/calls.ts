@@ -15,12 +15,26 @@ import type { Ctx } from './engine.ts';
 import { softwareKey } from './fleet.ts';
 import { closeCandidate, collectibleSubsystems, defaultScope, isCollectible, isMergeWorkspace, previewMerge, verifiedSources } from './integration.ts';
 import { getWorkspace } from './org.ts';
-import { releaseWorkspace } from './emergency.ts';
-import { compareVersions, setInEffect } from './release.ts';
-import type { Candidate, CallModule, CallModuleEvent, DclModule, IntegrationCall, MergePlan, State } from './types.ts';
+import { compareVersions } from './release.ts';
+import { partVersion } from './types.ts';
+import type { Candidate, CallModule, CallModuleEvent, DclModule, DclPart, IntegrationCall, MergePlan, SoftwareVersion, State } from './types.ts';
 
 const VERSION = /^[0-9]+(\.[0-9]+){0,3}$/;
+const CLIENT_VERSION = /^[0-9]+(\.[0-9]+){1,3}$/;
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
+
+/** A call's target is a working name (工作名) for software PLM has not published yet. */
+function assertWorkingName(s: State, vehicleModelId: string, target: string): void {
+  if (s.softwareVersions[softwareKey(vehicleModelId, target)]?.status === 'RECORDED') {
+    throw rule('TARGET_RECORDED', `PLM already published ${vehicleModelId} ${target}; a call targets a working name for new software`);
+  }
+}
+
+/** The working name of a call's target, planned until PLM publishes the software. */
+function plannedVersion(ctx: Ctx, vehicleModelId: string, version: string, callId: string, manifest: SoftwareVersion['manifest']): SoftwareVersion {
+  const by = ctx.user().username;
+  return { vehicleModelId, version, source: '', manifest, status: 'PLANNED', callId, dclModule: null, moduleLog: [], plannedBy: by, plannedAt: ctx.now, recordedBy: by, createdAt: ctx.now, dclPart: null, workingName: null, linkedTo: null };
+}
 
 export function getCall(s: State, id: string): IntegrationCall {
   const c = s.integrationCalls[id];
@@ -180,6 +194,7 @@ export function openCall(
     if (Object.values(ctx.s.releases).some((r) => r.vehicleModelId === ws.vehicleModelId && r.vehicleIntegrationVersions.includes(target))) {
       throw rule('VERSION_RELEASED', `${ws.vehicleModelId} ${target} already has a policy set published for it`);
     }
+    assertWorkingName(ctx.s, ws.vehicleModelId, target);
   }
   const exclude = new Set(input.exclude ?? []);
   const modules: CallModule[] = defaultModules(ctx.s, ws.id, scope).map((m) =>
@@ -199,7 +214,7 @@ export function openCall(
       if (input.baseVersion && !base) throw rule('UNKNOWN_SOFTWARE_VERSION', `${ws.vehicleModelId} ${input.baseVersion} is not a recorded software version`);
       baseVersion = base?.version ?? null;
       const manifest = base?.manifest ? { signals: [...base.manifest.signals], sources: base.manifest.sources.map((x) => ({ ...x })) } : null;
-      ctx.s.softwareVersions[key] = { vehicleModelId: ws.vehicleModelId, version: target, source: '', manifest, status: 'PLANNED', callId: id, dclModule: null, moduleLog: [], plannedBy: ctx.user().username, plannedAt: ctx.now, recordedBy: ctx.user().username, createdAt: ctx.now };
+      ctx.s.softwareVersions[key] = plannedVersion(ctx, ws.vehicleModelId, target, id, manifest);
     } else if (existing.status === 'PLANNED') {
       existing.callId = id; // a planned version left by a closed call is taken over
     }
@@ -414,13 +429,14 @@ export function retargetCall(ctx: Ctx, callId: string, version: string): void {
   if (Object.values(ctx.s.releases).some((r) => r.vehicleModelId === call.vehicleModelId && r.vehicleIntegrationVersions.includes(target))) {
     throw rule('VERSION_RELEASED', `${call.vehicleModelId} ${target} already has a policy set published for it`);
   }
+  assertWorkingName(ctx.s, call.vehicleModelId, target);
   const oldKey = softwareKey(call.vehicleModelId, call.targetVersion);
   const old = ctx.s.softwareVersions[oldKey];
   const newKey = softwareKey(call.vehicleModelId, target);
   if (!ctx.s.softwareVersions[newKey]) {
     ctx.s.softwareVersions[newKey] = old && old.status === 'PLANNED' && old.callId === call.id
       ? { ...old, version: target, manifest: old.manifest ? { signals: [...old.manifest.signals], sources: old.manifest.sources.map((x) => ({ ...x })) } : null, createdAt: ctx.now }
-      : { vehicleModelId: call.vehicleModelId, version: target, source: '', manifest: null, status: 'PLANNED', callId: call.id, dclModule: null, moduleLog: [], plannedBy: ctx.user().username, plannedAt: ctx.now, recordedBy: ctx.user().username, createdAt: ctx.now };
+      : plannedVersion(ctx, call.vehicleModelId, target, call.id, null);
   }
   // A planned version nothing runs yet goes with its call; one already in use stays planned.
   const used = Object.values(ctx.s.resources).some((r) => r.vehicleModelId === call.vehicleModelId && r.integrationVersion === call.targetVersion)
@@ -599,22 +615,17 @@ export function plannedVersionProblems(s: State, c: Candidate, versions: string[
 }
 
 /**
- * Publishing a call's passing round: the planned target becomes a recorded version produced by the
- * call, the call is released with the new set listed for it (the set ↔ version relation), and the
- * set is exported as the DCL configuration module of the version's vehicle OTA package.
+ * Publishing a call's passing round: the call is released with the new set listed for its working
+ * name (the set ↔ version relation), and the set is exported as the DCL configuration module DCL
+ * delivers to PLM. The working name stays planned until PLM publishes the software (PLM sync links
+ * them). A target PLM has already published gets no module: its BOM is fixed.
  */
 export function onCallReleased(ctx: Ctx, c: Candidate, releaseId: string): void {
   if (!c.callId) return;
   const call = ctx.s.integrationCalls[c.callId]!;
   const sv = ctx.s.softwareVersions[softwareKey(call.vehicleModelId, call.targetVersion)];
   if (sv && sv.status === 'PLANNED') {
-    sv.status = 'RECORDED';
     sv.callId = call.id;
-    sv.source = `integration call ${call.title}`;
-    sv.recordedBy = ctx.user().username;
-    sv.createdAt = ctx.now;
-  }
-  if (sv) {
     sv.dclModule = moduleOf(ctx, releaseId);
     sv.moduleLog.push({ ...sv.dclModule });
   }
@@ -638,24 +649,40 @@ export function moduleOf(ctx: Ctx, releaseId: string): DclModule {
   return { releaseId, resolvedConfigId: r.resolvedConfigId, digest: ctx.s.resolvedConfigs[r.resolvedConfigId]?.digest ?? '', exportedBy: ctx.user().username, exportedAt: ctx.now };
 }
 
+/** The newest DCL client version the model's vehicles report, the usual one to merge a configuration into. */
+export function reportedClientVersion(s: State, vehicleModelId: string): string | null {
+  const versions = Object.values(s.resources)
+    .filter((r) => r.vehicleModelId === vehicleModelId && r.type === 'PHYSICAL')
+    .flatMap((r) => s.clientReports[r.id]?.latest?.payload.clients.filter((x) => x.id === 'dcl-client').map((x) => x.version) ?? []);
+  return versions.sort(compareVersions).at(-1) ?? null;
+}
+
 /**
- * Configuration release exports the set in effect for a recorded software version as the DCL
- * configuration module of its vehicle OTA package: for a version recorded from outside, or again
- * after a patch, so vehicles flashed from then on start on the newest set.
+ * DCL merges a released working name's exported configuration into the DCL software and delivers it
+ * to PLM as one part (DCL 件), before PLM publishes the version. The part's version names the client
+ * and the set; its digest is how the platform recognises the set when PLM publishes. Delivering
+ * again with another client version replaces the part, until PLM has published.
  */
-export function exportDclModule(ctx: Ctx, input: { vehicleModelId: string; version: string }): DclModule {
+export function deliverDclPart(ctx: Ctx, input: { vehicleModelId: string; version: string; clientVersion: string }): DclPart {
   const sv = ctx.s.softwareVersions[softwareKey(input.vehicleModelId, input.version)];
   if (!sv) throw notFound('software version', input.version);
-  const set = setInEffect(ctx.s, input.vehicleModelId, input.version);
-  const workspaceId = (set && releaseWorkspace(ctx.s, set)) ?? Object.values(ctx.s.workspaces).find((w) => w.kind === 'PROJECT' && w.vehicleModelId === input.vehicleModelId && w.scopes.includes('Vehicle'))?.id ?? '*';
-  ctx.allow('release.promote', { type: 'softwareVersion', id: input.version, workspaceId, scope: 'Vehicle' });
-  if (sv.status === 'PLANNED') throw rule('VERSION_PLANNED', `${input.vehicleModelId} ${input.version} is planned; its module comes with its call’s release`);
-  if (!set) throw rule('NO_SET_FOR_VERSION', `no policy set applies to ${input.vehicleModelId} ${input.version}`);
-  if (sv.dclModule?.releaseId === set.id) throw rule('MODULE_CURRENT', `the module already carries policy set ${set.dclVersion}`);
+  const call = sv.callId ? ctx.s.integrationCalls[sv.callId] : undefined;
+  ctx.allow('dclPart.deliver', { type: 'softwareVersion', id: input.version, workspaceId: call?.workspaceId ?? '*', scope: 'Vehicle' });
+  if (sv.status !== 'PLANNED') throw rule('TARGET_RECORDED', `PLM already published ${input.vehicleModelId} ${input.version}; its BOM is fixed`);
+  if (sv.linkedTo) throw rule('WORKING_NAME_LINKED', `${input.vehicleModelId} ${input.version} is published by PLM as ${sv.linkedTo}`);
+  if (!sv.dclModule) throw rule('NO_MODULE_TO_DELIVER', `the call for ${input.vehicleModelId} ${input.version} has not been released; there is no configuration to deliver yet`);
+  const clientVersion = input.clientVersion.trim();
+  if (!CLIENT_VERSION.test(clientVersion)) throw rule('INVALID_CLIENT_VERSION', 'a DCL client version looks like 2.3.0');
+  if (sv.dclPart?.clientVersion === clientVersion) throw conflict('PART_DELIVERED', `the part ${partVersion(sv.dclPart)} is already delivered`);
   const draft = ctx.s.softwareVersions[softwareKey(input.vehicleModelId, input.version)]!;
-  draft.dclModule = moduleOf(ctx, set.id);
-  draft.moduleLog.push({ ...draft.dclModule });
-  return { ...draft.dclModule };
+  draft.dclPart = {
+    clientVersion,
+    setVersion: ctx.s.releases[sv.dclModule.releaseId]?.dclVersion ?? '',
+    digest: sv.dclModule.digest,
+    deliveredBy: ctx.user().username,
+    deliveredAt: ctx.now,
+  };
+  return { ...draft.dclPart };
 }
 
 function closeReleased(ctx: Ctx, call: IntegrationCall, candidateId: string): void {

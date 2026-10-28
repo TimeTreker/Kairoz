@@ -105,11 +105,13 @@ export function nextDclVersion(s: State, vehicleModelId: string, patchOf: string
 
 /**
  * Sets a same-software patch may target: every set but the mainline head that is still in effect
- * for some software version, newest first.
+ * for some version PLM published, newest first. A working name is not one: its set is fixed on the
+ * PLM version once PLM publishes it.
  */
 export function patchTargets(s: State, vehicleModelId: string): Release[] {
   const head = mainlineRelease(s, vehicleModelId);
-  return releasesOf(s, vehicleModelId).filter((r) => r.id !== head?.id && versionsInEffect(s, r).length > 0);
+  const published = (v: string) => s.softwareVersions[`${vehicleModelId}::${v}`]?.status === 'RECORDED';
+  return releasesOf(s, vehicleModelId).filter((r) => r.id !== head?.id && versionsInEffect(s, r).some(published));
 }
 
 /** A set and the older sets it patches, back to the mainline set the line started from. */

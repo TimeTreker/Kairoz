@@ -11,6 +11,7 @@ import { LoanVehicleTag, LoansPanel } from '../components/loans.tsx';
 import { EnvironmentModal } from '../components/environment.tsx';
 import { DeliveryTag } from '../components/testing.tsx';
 import { GroupFitDrawer, SoftwareUpdateTag, UpdateSoftwareModal, useCanUpdateSoftware } from '../components/vehicle-software.tsx';
+import { VersionStatusTag } from '../components/plm.tsx';
 import { fitOf } from '../engine/delivery.ts';
 import { openChangeOf, unrecordedReports } from '../engine/software-change.ts';
 import { catalogImages } from '../engine/sim-software.ts';
@@ -30,7 +31,6 @@ import {
   membersOf,
   pendingDeploymentOf,
   publicationLabel,
-  recordSoftwareVersion,
   registerImage,
   registerPhysical,
   releaseReservation,
@@ -1090,7 +1090,7 @@ function Catalogs() {
   const { L } = useI18n();
   const can = useCan();
   const run = useRun();
-  const [open, setOpen] = useState<'version' | 'image' | 'manifest' | null>(null);
+  const [open, setOpen] = useState<'image' | 'manifest' | null>(null);
   const [manifestFor, setManifestFor] = useState<SoftwareVersion | null>(null);
   const [form] = Form.useForm();
   const model = Form.useWatch('vehicleModelId', form);
@@ -1129,16 +1129,17 @@ function Catalogs() {
   return (
     <Row gutter={16}>
       <Col xs={24} xl={10}>
-        <Card title={L('整车软件版本', 'Software versions')} extra={canVersion && <Button size="small" icon={<PlusOutlined />} onClick={() => (form.resetFields(), setOpen('version'))}>{L('登记', 'Record')}</Button>}>
+        <Card title={L('整车软件版本', 'Software versions')}>
+          <Hint>{L('整车版本由 PLM 发布并同步过来；集成征集的工作名在 PLM 发布前是规划中。车辆资源只补录模拟的软件清单。', 'Whole-vehicle versions come from PLM by sync; an integration call’s working name is planned until PLM publishes it. Vehicle resources only add the mock manifest.')}</Hint>
           <Table
             rowKey={(v) => `${v.vehicleModelId}::${v.version}`}
             size="small"
             pagination={false}
-            dataSource={Object.values(state.softwareVersions)}
+            dataSource={Object.values(state.softwareVersions).sort((a, b) => a.vehicleModelId.localeCompare(b.vehicleModelId) || compareVersions(b.version, a.version))}
             columns={[
               { title: L('车型', 'Model'), dataIndex: 'vehicleModelId' },
               { title: L('版本', 'Version'), dataIndex: 'version' },
-              { title: L('来源', 'Source'), dataIndex: 'source' },
+              { title: L('状态', 'Status'), render: (_, v) => <VersionStatusTag v={v} /> },
               {
                 title: L('软件清单', 'Manifest'),
                 render: (_, v) =>
@@ -1178,22 +1179,15 @@ function Catalogs() {
       <Modal
         open={open !== null}
         title={
-          open === 'version'
-            ? L('登记整车软件版本', 'Record a software version')
-            : open === 'manifest'
-              ? L(`补录软件清单 · ${manifestFor?.vehicleModelId} ${manifestFor?.version}`, `Add the manifest · ${manifestFor?.vehicleModelId} ${manifestFor?.version}`)
-              : L('登记仿真镜像', 'Register a simulation image')
+          open === 'manifest'
+            ? L(`补录软件清单 · ${manifestFor?.vehicleModelId} ${manifestFor?.version}`, `Add the manifest · ${manifestFor?.vehicleModelId} ${manifestFor?.version}`)
+            : L('登记仿真镜像', 'Register a simulation image')
         }
         onCancel={() => setOpen(null)}
         onOk={() =>
           form.validateFields().then((v) => {
             const ok =
-              open === 'version'
-                ? run(
-                    (c) => recordSoftwareVersion(c, { vehicleModelId: v.vehicleModelId, version: v.version, source: v.source, manifest: parseManifest(v.signals, v.sources) }),
-                    L('已登记；没有策略集适用时会自动开启适用性确认', 'Recorded; an applicability check opens if no policy set applies'),
-                  )
-                : open === 'manifest'
+              open === 'manifest'
                   ? run(
                       (c) => setSoftwareManifest(c, { vehicleModelId: manifestFor!.vehicleModelId, version: manifestFor!.version, manifest: parseManifest(v.signals, v.sources) ?? { signals: [], sources: [] } }),
                       L('已补录软件清单', 'Manifest recorded'),
@@ -1220,16 +1214,6 @@ function Catalogs() {
           </Form.Item>
           {open === 'manifest' ? (
             manifestFields
-          ) : open === 'version' ? (
-            <>
-              <Form.Item name="version" label={L('版本', 'Version')} rules={[{ required: true }]}>
-                <Input placeholder="1.2" />
-              </Form.Item>
-              <Form.Item name="source" label={L('可信来源', 'Trusted source')} rules={[{ required: true }]}>
-                <Input />
-              </Form.Item>
-              {manifestFields}
-            </>
           ) : (
             <>
               <Form.Item name="id" label="ID" rules={[{ required: true }]}>

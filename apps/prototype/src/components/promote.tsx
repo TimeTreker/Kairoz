@@ -47,7 +47,7 @@ export function PromoteModal({ candidate, onClose }: { candidate: Candidate; onC
           const id = run(
             (c) => promoteCandidate(c, candidate.id, { dclVersion: v.dclVersion, vehicleIntegrationVersions: v.versions ?? [], notes: v.notes }),
             call
-              ? L(`已发布：生成整车集成版本 ${call.vehicleModelId} ${call.targetVersion}，新策略集已导出为它的 OTA 包内配置模块`, `Released: ${call.vehicleModelId} ${call.targetVersion} recorded, the set exported as its OTA package’s DCL module`)
+              ? L(`已发布：新策略集对应工作名 ${call.vehicleModelId} ${call.targetVersion}，配置已导出，待 DCL 导出 DCL 件交给 PLM`, `Released: the set is related to working name ${call.vehicleModelId} ${call.targetVersion}; its configuration is exported for DCL to hand to PLM`)
               : L('已发布；车辆在 OTA 回执成功后才会运行新策略集', 'Released; vehicles run the set only after an OTA receipt'),
           );
           if (id !== undefined) onClose();
@@ -91,10 +91,17 @@ export function PromoteModal({ candidate, onClose }: { candidate: Candidate; onC
           showIcon
           style={{ marginBottom: 12 }}
           title={L(`集成征集 ${call.title} 的测试集成版本`, `Test integration version of integration call ${call.title}`)}
-          description={L(
-            `发布后生成整车集成版本 ${call.vehicleModelId} ${call.targetVersion}${state.softwareVersions[`${call.vehicleModelId}::${call.targetVersion}`]?.status === 'PLANNED' ? '（规划版本转为已登记）' : ''}，记录它与新策略集的对应关系，并把新策略集导出为该版本 OTA 包内的配置模块：量产车刷这个版本就随软件生效，弱网或离线也不受影响。`,
-            `Publishing records whole-vehicle integration version ${call.vehicleModelId} ${call.targetVersion}${state.softwareVersions[`${call.vehicleModelId}::${call.targetVersion}`]?.status === 'PLANNED' ? ' (the planned version becomes recorded)' : ''}, its relation to the new policy set, and exports the set as the DCL module of that version’s OTA package: production vehicles flashed with it run the set with the software, weak signal or none.`,
-          )}
+          description={
+            state.softwareVersions[`${call.vehicleModelId}::${call.targetVersion}`]?.status === 'PLANNED'
+              ? L(
+                  `发布后记录新策略集与工作名 ${call.vehicleModelId} ${call.targetVersion} 的对应关系，并导出配置。工作名保持规划：DCL 导出 DCL 件交给 PLM，PLM 发布整车版本后，平台按配置摘要自动关联，刷这个版本的车随软件运行新策略集，弱网或离线也不受影响。`,
+                  `Publishing relates the new policy set to working name ${call.vehicleModelId} ${call.targetVersion} and exports its configuration. The working name stays planned: DCL exports the DCL part for PLM, and once PLM publishes the version the platform links them by the configuration digest; vehicles flashed with it run the set with the software, weak signal or none.`,
+                )
+              : L(
+                  `PLM 已发布 ${call.vehicleModelId} ${call.targetVersion}，它的 BOM 不再改变：新策略集只记录对应关系，由配置 OTA 送到车上。`,
+                  `PLM already published ${call.vehicleModelId} ${call.targetVersion} and its BOM no longer changes: the new set is related to it and reaches vehicles by configuration OTA.`,
+                )
+          }
         />
       )}
       {target && !moved && (

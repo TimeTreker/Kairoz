@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import { produce } from 'immer';
-import { answerAll } from '../acceptance/helpers.ts';
+import { answerAll, plmPublish } from '../acceptance/helpers.ts';
 import { World } from '../acceptance/world.ts';
 import * as config from '../src/engine/config.ts';
 import { decideEmergencyStop, requestEmergencyStop } from '../src/engine/emergency.ts';
@@ -52,7 +52,7 @@ describe('vehicle software changes', () => {
     const u = latest(w, 'VEH-001');
     assert.deepEqual([w.s.resources['VEH-001']!.integrationVersion, u.toVersion, u.status], ['1.1', '1.3', 'UNRECORDED']);
     assert.deepEqual(sc.unrecordedReports(w.s, w.actor('resource')).map((x) => x.id), [u.id]);
-    w.as('resource', (c) => fleet.recordSoftwareVersion(c, { vehicleModelId: 'X89', version: '1.3', source: 'OTA 1.3', manifest: MANIFEST_13 }));
+    plmPublish(w.engine, 'X89', '1.3', { manifest: MANIFEST_13 });
     w.as('resource', (c) => fleet.confirmIntegration(c, 'VEH-001', { version: '1.3', source: '客户端上报' }));
     assert.equal(w.s.softwareChanges[u.id]!.status, 'RESOLVED');
     assert.deepEqual([latest(w, 'VEH-001').fromVersion, latest(w, 'VEH-001').toVersion, latest(w, 'VEH-001').source], ['1.1', '1.3', 'CONFIRMED']);
@@ -76,7 +76,7 @@ describe('vehicle software changes', () => {
 
   test('a missing source flags the file and the policies that capture it; no set gives NO_BASE, an explicit base FIX', () => {
     const w = demoWith11();
-    w.as('resource', (c) => fleet.recordSoftwareVersion(c, { vehicleModelId: 'X89', version: '1.3', source: 'OTA 1.3', manifest: MANIFEST_13 }));
+    plmPublish(w.engine, 'X89', '1.3', { manifest: MANIFEST_13 });
     ota(w, 'VEH-001', '1.3');
     let a = sc.assessSoftwareChange(w.s, latest(w, 'VEH-001').id);
     assert.equal(a.outcome, 'NO_BASE');
@@ -125,7 +125,7 @@ describe('vehicle software changes', () => {
 
   test('without a manifest the check cannot be made; production and simulations raise no team notice', () => {
     const w = demoWith11();
-    w.as('resource', (c) => fleet.recordSoftwareVersion(c, { vehicleModelId: 'X89', version: '1.4', source: 'OTA 1.4' }));
+    plmPublish(w.engine, 'X89', '1.4');
     w.as('workspace_manager', (c) => fleet.setGroupBase(c, groupId(w, '制动研发车组'), set(w, '1.0.0').id));
     ota(w, 'VEH-001', '1.4');
     assert.equal(sc.assessSoftwareChange(w.s, latest(w, 'VEH-001').id).outcome, 'CANNOT_CHECK');

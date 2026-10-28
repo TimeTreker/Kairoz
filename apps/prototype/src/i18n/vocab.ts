@@ -914,8 +914,8 @@ Object.assign(ERROR_LABELS, {
 
 // Integration calls (集成征集) and the release history (发布记录)
 Object.assign(ERROR_LABELS, {
-  VERSION_PLANNED: b('这是集成征集的规划版本：只能由该征集的发布列入，不能另做适用性确认', 'A planned version of an integration call: only that call’s release lists it, and it takes no applicability check'),
-  PLANNED_VERSION_IN_PRODUCTION: b('规划版本还没有发布，量产车只能运行已发布的软件', 'The planned version is not released; production vehicles run released software only'),
+  VERSION_PLANNED: b('这是集成征集的工作名（规划版本）：只能由该征集的发布列入，不能另做适用性确认', 'An integration call’s working name (planned): only that call’s release lists it, and it takes no applicability check'),
+  PLANNED_VERSION_IN_PRODUCTION: b('工作名还没有由 PLM 发布，量产车只能运行 PLM 发布的软件', 'The working name is not published by PLM; production vehicles run PLM-published software only'),
   CALL_CLOSED: b('该集成征集已经结束', 'The integration call is closed'),
   PARENT_CALL_REQUIRED: b('域子征集要响应一个整车征集，目标版本跟随整车征集', 'A domain call answers a whole-vehicle call and follows its target'),
   NOT_A_CALL_MODULE: b('该模块不在这个征集的清单里', 'That module is not on this call’s list'),
@@ -974,13 +974,23 @@ export const ROUND_OUTCOME_LABELS: Record<string, Bilingual> = {
   CANCELLED: b('已取消', 'Cancelled'),
   RELEASED: b('已发布', 'Released'),
 };
+/** A version's status; a working name (PLANNED) also by where it stands (`workingNameState`). */
 export const SOFTWARE_STATUS_LABELS: Record<string, Bilingual> = {
-  PLANNED: b('规划中', 'Planned'),
-  RECORDED: b('已登记', 'Recorded'),
+  PLANNED: b('工作名 · 规划中', 'Working name · planned'),
+  TO_DELIVER: b('已发布 · 待导出 DCL 件', 'Released · DCL part to export'),
+  DELIVERED: b('DCL 件已交付 · 待 PLM 发布', 'DCL part handed over · waiting for PLM'),
+  LINKED: b('已关联 PLM 版本', 'Linked to a PLM version'),
+  RECORDED: b('PLM 已发布', 'Published by PLM'),
 };
 Object.assign(ERROR_LABELS, {
-  NO_SET_FOR_VERSION: b('没有适用这个软件版本的策略集，无法导出配置模块', 'No policy set applies to this software version; there is no module to export'),
-  MODULE_CURRENT: b('配置模块已经是当前生效的策略集', 'The module already carries the set in effect'),
+  TARGET_RECORDED: b('PLM 已经发布了这个版本：征集的目标是新软件的工作名，PLM 版本的 BOM 不再改变', 'PLM already published this version: a call targets a working name for new software, and a PLM version’s BOM no longer changes'),
+  WORKING_NAME_LINKED: b('这个工作名已由 PLM 发布为另一个版本号，请改用 PLM 版本', 'PLM published this working name under its own number; use the PLM version'),
+  NO_MODULE_TO_DELIVER: b('工作名的征集还没有发布，没有可以导出的 DCL 配置', 'The working name’s call is not released yet; there is no DCL configuration to export'),
+  INVALID_CLIENT_VERSION: b('DCL 客户端版本形如 2.3.0', 'A DCL client version looks like 2.3.0'),
+  PART_DELIVERED: b('这个客户端版本的 DCL 件已经交付', 'The DCL part with this client version is already handed over'),
+  PLM_VERSION_EXISTS: b('PLM 已经发布过这个版本号', 'PLM already published this version number'),
+  INVALID_BOM: b('BOM 的每个模块都要有名称和版本，且不重复', 'Each module of the BOM has a name and a version, once'),
+  INVALID_DCL_PART: b('DCL 件需写明客户端版本、策略集版本和配置摘要', 'A DCL part names its client version, policy set version and configuration digest'),
 });
 
 /** Privacy levels: P1 is ordinary; P2 and P3 always go through DCL's sensitive review. */

@@ -15,6 +15,7 @@ import { releaseHeld } from './budget.ts';
 import { confirmHold, isCollectionPaused } from './collection-hold.ts';
 import { syncIfChanged } from './company-directory.ts';
 import { pushPending } from './delivery.ts';
+import { syncPlmIfChanged } from './plm.ts';
 import { advanceEvent } from './events.ts';
 import { answerImageChange } from './sim-software.ts';
 import { acceptReceipt } from './validation.ts';
@@ -189,8 +190,9 @@ export function tick(ctx: Ctx): number {
     answered += 1;
   }
   for (const r of Object.values(ctx.s.resources)) reportIfDue(ctx, r);
-  // The company directory pushes its changes like a SCIM feed would.
+  // The company directory pushes its changes like a SCIM feed would; PLM its published versions.
   answered += syncIfChanged(ctx);
+  answered += syncPlmIfChanged(ctx);
   return answered;
 }
 
@@ -380,7 +382,14 @@ export function simulateSoftwareOta(ctx: Ctx, resourceId: string, version: strin
   if (r.type !== 'PHYSICAL') throw rule('SIMULATION_SOFTWARE_FROM_IMAGE', 'a simulation’s software comes from its image');
   const v = version.trim();
   if (!/^[A-Za-z0-9._-]{1,40}$/.test(v)) throw rule('INVALID_VERSION', 'a software version is letters, digits, . _ - (up to 40)');
-  provisionDevice(ctx, r.id).software = v;
+  const device = provisionDevice(ctx, r.id);
+  device.software = v;
+  // A production car's package is PLM's version: its DCL part brings the DCL client and the bundled
+  // set (出厂配置), which the car runs at once and reports.
+  const part = r.env === 'production' ? ctx.s.plm.versions.find((x) => x.vehicleModelId === r.vehicleModelId && x.version === v)?.dclPart : null;
+  const config = part ? Object.values(ctx.s.resolvedConfigs).find((c) => c.digest === part.digest) : undefined;
+  if (part) device.clientVersion = part.clientVersion;
+  if (config) device.config = config.id;
   return v;
 }
 

@@ -76,6 +76,7 @@ export const ACTIONS = {
   'applicability.recordTest': { roles: ['INTEGRATION_TEST'], env: 'testing', excludeDispatchOnly: true },
   'applicability.verify': { roles: ['INTEGRATION_TEST'], env: 'testing', excludeDispatchOnly: true },
   // Vehicles (车辆资源 / 工作区管理员)
+  /** Adding a version's mock manifest (signals and data sources); the versions themselves come from PLM. */
   'softwareVersion.record': { roles: ['VEHICLE_RESOURCE'], env: 'all' },
   'resource.manage': { roles: ['VEHICLE_RESOURCE'], env: 'target' },
   'simulation.manage': { roles: ['WORKSPACE_ADMIN', 'VEHICLE_RESOURCE'], env: 'target' },
@@ -111,6 +112,8 @@ export const ACTIONS = {
   /** A domain's subsystem release: an integration input, never a production release. */
   'subsystem.publish': { roles: ['CONFIG_RELEASE'], env: 'testing' },
   'ota.manage': { roles: ['CONFIG_RELEASE'], env: 'production' },
+  /** Merging a released configuration into the DCL software and delivering it to PLM as one part (DCL 件). */
+  'dclPart.deliver': { roles: ['DCL_ENGINEER'], env: 'production' },
   // Data use (数据查询): roles that work with the data, within their grants; never platform ops.
   'event.query': {
     roles: ['BUSINESS_DEV', 'BUSINESS_TEST', 'DCL_ENGINEER', 'CONFIG_INTEGRATOR', 'INTEGRATION_TEST', 'CONFIG_RELEASE'],

@@ -10,8 +10,9 @@ import * as integ from '../src/engine/integration.ts';
 import * as ota from '../src/engine/ota.ts';
 import * as rel from '../src/engine/release.ts';
 import { demoState } from '../src/engine/seed.ts';
-import { sendReceipt } from '../src/engine/simulator.ts';
+import { advanceClockHours, sendReceipt } from '../src/engine/simulator.ts';
 import * as v from '../src/engine/validation.ts';
+import { carRuns, plmPublish } from '../acceptance/helpers.ts';
 
 function fails(fn: () => unknown, code: string): DomainError {
   try {
@@ -152,35 +153,54 @@ describe('integration calls', () => {
     const set = e.run('release', (c) => rel.promoteCandidate(c, t2, { dclVersion: '1.1.0', vehicleIntegrationVersions: ['1.2'], notes: 'X89 1.2 集成发布' }));
     s = e.getState();
     const sv = s.softwareVersions['X89::1.2']!;
-    assert.deepEqual([sv.status, sv.callId], ['RECORDED', callId]);
-    assert.match(sv.source, /integration call X89 1\.2/);
+    // The working name stays planned until PLM publishes the software; its set is exported for DCL.
+    assert.deepEqual([sv.status, sv.callId, sv.linkedTo], ['PLANNED', callId, null]);
     assert.deepEqual([call().status, call().releaseId, call().rounds.map((r) => r.outcome)], ['RELEASED', set, ['CANCELLED', 'RELEASED']]);
     assert.deepEqual(s.releases[set]!.vehicleIntegrationVersions, ['1.2'], 'the set ↔ version relation');
     assert.equal(rel.setInEffect(s, 'X89', '1.2')!.id, set);
     assert.equal(rel.setInEffect(s, 'X89', '1.0')!.id, r100, '1.0 keeps its set');
-
-    // The set is exported as the DCL module of 1.2's vehicle OTA package: a production vehicle
-    // flashed with 1.2 runs it at once, without a cloud push (weak signal included).
     assert.deepEqual([sv.dclModule?.releaseId, sv.dclModule?.resolvedConfigId], [set, s.releases[set]!.resolvedConfigId]);
-    e.run('resource', (c) => fleet.confirmIntegration(c, 'VEH-201', { version: '1.2', source: '整车 OTA 回执' }));
+    fails(() => e.run('resource', (c) => fleet.confirmIntegration(c, 'VEH-201', { version: '1.2', source: '整车 OTA 回执' })), 'PLANNED_VERSION_IN_PRODUCTION');
+
+    // DCL hands the part over to PLM; PLM publishes the software as 1.2.0 with it in the BOM, and the
+    // platform links the working name by the part's configuration digest.
+    fails(() => e.run('release', (c) => calls.deliverDclPart(c, { vehicleModelId: 'X89', version: '1.2', clientVersion: '2.3.0' })), 'FORBIDDEN');
+    const part = e.run('dcl', (c) => calls.deliverDclPart(c, { vehicleModelId: 'X89', version: '1.2', clientVersion: '2.3.0' }));
+    assert.deepEqual([part.clientVersion, part.setVersion, part.digest], ['2.3.0', '1.1.0', s.resolvedConfigs[s.releases[set]!.resolvedConfigId]!.digest]);
+    e.run(null, (c) => advanceClockHours(c, 1));
+    plmPublish(e, 'X89', '1.2.0', { partOf: '1.2' });
+    s = e.getState();
+    const plm = s.softwareVersions['X89::1.2.0']!;
+    assert.deepEqual([plm.status, plm.workingName, plm.callId, s.softwareVersions['X89::1.2']!.linkedTo], ['RECORDED', '1.2', callId, '1.2.0']);
+    assert.equal(rel.setInEffect(s, 'X89', '1.2.0')!.id, set, 'the PLM version takes over the working name’s set');
+    assert.equal(Object.values(s.applicabilityChecks).filter((c) => c.version === '1.2.0').length, 0, 'no check: the call tested this software');
+    fails(() => e.run('resource', (c) => fleet.confirmIntegration(c, 'VEH-031', { version: '1.2', source: '预发布' })), 'WORKING_NAME_LINKED');
+
+    // A production vehicle flashed with 1.2.0 reports the bundled digest and runs the set at once,
+    // without a cloud push (weak signal included).
+    carRuns(e, 'VEH-201', '1.2.0');
     s = e.getState();
     assert.equal(rel.releaseFor(s, s.resources['VEH-201']!).release?.id, set);
     assert.equal(s.resources['VEH-201']!.appliedConfigId, s.releases[set]!.resolvedConfigId, 'applied with the software');
     assert.deepEqual(ota.answerConfigRequest(s, 'VEH-201'), { configId: s.releases[set]!.resolvedConfigId, reason: 'LATEST_RELEASE', detail: 'policy set 1.1.0' });
-    const change = Object.values(s.softwareChanges).find((c) => c.resourceId === 'VEH-201' && c.toVersion === '1.2')!;
+    const change = Object.values(s.softwareChanges).find((c) => c.resourceId === 'VEH-201' && c.toVersion === '1.2.0')!;
     assert.equal(change.configId, s.releases[set]!.resolvedConfigId);
-    assert.equal(h.versionHistory(s, 'X89', '1.2').find((x) => x.kind === 'VEHICLE_ARRIVED')!.releaseId, set);
+    assert.equal(h.versionHistory(s, 'X89', '1.2.0').find((x) => x.kind === 'VEHICLE_ARRIVED')!.releaseId, set);
     // A testing vehicle keeps what it was sent: bundles are for production vehicles.
     assert.notEqual(s.resources['VEH-032']!.appliedConfigId, s.releases[set]!.resolvedConfigId);
 
-    const history = h.versionHistory(e.getState(), 'X89', '1.2');
+    // The PLM version's history tells the working name's story first.
+    const history = h.versionHistory(e.getState(), 'X89', '1.2.0');
     const kinds = history.map((x) => x.kind);
     assert.equal(kinds[0], 'CALL_OPENED');
     assert.deepEqual(
-      kinds.filter((k) => k.startsWith('ROUND_') || k === 'PUBLISHED' || k === 'MODULE_RETURNED' || k === 'SOFTWARE_RECORDED'),
-      ['ROUND_FROZEN', 'MODULE_RETURNED', 'ROUND_CANCELLED', 'ROUND_FROZEN', 'ROUND_PASSED', 'SOFTWARE_RECORDED', 'PUBLISHED'],
+      kinds.filter((k) => k.startsWith('ROUND_') || ['PUBLISHED', 'MODULE_RETURNED', 'MODULE_EXPORTED', 'PART_DELIVERED', 'PLM_PUBLISHED', 'LINKED', 'APPLICABILITY_ADDED'].includes(k)),
+      ['ROUND_FROZEN', 'MODULE_RETURNED', 'ROUND_CANCELLED', 'ROUND_FROZEN', 'ROUND_PASSED', 'PUBLISHED', 'MODULE_EXPORTED', 'PART_DELIVERED', 'PLM_PUBLISHED', 'LINKED', 'APPLICABILITY_ADDED'],
     );
-    assert.equal(history.find((x) => x.kind === 'PUBLISHED')!.inEffect, set);
+    assert.equal(history.find((x) => x.kind === 'PUBLISHED')!.inEffect, null, 'published for the working name, not yet for 1.2.0');
+    assert.equal(history.find((x) => x.kind === 'APPLICABILITY_ADDED')!.inEffect, set);
+    assert.deepEqual(h.setsOverTime(history), [set]);
+    assert.equal(h.versionHistory(e.getState(), 'X89', '1.2').find((x) => x.kind === 'PUBLISHED')!.inEffect, set);
     assert.equal(kinds.filter((k) => k === 'MODULE_SUBMITTED').length, 3, 'steering twice and brake once');
   });
 
@@ -205,16 +225,13 @@ describe('integration calls', () => {
     assert.deepEqual([adc.status, adc.by], ['NO_CHANGE', 'adc_integrator']);
   });
 
-  test('configuration release exports a module for a version recorded from outside, and again after a newer set', () => {
+  test('a call targets a working name: PLM versions are refused, and a part exists only after the release', () => {
     const e = new Engine(demoState());
-    const r100 = rel.releasesOf(e.getState(), 'X89')[0]!;
-    assert.equal(e.getState().softwareVersions['X89::1.0']!.dclModule, null);
-    fails(() => e.run('integrator', (c) => calls.exportDclModule(c, { vehicleModelId: 'X89', version: '1.0' })), 'FORBIDDEN');
-    fails(() => e.run('release', (c) => calls.exportDclModule(c, { vehicleModelId: 'X89', version: '1.1' })), 'NO_SET_FOR_VERSION');
-    const m = e.run('release', (c) => calls.exportDclModule(c, { vehicleModelId: 'X89', version: '1.0' }));
-    assert.deepEqual([m.releaseId, m.exportedBy], [r100.id, 'release']);
-    fails(() => e.run('release', (c) => calls.exportDclModule(c, { vehicleModelId: 'X89', version: '1.0' })), 'MODULE_CURRENT');
-    assert.equal(h.versionHistory(e.getState(), 'X89', '1.0').filter((x) => x.kind === 'MODULE_EXPORTED').length, 1);
+    fails(() => e.run('integration_admin', (c) => calls.openCall(c, { workspaceId: 'x89-project', targetVersion: '1.1', dueDate: null })), 'TARGET_RECORDED');
+    const callId = e.run('integration_admin', (c) => calls.openCall(c, { workspaceId: 'x89-project', targetVersion: '1.2', dueDate: null }));
+    fails(() => e.run('integration_admin', (c) => calls.retargetCall(c, callId, '1.1')), 'TARGET_RECORDED');
+    fails(() => e.run('dcl', (c) => calls.deliverDclPart(c, { vehicleModelId: 'X89', version: '1.2', clientVersion: '2.3.0' })), 'NO_MODULE_TO_DELIVER');
+    fails(() => e.run('dcl', (c) => calls.deliverDclPart(c, { vehicleModelId: 'X89', version: '1.0', clientVersion: '2.3.0' })), 'TARGET_RECORDED');
   });
 
   test('leaving out, retargeting before testing, and cancelling', () => {
@@ -232,7 +249,7 @@ describe('integration calls', () => {
     assert.deepEqual([call().status, call().note, calls.callPhase(s, call())], ['CANCELLED', '整车计划调整', 'CANCELLED']);
     fails(() => e.run('steering', (c) => calls.submitGroup(c, callId, 'steering', {})), 'CALL_CLOSED');
     // Released outside the call, the planned version becomes recorded and asks for applicability.
-    e.run('resource', (c) => fleet.recordSoftwareVersion(c, { vehicleModelId: 'X89', version: '1.3', source: '整车 OTA 发布记录 X89-1.3' }));
+    plmPublish(e, 'X89', '1.3');
     s = e.getState();
     assert.equal(s.softwareVersions['X89::1.3']!.status, 'RECORDED');
     assert.equal(Object.values(s.applicabilityChecks).filter((c) => c.version === '1.3').length, 1);

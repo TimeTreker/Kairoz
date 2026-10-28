@@ -40,7 +40,8 @@ export const NOTIFICATION_CATEGORY: Record<NotificationKind, string> = {
   EMERGENCY_STOP: 'RELEASE',
   ROLLOUT_PAUSED: 'RELEASE',
   PRODUCTION_BLOCKED: 'RELEASE',
-  MODULE_OUTDATED: 'RELEASE',
+  DCL_PART_TO_DELIVER: 'RELEASE',
+  PLM_PART_UNKNOWN: 'RELEASE',
   UNRECORDED_SOFTWARE: 'VEHICLE',
   GROUP_MISMATCH: 'VEHICLE',
   SOFTWARE_UPDATE: 'VEHICLE',
@@ -151,17 +152,22 @@ export function useNotificationText() {
         return { title: L(`配置 OTA 策略集 ${s} 已暂停`, `Rollout of policy set ${s} paused`), body: d ?? L('车辆应用失败，已自动暂停', 'Paused automatically after a vehicle failed') };
       case 'PRODUCTION_BLOCKED':
         return { title: L(`量产车 ${s} 被阻止`, `Production vehicle ${s} is blocked`), body: L(`软件 ${d} 没有适用的策略集。`, `No policy set applies to software ${d}.`) };
-      case 'MODULE_OUTDATED': {
-        const [carried, current] = d.split(' · ');
+      case 'DCL_PART_TO_DELIVER':
         return {
-          title: L(`${s} 的 OTA 包内配置模块已不是当前策略集`, `The DCL module in ${s}’s OTA package is no longer the set in effect`),
-          body: current
-            ? L(`包内是策略集 ${carried}，当前生效 ${current}。刷这个版本的量产车会先运行 ${carried}：更新模块，并用配置 OTA 更新已刷的车。`, `It carries policy set ${carried}; ${current} is in effect. Production vehicles flashed with it run ${carried} first: update the module, and bring flashed vehicles up to date by configuration OTA.`)
-            : L(`包内是策略集 ${carried}，它已不适用于这个版本，也没有其他生效的策略集。`, `It carries policy set ${carried}, which no longer applies to this version, and no other set is in effect.`),
+          title: L(`${s} 的 DCL 件待导出交付 PLM`, `${s}: export the DCL part for PLM`),
+          body: L(`策略集 ${d ?? ''} 已发布；DCL 件交给 PLM 后，PLM 才能把它放进这个整车版本。`, `Policy set ${d ?? ''} is released; PLM can put the DCL part into this version once it is handed over.`),
         };
+      case 'PLM_PART_UNKNOWN':
+        return {
+          title: L(`PLM 版本 ${s} 的 DCL 件无法识别`, `The DCL part of PLM version ${s} is unknown`),
+          body: L(`件 ${d}：配置摘要不属于任何策略集。刷这个版本的车不会被认作运行某个策略集，请与 PLM 核对。`, `Part ${d}: its configuration digest matches no policy set. Vehicles flashed with this version are not taken as running a set; check with PLM.`),
+        };
+      case 'UNRECORDED_SOFTWARE': {
+        const [reported, linked] = d.split(' → ');
+        return linked
+          ? { title: L(`${s} 上报了工作名 ${reported}`, `${s} reported the working name ${reported}`), body: L(`PLM 已把它发布为 ${linked}；请为车辆刷写 ${linked}。`, `PLM published it as ${linked}; flash the vehicle with ${linked}.`) }
+          : { title: L(`${s} 上报了 PLM 未发布的软件版本`, `${s} reported a version PLM has not published`), body: L(`${reported} 不在 PLM 的发布记录里；PLM 发布后，车辆下一次上报即生效。`, `${reported} is not in PLM's record; once PLM publishes it, the vehicle's next report takes effect.`) };
       }
-      case 'UNRECORDED_SOFTWARE':
-        return { title: L(`${s} 上报了未登记的软件版本`, `${s} reported an unrecorded software version`), body: L(`先登记 ${d}，再确认。`, `Record ${d}, then confirm it.`) };
       case 'GROUP_MISMATCH': {
         const [group, outcome] = d.split(' · ');
         return {

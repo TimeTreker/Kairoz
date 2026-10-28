@@ -1,11 +1,13 @@
 // Release history (发布历史): the read-only story of each whole-vehicle software version and each
 // DCL policy set of a vehicle model, assembled from the records the platform already keeps
 // (integration calls and their rounds, publications, applicability records and checks, emergency
-// stops, OTA rollout logs, vehicle software changes). Software versions belong to one vehicle
-// model: X90 1.0 is not X89 1.0.
+// stops, OTA rollout logs, vehicle software changes, DCL parts and PLM publication). Software
+// versions belong to one vehicle model: X90 1.0 is not X89 1.0. A PLM version linked from a working
+// name tells the working name's story first: its call, its release, the part DCL delivered.
 
 import { softwareKey } from './fleet.ts';
 import { compareVersions, releasesOf } from './release.ts';
+import { partVersion } from './types.ts';
 import type { Release, Resource, RolloutEvent, SoftwareVersion, State } from './types.ts';
 
 export type HistoryKind =
@@ -21,7 +23,10 @@ export type HistoryKind =
   | 'CALL_CANCELLED'
   | 'CALL_NO_CHANGE'
   | 'SOFTWARE_RECORDED'
+  | 'PLM_PUBLISHED'
   | 'MODULE_EXPORTED'
+  | 'PART_DELIVERED'
+  | 'LINKED'
   | 'PUBLISHED'
   | 'PATCHED'
   | 'CHECK_OPENED'
@@ -72,6 +77,7 @@ const RANK: Record<string, number> = {
   CALL_OPENED: -1,
   SOFTWARE_PLANNED: 0,
   SOFTWARE_RECORDED: 0,
+  PLM_PUBLISHED: 0,
   MODULE_SUBMITTED: 1,
   MODULE_NO_CHANGE: 1,
   MODULE_RETURNED: 1,
@@ -90,6 +96,8 @@ const RANK: Record<string, number> = {
   PATCHED: 5,
   EMERGENCY_APPROVED: 6,
   MODULE_EXPORTED: 7,
+  PART_DELIVERED: 7.2,
+  LINKED: 7.6,
   EMERGENCY_REJECTED: 6,
   CHECK_CONFIRMED: 7,
   APPLICABILITY_ADDED: 8,
@@ -157,12 +165,12 @@ function rolloutDrafts(s: State, keep: (releaseId: string) => boolean, only?: (r
 }
 
 /** A whole-vehicle call's story: opened, what each module submitted or was sent back for, each round, how it closed. */
-function callDrafts(s: State, vehicleModelId: string, version: string): Draft[] {
+function callDrafts(s: State, vehicleModelId: string, versions: string[]): Draft[] {
   const out: Draft[] = [];
   const MODULE_KIND = { SUBMITTED: 'MODULE_SUBMITTED', NO_CHANGE: 'MODULE_NO_CHANGE', RETURNED: 'MODULE_RETURNED', EXCLUDED: 'MODULE_EXCLUDED' } as const;
   for (const call of Object.values(s.integrationCalls)) {
-    if (call.vehicleModelId !== vehicleModelId || call.scope !== 'Vehicle' || call.targetVersion !== version) continue;
-    const base = { callId: call.id, version };
+    if (call.vehicleModelId !== vehicleModelId || call.scope !== 'Vehicle' || !versions.includes(call.targetVersion)) continue;
+    const base = { callId: call.id, version: call.targetVersion };
     out.push({ ...base, at: call.createdAt, kind: 'CALL_OPENED', by: call.createdBy, reason: call.title, order: 0 });
     for (const m of call.modules) {
       m.history.forEach((e, i) => {
@@ -194,13 +202,29 @@ function callDrafts(s: State, vehicleModelId: string, version: string): Draft[] 
 export function versionHistory(s: State, vehicleModelId: string, version: string): HistoryEntry[] {
   const drafts: Draft[] = [];
   const sv = s.softwareVersions[softwareKey(vehicleModelId, version)];
-  if (sv?.plannedAt) drafts.push({ at: sv.plannedAt, kind: 'SOFTWARE_PLANNED', by: sv.plannedBy, version, callId: sv.callId, reason: null, order: 0 });
-  if (sv?.status === 'RECORDED') drafts.push({ at: sv.createdAt, kind: 'SOFTWARE_RECORDED', by: sv.recordedBy, version, callId: sv.callId, reason: sv.source || null, order: 0 });
-  drafts.push(...callDrafts(s, vehicleModelId, version));
-  for (const m of sv?.moduleLog ?? []) drafts.push({ at: m.exportedAt, kind: 'MODULE_EXPORTED', by: m.exportedBy, version, releaseId: m.releaseId, order: 0 });
+  // A PLM version linked from a working name: the working name's story comes first.
+  const w = sv?.workingName && sv.workingName !== version ? s.softwareVersions[softwareKey(vehicleModelId, sv.workingName)] : undefined;
+  const names = w ? [w.version, version] : [version];
+  const planned = w ?? sv;
+  if (planned?.plannedAt) drafts.push({ at: planned.plannedAt, kind: 'SOFTWARE_PLANNED', by: planned.plannedBy, version: planned.version, callId: planned.callId, reason: null, order: 0 });
+  if (sv?.status === 'RECORDED') {
+    const plm = sv.source === 'PLM';
+    drafts.push({ at: sv.createdAt, kind: plm ? 'PLM_PUBLISHED' : 'SOFTWARE_RECORDED', by: sv.recordedBy, version, callId: sv.callId, reason: plm ? (sv.dclPart ? partVersion(sv.dclPart) : null) : sv.source || null, order: 0 });
+  }
+  drafts.push(...callDrafts(s, vehicleModelId, names));
+  for (const x of [w, sv]) for (const m of x?.moduleLog ?? []) drafts.push({ at: m.exportedAt, kind: 'MODULE_EXPORTED', by: m.exportedBy, version: x!.version, releaseId: m.releaseId, order: 0 });
+  const part = sv?.dclPart?.deliveredAt ? sv.dclPart : w?.dclPart;
+  if (part?.deliveredAt) drafts.push({ at: part.deliveredAt, kind: 'PART_DELIVERED', by: part.deliveredBy, version: w?.version ?? version, reason: partVersion(part), order: 0 });
+  if (w) drafts.push({ at: sv!.createdAt, kind: 'LINKED', version, reason: w.version, order: 0 });
+  if (sv?.linkedTo) {
+    const linked = s.softwareVersions[softwareKey(vehicleModelId, sv.linkedTo)];
+    if (linked) drafts.push({ at: linked.createdAt, kind: 'LINKED', version: sv.linkedTo, reason: version, order: 0 });
+  }
   const releases = releasesOf(s, vehicleModelId);
   for (const r of releases) {
-    if (r.vehicleIntegrationVersions.includes(version)) drafts.push({ at: r.publishedAt, kind: 'PUBLISHED', by: r.publishedBy, releaseId: r.id, version, reason: r.notes || null, order: r.sequence });
+    for (const n of names) {
+      if (r.vehicleIntegrationVersions.includes(n)) drafts.push({ at: r.publishedAt, kind: 'PUBLISHED', by: r.publishedBy, releaseId: r.id, version: n, reason: r.notes || null, order: r.sequence });
+    }
   }
   drafts.push(...checkDrafts(s, (c) => c.vehicleModelId === vehicleModelId && c.version === version));
   for (const a of s.applicability) {
@@ -225,7 +249,8 @@ export function versionHistory(s: State, vehicleModelId: string, version: string
   const sequence = (id: string) => s.releases[id]?.sequence ?? -1;
   let current: string | null = null;
   return finish(drafts).map((e) => {
-    if (e.releaseId && (e.kind === 'PUBLISHED' || e.kind === 'APPLICABILITY_ADDED')) applies.set(e.releaseId, true);
+    // A set published for the working name applies to the PLM version from the link on.
+    if (e.releaseId && ((e.kind === 'PUBLISHED' && e.version === version) || e.kind === 'APPLICABILITY_ADDED')) applies.set(e.releaseId, true);
     if (e.releaseId && e.kind === 'APPLICABILITY_WITHDRAWN') applies.set(e.releaseId, false);
     const next = [...applies].filter(([, on]) => on).map(([id]) => id).sort((a, b) => sequence(b) - sequence(a))[0] ?? null;
     const changed = next !== current;

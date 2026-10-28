@@ -1,6 +1,7 @@
 // Client reports (DCL Client 实际状态上报): what each vehicle says it actually runs. The platform
-// checks the device and keeps the latest snapshot plus a history. A report is diagnostic only:
-// it never completes an OTA, never changes ownership and never sets the recorded software version.
+// checks the device and keeps the latest snapshot plus a history. A report never completes an OTA
+// and never changes ownership; the software it runs, and the factory configuration that came with
+// that software, are the vehicle's own facts (`noteReportedSoftware`).
 
 import { authorize } from '../domain/authz.ts';
 import { contentDigest, isNewer, mockVerify, payloadIssue } from '../domain/client-report.ts';
@@ -121,7 +122,7 @@ export function acceptClientReport(ctx: Ctx, signed: SignedReport): 'ACCEPTED' |
     // The newest signed report is what the vehicle actually runs: a software change is noted. The
     // vehicle is on and connected, so the cloud pushes what was dispatched to it, and a vehicle
     // waiting to follow its group gets the group's publication if it fits.
-    noteReportedSoftware(ctx, p.resourceId, p.vehicleIntegrationVersion);
+    noteReportedSoftware(ctx, p.resourceId, p.vehicleIntegrationVersion, p.configuration?.digest ?? null);
     pushPending(ctx, p.resourceId);
     followGroup(ctx, p.resourceId);
   }

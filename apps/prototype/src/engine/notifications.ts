@@ -20,11 +20,12 @@ import { isConfirmed, isMergeWorkspace, verifiedSources } from './integration.ts
 import { borrowedBy, lentBy, loansToAgree, loansToApprove, managedLoans } from './loans.ts';
 import { orphanedOrgObjects } from './org.ts';
 import { otaRollouts } from './ota.ts';
-import { setInEffect } from './release.ts';
+import { workingNameState } from './plm-sync.ts';
 import { deploymentNumber, planNumber } from './labels.ts';
 import { referenceRequestsFor } from './references.ts';
 import { assessSoftwareChange, softwareChangesFor, unrecordedReports } from './software-change.ts';
-import type { State } from './types.ts';
+import { partVersion } from './types.ts';
+import type { SoftwareVersion, State } from './types.ts';
 import { deploymentsOf, testRequestsOf } from './validation.ts';
 
 export type NotificationKind =
@@ -49,7 +50,8 @@ export type NotificationKind =
   | 'EMERGENCY_STOP'
   | 'ROLLOUT_PAUSED'
   | 'PRODUCTION_BLOCKED'
-  | 'MODULE_OUTDATED'
+  | 'DCL_PART_TO_DELIVER'
+  | 'PLM_PART_UNKNOWN'
   | 'UNRECORDED_SOFTWARE'
   | 'GROUP_MISMATCH'
   | 'SOFTWARE_UPDATE'
@@ -93,6 +95,11 @@ export const READ_LIMIT = 1000;
 export const ANSWER_DAYS = 14;
 
 /** The account's current notifications in a workspace: warnings first, then newest first. */
+/** PLM versions whose DCL part carries a configuration no policy set of the model has. */
+function unknownParts(s: State, vehicleModelId: string): SoftwareVersion[] {
+  return Object.values(s.softwareVersions).filter((v) => v.vehicleModelId === vehicleModelId && v.status === 'RECORDED' && v.dclPart && !v.dclModule);
+}
+
 export function notificationsFor(s: State, actor: Actor, workspaceId: string): Notification[] {
   const ws = s.workspaces[workspaceId];
   const roles = workspaceAccess(s, actor).find((a) => a.workspaceId === workspaceId)?.roles ?? [];
@@ -237,6 +244,15 @@ export function notificationsFor(s: State, actor: Actor, workspaceId: string): N
     for (const x of emergencyStopsOf(s, ws.vehicleModelId).filter((x) => x.requestedBy === actor.username && x.status !== 'REQUESTED' && fresh(x.decidedAt))) {
       add('DCL_ENGINEER', 'EMERGENCY_STOP', [x.id, x.status], { severity: 'INFO', subject: x.policyId, detail: x.status, link: 'release', at: x.decidedAt });
     }
+    // A released call's configuration waits for DCL to merge it into the DCL software and deliver it to PLM.
+    for (const v of Object.values(s.softwareVersions).filter((x) => workingNameState(x) === 'TO_DELIVER' && x.callId && s.integrationCalls[x.callId]?.workspaceId === workspaceId)) {
+      add('DCL_ENGINEER', 'DCL_PART_TO_DELIVER', [v.version, v.dclModule!.releaseId], { severity: 'WARNING', subject: `${v.vehicleModelId} ${v.version}`, detail: s.releases[v.dclModule!.releaseId]?.dclVersion ?? null, link: 'release/applicability', at: v.dclModule!.exportedAt });
+    }
+    if (ws.scopes.includes('Vehicle')) {
+      for (const v of unknownParts(s, ws.vehicleModelId)) {
+        add('DCL_ENGINEER', 'PLM_PART_UNKNOWN', [v.version, v.dclPart!.digest], { severity: 'WARNING', subject: `${v.vehicleModelId} ${v.version}`, detail: partVersion(v.dclPart!), link: 'release/applicability', at: v.createdAt });
+      }
+    }
   }
   // Resource protection: captures a vehicle of the workspace dropped or suppressed this hour.
   if (has('DCL_ENGINEER')) {
@@ -331,28 +347,18 @@ export function notificationsFor(s: State, actor: Actor, workspaceId: string): N
       for (const r of blockedProductionVehicles(s, ws.vehicleModelId)) {
         add('CONFIG_RELEASE', 'PRODUCTION_BLOCKED', [r.id, r.integrationVersion], { severity: 'WARNING', subject: r.id, detail: r.integrationVersion, link: 'release/applicability', at: r.updatedAt });
       }
-      // A module the OTA package still carries after another set took its version over: vehicles
-      // flashed with it run the old set until a configuration OTA reaches them.
-      for (const v of Object.values(s.softwareVersions).filter((x) => x.vehicleModelId === ws.vehicleModelId && x.dclModule)) {
-        const current = setInEffect(s, v.vehicleModelId, v.version);
-        if (current?.id === v.dclModule!.releaseId) continue;
-        const carried = s.releases[v.dclModule!.releaseId]?.dclVersion ?? '';
-        add('CONFIG_RELEASE', 'MODULE_OUTDATED', [v.version, v.dclModule!.releaseId, current?.id ?? null], {
-          severity: 'WARNING',
-          subject: `${v.vehicleModelId} ${v.version}`,
-          detail: `${carried} · ${current?.dclVersion ?? ''}`,
-          link: 'release/applicability',
-          at: v.dclModule!.exportedAt,
-        });
+      for (const v of unknownParts(s, ws.vehicleModelId)) {
+        add('CONFIG_RELEASE', 'PLM_PART_UNKNOWN', [v.version, v.dclPart!.digest], { severity: 'WARNING', subject: `${v.vehicleModelId} ${v.version}`, detail: partVersion(v.dclPart!), link: 'release/applicability', at: v.createdAt });
       }
     }
   }
   if (has('VEHICLE_RESOURCE')) {
     for (const c of unrecordedReports(s, actor)) {
-      // A production vehicle reporting a planned version is confirmed once the version is released.
-      const planned = s.softwareVersions[softwareKey(s.resources[c.resourceId]!.vehicleModelId, c.toVersion)]?.status === 'PLANNED';
-      if (planned && s.resources[c.resourceId]!.env === 'production') continue;
-      add('VEHICLE_RESOURCE', 'UNRECORDED_SOFTWARE', [c.id, c.status], { severity: 'WARNING', subject: c.resourceId, detail: c.toVersion, link: 'fleet/registry', at: c.at });
+      // A production vehicle reporting a working name waits for PLM; once PLM published it, the
+      // vehicle runs a pre-release build of what is now another number.
+      const planned = s.softwareVersions[softwareKey(s.resources[c.resourceId]!.vehicleModelId, c.toVersion)];
+      if (planned?.status === 'PLANNED' && !planned.linkedTo && s.resources[c.resourceId]!.env === 'production') continue;
+      add('VEHICLE_RESOURCE', 'UNRECORDED_SOFTWARE', [c.id, c.status], { severity: 'WARNING', subject: c.resourceId, detail: planned?.linkedTo ? `${c.toVersion} → ${planned.linkedTo}` : c.toVersion, link: 'fleet/registry', at: c.at });
     }
   }
   if (has('PLATFORM_OPS') && authorize(actor.grants, 'account.manage', {}).ok) {

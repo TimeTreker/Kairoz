@@ -16,7 +16,7 @@ import { cleanState } from '../src/engine/seed.ts';
 import { sendReceipt } from '../src/engine/simulator.ts';
 import type { State } from '../src/engine/types.ts';
 import * as v from '../src/engine/validation.ts';
-import { answerAll, CONTROLS, recordPasses, verifyFeatureOn } from './helpers.ts';
+import { answerAll, CONTROLS, recordPasses, verifyFeatureOn, plmPublish } from './helpers.ts';
 import { World } from './world.ts';
 import type { SceneSpec } from './world.ts';
 
@@ -72,7 +72,8 @@ export const scenes: Record<string, SceneSpec> = {
         w.as('admin', (c) => createAccount(c, { username, displayName, grants: grants.map((x) => ({ ...x, envs: [...x.envs] })) }));
       }
       w.check(Object.keys(w.s.accounts).length === 9, 'every duty has a person');
-      w.denied('business', (c) => fleet.recordSoftwareVersion(c, { vehicleModelId: 'X89', version: '9.9', source: 'x' }));
+      // Versions come from PLM; only vehicle resources add their manifest.
+      w.denied('business', (c) => fleet.setSoftwareManifest(c, { vehicleModelId: 'X89', version: '9.9', manifest: { signals: [], sources: [] } }));
     },
   },
   E04: {
@@ -184,7 +185,7 @@ export const scenes: Record<string, SceneSpec> = {
     needs: ['E11'],
     run: (w) => {
       w.fails('UNKNOWN_SOFTWARE_VERSION', () => w.as('release', (c) => rel.promoteCandidate(c, w.ref.candidate!, { dclVersion: '1.0.0', vehicleIntegrationVersions: ['1.0'] })));
-      w.as('resource', (c) => fleet.recordSoftwareVersion(c, { vehicleModelId: 'X89', version: '1.0', source: 'MOCK 外部软件发布记录' }));
+      plmPublish(w.engine, 'X89', '1.0');
       w.ref.release = w.as('release', (c) => rel.promoteCandidate(c, w.ref.candidate!, { dclVersion: '1.0.0', vehicleIntegrationVersions: ['1.0'] }));
       w.eq(w.s.features[w.ref.feature!]!.stage, 'ARCHIVED', 'participating Features are closed as Archived');
       w.eq(w.s.resources['VEH-902']!.integrationVersion, null, 'actual software is not rewritten');

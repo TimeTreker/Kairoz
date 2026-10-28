@@ -69,7 +69,7 @@ function allowCheck(ctx: Ctx, action: 'applicability.dispatch' | 'applicability.
 }
 
 /** Creates the check; the caller has authorized. */
-function createCheck(ctx: Ctx, release: Release, version: string, testWorkspaceId: string, auto: boolean, openedBy: string): string {
+function createCheck(ctx: Ctx, release: Release, version: string, testWorkspaceId: string, auto: boolean, openedBy: string | null): string {
   const id = newId('ac');
   ctx.s.applicabilityChecks[id] = {
     id,
@@ -92,14 +92,15 @@ function createCheck(ctx: Ctx, release: Release, version: string, testWorkspaceI
 
 /**
  * A software version no set applies to: if the model has sets, a check for the mainline head is opened
- * as a to-do for configuration release. Part of recording the version; nothing else changes.
+ * as a to-do for configuration release. Part of recording the version (PLM sync, system context);
+ * nothing else changes.
  */
 export function openCheckForNewSoftware(ctx: Ctx, vehicleModelId: string, version: string): string | null {
   if (setInEffect(ctx.s, vehicleModelId, version)) return null;
   const latest = mainlineRelease(ctx.s, vehicleModelId);
   const testWs = latest ? testWorkspaceFor(ctx.s, latest) : null;
   if (!latest || !testWs) return null;
-  return createCheck(ctx, latest, version, testWs, true, ctx.user().username);
+  return createCheck(ctx, latest, version, testWs, true, ctx.actor?.username ?? null);
 }
 
 /** Configuration release asks whether a set may serve another software version. */

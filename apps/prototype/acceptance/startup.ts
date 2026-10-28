@@ -19,7 +19,7 @@ import { commitSnapshot } from '../src/engine/snapshots.ts';
 import { sendReceipt, tick } from '../src/engine/simulator.ts';
 import type { State } from '../src/engine/types.ts';
 import * as v from '../src/engine/validation.ts';
-import { answerAll, CONTROLS, dispatchApplied, recordPasses, simpleFeature, verifyFeatureOn } from './helpers.ts';
+import { answerAll, CONTROLS, dispatchApplied, recordPasses, simpleFeature, verifyFeatureOn, plmPublish } from './helpers.ts';
 import { sha, World } from './world.ts';
 import type { SceneSpec } from './world.ts';
 
@@ -472,7 +472,7 @@ export const scenes: Record<string, SceneSpec> = {
   },
   E01: {
     run: (w) => {
-      w.as('resource', (c) => fleet.recordSoftwareVersion(c, { vehicleModelId: 'X89', version: '1.0', source: '外部软件集成发布 X89-1.0（Mock 记录）' }));
+      plmPublish(w.engine, 'X89', '1.0');
       w.as('resource', (c) => fleet.registerImage(c, { id: 'x89-1.0', vehicleModelId: 'X89', integrationVersion: '1.0', build: 'x89-1.0.0', digest: sha('x89-1.0'), simulator: 'SimOne 3' }));
       for (const [id, vin] of [
         ['VEH-951', 'LSDEMX89000000951'],
