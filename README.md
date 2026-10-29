@@ -67,6 +67,7 @@ npm run preview -w @kairoz/prototype
 | 多车型独立发布：X90 有自己的工作区、软件版本、初始配置、策略集与配置 OTA，不改变 X89 | ✅ |
 | 集成征集：为目标版本（自己起的工作名）征集各模块（业务组、域集成）的策略版本，收齐送测、逐轮退回，发布策略集并记录与工作名的对应关系；发布记录按版本和策略集回看 | ✅ |
 | 外部系统（模拟）：PLM 发布整车版本，DCL 导出 DCL 件交给 PLM，平台按配置摘要把工作名关联到 PLM 版本、认出出厂配置；实车从 TSP 登记，TSP 给应为版本，车端签名上报给实为版本 | ✅ |
+| 整车测试版本：PLM 每轮出号、通过的一轮同号发布；集成管理员关联到征集，策略集 ↔ 测试版本的引用（DCL 没变时直接确认）；测试组没有测试时按映射取策略集 | ✅ |
 
 ## 测试
 
@@ -86,7 +87,7 @@ npm run typecheck
 npm run acceptance
 ```
 
-在引擎层逐幕重放 22 份剧本（设计文档的三份，加按后续设计补写的 19 份）与 24 个反向用例，每次重新执行（最近一次：231 幕通过、0 失败、3 幕不适用于浏览器原型），结果写入 [docs/acceptance/RESULTS.md](docs/acceptance/RESULTS.md)。浏览器中逐幕操作的记录见 [docs/acceptance/BROWSER-RUN.md](docs/acceptance/BROWSER-RUN.md)。
+在引擎层逐幕重放 22 份剧本（设计文档的三份，加按后续设计补写的 19 份）与 24 个反向用例，每次重新执行（最近一次：233 幕通过、0 失败、3 幕不适用于浏览器原型），结果写入 [docs/acceptance/RESULTS.md](docs/acceptance/RESULTS.md)。浏览器中逐幕操作的记录见 [docs/acceptance/BROWSER-RUN.md](docs/acceptance/BROWSER-RUN.md)。
 
 ## 目录
 
