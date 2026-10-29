@@ -327,14 +327,18 @@ export function notificationsFor(s: State, actor: Actor, workspaceId: string): N
       }
     }
   }
-  // PLM issued test versions no call has linked yet: the call's admin says which round they are.
-  for (const call of callsFor(s, workspaceId).filter((c) => c.workspaceId === workspaceId && takesTestVersions(s, c))) {
-    const manager = (['WORKSPACE_ADMIN', 'CONFIG_INTEGRATOR'] as const).find((r) => has(r) && authorize(actor.grants, 'call.manage', { workspaceId, scope: call.scope }).ok);
-    const unlinked = unlinkedTestVersions(s, call.vehicleModelId);
-    if (manager && unlinked.length) {
-      const versions = unlinked.map((v) => v.version);
-      add(manager, 'TEST_VERSION_UNLINKED', [call.id, versions.join(',')], { severity: 'INFO', subject: call.title, detail: versions.join(', '), link: `versions/calls/${call.id}`, at: unlinked[0]!.createdAt });
-    }
+  // PLM issued test versions no call has linked yet: the calls' admin says which round they are. One
+  // notice per model, for builds issued since the earliest call that still takes them (older ones
+  // belong to calls long gone), pointing at the newest such call.
+  const manager = (['WORKSPACE_ADMIN', 'CONFIG_INTEGRATOR'] as const).find((r) => has(r) && authorize(actor.grants, 'call.manage', { workspaceId, scope: 'Vehicle' }).ok);
+  const taking = manager ? callsFor(s, workspaceId).filter((c) => c.workspaceId === workspaceId && takesTestVersions(s, c)) : [];
+  for (const model of new Set(taking.map((c) => c.vehicleModelId))) {
+    const calls = taking.filter((c) => c.vehicleModelId === model).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+    const unlinked = unlinkedTestVersions(s, model).filter((v) => v.createdAt >= calls[0]!.createdAt);
+    if (!unlinked.length) continue;
+    const newest = calls.at(-1)!;
+    const versions = unlinked.map((v) => v.version);
+    add(manager!, 'TEST_VERSION_UNLINKED', [model, versions.join(',')], { severity: 'INFO', subject: newest.title, detail: versions.join(', '), link: `versions/calls/${newest.id}`, at: unlinked[0]!.createdAt });
   }
   if (has('CONFIG_INTEGRATOR') && isMergeWorkspace(s, workspaceId)) {
     for (const f of verifiedSources(s, workspaceId)) {

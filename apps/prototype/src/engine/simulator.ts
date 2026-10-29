@@ -14,7 +14,7 @@ import { answerCaptureRequest } from './aftersales.ts';
 import { releaseHeld } from './budget.ts';
 import { confirmHold, isCollectionPaused } from './collection-hold.ts';
 import { syncIfChanged } from './company-directory.ts';
-import { pushPending } from './delivery.ts';
+import { pushPending, settleBaselines } from './delivery.ts';
 import { syncPlmIfChanged } from './plm.ts';
 import { syncTspIfChanged, tspVehicle } from './tsp.ts';
 import { advanceEvent } from './events.ts';
@@ -45,6 +45,7 @@ export function sendReceipt(ctx: Ctx, deploymentId: string, resourceId: string, 
   const d = ctx.s.deployments[deploymentId];
   const t = d?.targets.find((x) => x.resourceId === resourceId);
   if (!d || !t) throw notFound('deployment target', `${deploymentId}/${resourceId}`);
+  if (d.kind === 'BASELINE') settleBaselines(ctx);
   const answer = acceptReceipt(ctx, { deploymentId, resourceId, attempt: t.attempt, result, ...(error ? { error } : {}) });
   const device = ctx.s.devices[resourceId];
   // The platform now records what the vehicle runs; a receipt it held for this target is delivered.
@@ -151,6 +152,8 @@ export function resendReceipts(ctx: Ctx, resourceId: string): { sent: number; wa
  * (not those of a paused rollout), and in-flight collection events move one processing step. */
 export function tick(ctx: Ctx): number {
   let answered = 0;
+  // The cloud takes back pushes of a mapped set the vehicle's software no longer maps to.
+  settleBaselines(ctx);
   // Vehicles that are on and connected receive what was dispatched to them (推送).
   for (const r of Object.values(ctx.s.resources)) if (r.agent.online && clientRunning(r)) pushPending(ctx, r.id);
   // Receipts a vehicle could not deliver go out once it is connected and no longer loses them.

@@ -245,7 +245,7 @@ function OpenCallModal({ onClose, parentCallId }: { onClose: () => void; parentC
               name="targetVersion"
               label={L('目标版本（工作名）', 'Target version (working name)')}
               rules={[{ required: true }]}
-              extra={L('PLM 要到集成开始后才有版本号，这里用自己起的工作名，平台建一个规划版本；第一轮送测前可以改名，送测后固定。PLM 发布后按 DCL 件的配置摘要自动关联。', 'PLM numbers a version only once integration starts, so this is a working name of your own, planned by the platform; it can change until the first round is sent to testing. It is linked to the PLM version by the DCL part’s digest once PLM publishes.')}
+              extra={L('PLM 要到集成测试开始后才出版本号（每轮一个测试版本），这里用自己起的工作名，平台建一个规划版本；第一轮送测前可以改名，送测后固定。PLM 的测试版本由集成管理员关联到征集，通过的那一轮同号发布后自动关联。', 'PLM numbers versions only once integration testing starts (one test version per round), so this is a working name of your own, planned by the platform; it can change until the first round is sent to testing. The integration admin links PLM’s test versions to the call, and the working name is linked once PLM releases the passing round under its number.')}
             >
               <Input placeholder={L('例如 1.2', 'e.g. 1.2')} />
             </Form.Item>
@@ -397,7 +397,7 @@ function CallDetail({ callId }: { callId: string }) {
                 <Typography.Text type="secondary">
                   {sv.linkedTo
                     ? L(`PLM 已发布为 ${call.vehicleModelId} ${sv.linkedTo}：刷这个版本的车随软件运行出厂配置 ${state.releases[sv.dclModule.releaseId]!.dclVersion}，不依赖网络。`, `PLM published it as ${call.vehicleModelId} ${sv.linkedTo}: vehicles flashed with it run the factory configuration ${state.releases[sv.dclModule.releaseId]!.dclVersion} with the software, no network needed.`)
-                    : L('DCL 导出 DCL 件交给 PLM；PLM 发布带这个件的整车版本后，平台按配置摘要自动关联工作名。', 'DCL exports the DCL part for PLM; once PLM publishes a version carrying it, the platform links the working name by the configuration digest.')}
+                    : L('DCL 导出 DCL 件交给 PLM，要赶在最后一轮出包前；PLM 以同号发布通过的整车测试版本（或发布带这个件的版本）后，平台自动关联工作名。', 'DCL exports the DCL part for PLM, in time for the last round’s package; once PLM releases the passing test version under its number (or publishes a version carrying the part), the platform links the working name.')}
                 </Typography.Text>
               </Space>
             </Descriptions.Item>
@@ -655,7 +655,9 @@ function TestVersionsCard({ call }: { call: IntegrationCall }) {
             title: L('引用的策略集', 'References'),
             render: (_, v) => {
               const set = setInEffect(state, v.vehicleModelId, v.version);
-              return set ? <Tag color="green">{B(setName(set.dclVersion))}</Tag> : <Typography.Text type="secondary">{call.status === 'RELEASED' ? '—' : L('征集发布时引用', 'referenced on release')}</Typography.Text>;
+              if (set) return <Tag color="green">{B(setName(set.dclVersion))}</Tag>;
+              const text = call.status === 'OPEN' ? L('征集发布时引用', 'referenced on release') : call.status === 'RELEASED' ? '—' : L('征集已结束，不引用', 'call ended: no reference');
+              return <Typography.Text type="secondary">{text}</Typography.Text>;
             },
           },
           { title: L('DCL 件', 'DCL part'), render: (_, v) => <DclPartCell v={v} /> },

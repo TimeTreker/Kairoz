@@ -19,14 +19,17 @@ const STATUS_COLORS: Record<string, string> = { PLANNED: 'gold', TO_DELIVER: 'or
 
 /** A version's status: a working name by where it stands, or published by PLM (with the working name it was linked from). */
 export function VersionStatusTag({ v }: { v: SoftwareVersion }) {
+  const state = useEngineState();
   const { L, B } = useI18n();
   const status = workingNameState(v) ?? (v.status === 'TESTING' ? 'TESTING' : 'RECORDED');
   const tips: Record<string, string> = {
     PLANNED: L('集成征集的工作名：PLM 还没有这个版本号；只有该征集的发布能列入它，量产车不能使用。', 'An integration call’s working name: PLM has no number for it yet; only that call’s release lists it, and production vehicles never run it.'),
     TO_DELIVER: L('征集已发布：DCL 导出 DCL 件，在平台外合入 DCL 软件并交给 PLM。', 'The call is released: DCL exports the DCL part, merges it into the DCL software and hands it to PLM outside the platform.'),
-    DELIVERED: L('DCL 件已导出交付；PLM 发布带这个件的整车版本后，平台按配置摘要自动关联。', 'The DCL part is exported for PLM; once PLM publishes a version carrying it, the platform links them by the configuration digest.'),
+    DELIVERED: L('DCL 件已导出交付，要赶在最后一轮出包前；PLM 以同号发布通过的整车测试版本（或发布带这个件的版本）后，平台自动关联。', 'The DCL part is exported for PLM, in time for the last round’s package; once PLM releases the passing test version under its number (or publishes a version carrying the part), the platform links them.'),
     LINKED: L('PLM 已发布这个软件；以后使用 PLM 版本号。', 'PLM published this software; use the PLM number from now on.'),
-    TESTING: v.testOf
+    TESTING: v.testOf && ['CANCELLED', 'NO_CHANGE'].includes(state.integrationCalls[v.testOf.callId]?.status ?? '')
+      ? L(`PLM 为整车集成测试出的测试版本，曾关联为工作名 ${v.testOf.workingName} 第 ${v.testOf.round} 轮；那次征集已结束，它不再引用策略集。量产车不能使用。`, `A test build PLM issued for whole-vehicle integration testing, once linked as round ${v.testOf.round} of working name ${v.testOf.workingName}; that call has ended, so it references no set. Production vehicles never run it.`)
+      : v.testOf
       ? L(`PLM 为整车集成测试出的测试版本，是工作名 ${v.testOf.workingName} 第 ${v.testOf.round} 轮的构建：研发车、测试车可以运行，按工作名引用策略集；量产车不能使用。通过后 PLM 以同号发布。`, `A test build PLM issued for whole-vehicle integration testing, round ${v.testOf.round} of working name ${v.testOf.workingName}: development and testing vehicles run it and it references the working name’s sets; production vehicles never run it. PLM releases it under the same number if it passes.`)
       : L('PLM 为整车集成测试出的测试版本，还没关联到集成征集：由集成管理员在征集里关联为整车的某一轮。量产车不能使用。', 'A test build PLM issued for whole-vehicle integration testing, not linked to a call yet: the integration admin links it as a round of the call. Production vehicles never run it.'),
     RECORDED: L('PLM 发布的整车集成版本。', 'A whole-vehicle integration version PLM published.'),

@@ -14,7 +14,7 @@ import { publishPlmVersion, releasePlmVersion, syncPlmIfChanged } from '../src/e
 import * as rel from '../src/engine/release.ts';
 import { demoState } from '../src/engine/seed.ts';
 import { noteReportedSoftware } from '../src/engine/software-change.ts';
-import { sendReceipt, simulateSoftwareOta, tick } from '../src/engine/simulator.ts';
+import { advanceClockHours, sendReceipt, setAgent, simulateSoftwareOta, tick } from '../src/engine/simulator.ts';
 import type { PlmVersion } from '../src/engine/types.ts';
 import * as v from '../src/engine/validation.ts';
 
@@ -238,3 +238,108 @@ describe('PLM test versions (整车测试版本)', () => {
     assert.equal(w.s, before);
   });
 });
+
+describe('PLM test versions: review fixes', () => {
+  const baselines = (w: World, car: string) => Object.values(w.s.deployments).filter((d) => d.kind === 'BASELINE' && d.targets.some((t) => t.resourceId === car));
+  const testCar = (w: World) => fleet.membersOf(w.s, testGroup(w).id).find((id) => w.s.resources[id]!.type === 'PHYSICAL')!;
+
+  test('a push that fails on a faulty vehicle is not pushed again every step', () => {
+    const { w, callId } = released();
+    const car = testCar(w);
+    issue(w, '1.2.0.2');
+    link(w, callId, '1.2.0.2');
+    carRuns(w.engine, car, '1.2.0.2');
+    w.sys((c) => setAgent(c, car, { fault: 'CHECKSUM', autoAck: true, online: true }));
+    for (let i = 0; i < 4; i++) w.sys((c) => tick(c));
+    assert.deepEqual(baselines(w, car).filter((d) => d.targets[0]!.status === 'FAILED').length, 1, 'one failed push, not one per step');
+    const before = w.s;
+    w.sys((c) => tick(c));
+    assert.equal(w.s, before, 'idle steps write nothing');
+  });
+
+  test('a push gives way when the vehicle leaves service or its software maps to no set', () => {
+    const { w, callId } = released();
+    const car = testCar(w);
+    issue(w, '1.2.0.2');
+    link(w, callId, '1.2.0.2');
+    carRuns(w.engine, car, '1.2.0.2');
+    const pending = () => baselines(w, car).filter((d) => d.status === 'PENDING');
+    assert.equal(pending().length, 1);
+    // An unlinked build maps to no set: the push for 1.2.0.2 is taken back, nothing replaces it.
+    issue(w, '1.2.0.3');
+    carRuns(w.engine, car, '1.2.0.3');
+    assert.equal(pending().length, 0);
+    carRuns(w.engine, car, '1.2.0.2');
+    assert.equal(pending().length, 1);
+    w.as('resource', (c) => fleet.setResourceStatus(c, car, { status: 'MAINTENANCE', reason: '检修' }));
+    assert.equal(pending().length, 0, 'out of service: no push');
+  });
+
+  test('a call renamed after a round was linked keeps its build', () => {
+    const w = new World(demoState());
+    const callId = w.as('integration_admin', (c) => calls.openCall(c, { workspaceId: 'x89-project', targetVersion: '1.2', dueDate: null }));
+    issue(w, '1.2.0.1');
+    link(w, callId, '1.2.0.1');
+    w.as('integration_admin', (c) => calls.retargetCall(c, callId, '1.3'));
+    assert.equal(sv(w, '1.2.0.1').testOf!.workingName, '1.3');
+  });
+
+  test('PLM releasing a cancelled call’s build leaves the working name to the call that owns it now', () => {
+    const w = new World(demoState());
+    const a = w.as('integration_admin', (c) => calls.openCall(c, { workspaceId: 'x89-project', targetVersion: '1.2', dueDate: null }));
+    issue(w, '1.2.0.1');
+    link(w, a, '1.2.0.1');
+    w.as('integration_admin', (c) => calls.cancelCall(c, a, '计划调整'));
+    const b = w.as('integration_admin', (c) => calls.openCall(c, { workspaceId: 'x89-project', targetVersion: '1.2', dueDate: null }));
+    w.sys((c) => releasePlmVersion(c, { vehicleModelId: 'X89', version: '1.2.0.1' }));
+    w.sys((c) => syncPlmIfChanged(c));
+    assert.equal(sv(w, '1.2').linkedTo, null);
+    issue(w, '1.2.0.2');
+    link(w, b, '1.2.0.2');
+  });
+
+  test('a released build carrying the delivered part links its working name even when no round was linked', () => {
+    const { w, set } = released();
+    const part = w.as('dcl', (c) => calls.deliverDclPart(c, { vehicleModelId: 'X89', version: '1.2', clientVersion: '2.3.0' }));
+    issue(w, '1.2.0.2', { clientVersion: part.clientVersion, setVersion: part.setVersion, digest: part.digest });
+    w.sys((c) => releasePlmVersion(c, { vehicleModelId: 'X89', version: '1.2.0.2' }));
+    w.sys((c) => syncPlmIfChanged(c));
+    assert.deepEqual([sv(w, '1.2').linkedTo, sv(w, '1.2.0.2').workingName, rel.setInEffect(w.s, 'X89', '1.2.0.2')?.id], ['1.2.0.2', '1.2', set]);
+    assert.ok(!Object.values(w.s.applicabilityChecks).some((c) => c.version === '1.2.0.2'));
+  });
+
+  test('a set withdrawn from a build stays withdrawn when PLM releases it', () => {
+    const { w, set } = released();
+    const stop = w.as('dcl', (c) => em.requestEmergencyStop(c, { releaseId: set, policyId: 'chassis.steering.return_rate', reason: '回正率误报' }));
+    const set111 = w.as('release', (c) => em.decideEmergencyStop(c, stop, { decision: 'APPROVED', note: '同意' }))!;
+    w.as('release', (c) => ap.withdrawApplicability(c, { releaseId: set111, version: '1.2.0.1', reason: '第 1 轮保持 1.1.0' }));
+    w.sys((c) => releasePlmVersion(c, { vehicleModelId: 'X89', version: '1.2.0.1' }));
+    w.sys((c) => syncPlmIfChanged(c));
+    assert.equal(rel.setInEffect(w.s, 'X89', '1.2.0.1')?.id, set);
+  });
+
+  test('the change since the previous round is noted on the set in effect only', () => {
+    const { w, callId, set } = released();
+    const stop = w.as('dcl', (c) => em.requestEmergencyStop(c, { releaseId: set, policyId: 'chassis.steering.return_rate', reason: '回正率误报' }));
+    const set111 = w.as('release', (c) => em.decideEmergencyStop(c, stop, { decision: 'APPROVED', note: '同意' }))!;
+    w.as('release', (c) => ap.withdrawApplicability(c, { releaseId: set111, version: '1.2.0.1', reason: '第 1 轮保持 1.1.0' }));
+    issue(w, '1.2.0.2');
+    link(w, callId, '1.2.0.2');
+    const reasons = Object.fromEntries(w.s.applicability.filter((a) => a.version === '1.2.0.2').map((a) => [w.s.releases[a.releaseId]!.dclVersion, a.reason]));
+    assert.deepEqual(reasons, { '1.1.0': 'reference 1.2', '1.1.1': 'reference 1.2 changed 1.1.0 1.1.1' });
+  });
+
+  test('one notice per model, for builds issued since the earliest call that takes them', () => {
+    const w = new World(demoState());
+    issue(w, '1.1.0.9');
+    w.sys((c) => advanceClockHours(c, 1));
+    w.as('integration_admin', (c) => calls.openCall(c, { workspaceId: 'x89-project', targetVersion: '1.2', dueDate: null }));
+    w.as('integration_admin', (c) => calls.openCall(c, { workspaceId: 'x89-project', targetVersion: '1.3', dueDate: null }));
+    assert.ok(!kinds(w, 'integration_admin', 'x89-project').includes('TEST_VERSION_UNLINKED'), 'a build from before the calls is not theirs');
+    w.sys((c) => advanceClockHours(c, 1));
+    issue(w, '1.3.0.1');
+    const notices = w.engine.read('integration_admin', (s, a) => notificationsFor(s, a, 'x89-project')).filter((n) => n.kind === 'TEST_VERSION_UNLINKED');
+    assert.deepEqual(notices.map((n) => [n.subject, n.detail]), [['X89 1.3', '1.3.0.1']]);
+  });
+});
+

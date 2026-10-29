@@ -42,10 +42,12 @@ function partFor(s: State, part: NonNullable<PlmVersion['dclPart']>): DclPart {
   return { ...part, deliveredBy: delivered?.deliveredBy ?? null, deliveredAt: delivered?.deliveredAt ?? null };
 }
 /** The sets that apply to a working name, applied to the software that stands for it (a PLM version, a test version). */
-export function inheritSets(ctx: Ctx, vehicleModelId: string, from: string, to: string, reason: string, by: string | null): number {
+export function inheritSets(ctx: Ctx, vehicleModelId: string, from: string, to: string, reason: string | ((r: Release) => string), by: string | null): number {
   let added = 0;
-  for (const r of [...releasesOf(ctx.s, vehicleModelId)].reverse().filter((x) => appliesTo(ctx.s, x, from) && !appliesTo(ctx.s, x, to))) {
-    ctx.s.applicability.push({ id: newId('ap'), seq: ctx.seq(), releaseId: r.id, vehicleModelId, version: to, action: 'ADD', checkId: null, reason, by, at: ctx.now });
+  // A set someone withdrew from the target stays withdrawn.
+  const withdrawn = (r: Release) => ctx.s.applicability.some((a) => a.releaseId === r.id && a.version === to && a.action === 'WITHDRAW');
+  for (const r of [...releasesOf(ctx.s, vehicleModelId)].reverse().filter((x) => appliesTo(ctx.s, x, from) && !appliesTo(ctx.s, x, to) && !withdrawn(x))) {
+    ctx.s.applicability.push({ id: newId('ap'), seq: ctx.seq(), releaseId: r.id, vehicleModelId, version: to, action: 'ADD', checkId: null, reason: typeof reason === 'string' ? reason : reason(r), by, at: ctx.now });
     added += 1;
   }
   return added;
@@ -134,9 +136,14 @@ export function syncPlm(ctx: Ctx, snapshot: PlmCatalog): number {
       existing.releasedAt = ctx.now;
       existing.dclModule = module;
       existing.dclPart = part;
+      // The working name it was linked to as a round, while that call still stands for it; else the one
+      // its DCL part was delivered for (nobody linked the round).
       const link = existing.testOf;
-      const w = link ? ctx.s.softwareVersions[softwareKey(v.vehicleModelId, link.workingName)] : undefined;
-      if (link && w && w.status === 'PLANNED' && !w.linkedTo) {
+      const linkCall = link ? ctx.s.integrationCalls[link.callId] : undefined;
+      const named = link && (linkCall?.status === 'OPEN' || linkCall?.status === 'RELEASED') ? ctx.s.softwareVersions[softwareKey(v.vehicleModelId, link.workingName)] : undefined;
+      const byRound = named && named.status === 'PLANNED' && !named.linkedTo && named.callId === link!.callId ? named : null;
+      const w = byRound ?? (release ? unlinkedWorkingName(ctx.s, release, v.dclPart!.digest) : null);
+      if (w) {
         w.linkedTo = v.version;
         existing.workingName = w.version;
         existing.callId = w.callId;

@@ -76,7 +76,8 @@ export const scenes: Record<string, SceneSpec> = {
   },
   EX05: {
     run: (w) => {
-      // PLM issues the test build of an integration test round; no call links it yet.
+      // The integration admin opens a call for working name 1.4; PLM issues round 1's test build once testing starts.
+      const callId = w.as('integration_admin', (c) => calls.openCall(c, { workspaceId: 'x89-project', targetVersion: '1.4', baseVersion: '1.2' }));
       w.sys((c) => publishPlmVersion(c, { vehicleModelId: 'X89', version: '1.4.0.1', dclPart: null, stage: 'TEST' }));
       w.sys((c) => syncPlmIfChanged(c));
       const t = () => w.s.softwareVersions['X89::1.4.0.1']!;
@@ -84,8 +85,6 @@ export const scenes: Record<string, SceneSpec> = {
       w.eq(Object.values(w.s.applicabilityChecks).filter((c) => c.version === '1.4.0.1').length, 0, 'no applicability check for a test build');
       w.fails('VERSION_IN_TEST', () => w.as('release', (c) => ap.openApplicabilityCheck(c, { releaseId: releasesOf(w.s, 'X89')[0]!.id, version: '1.4.0.1' })));
       w.fails('TEST_VERSION_FOR_PRODUCTION', () => w.sys((c) => simulateSoftwareOta(c, 'VEH-201', '1.4.0.1')));
-      // The integration admin opens the call for the working name and links the build as round 1.
-      const callId = w.as('integration_admin', (c) => calls.openCall(c, { workspaceId: 'x89-project', targetVersion: '1.4', baseVersion: '1.2' }));
       w.check(notes(w, 'integration_admin').some((n) => n.kind === 'TEST_VERSION_UNLINKED' && n.detail === '1.4.0.1'), 'the admin is told PLM issued a build no call has linked');
       w.as('integration_admin', (c) => calls.linkTestVersion(c, callId, '1.4.0.1'));
       w.check(!notes(w, 'integration_admin').some((n) => n.kind === 'TEST_VERSION_UNLINKED'), 'linked: nothing left to do');

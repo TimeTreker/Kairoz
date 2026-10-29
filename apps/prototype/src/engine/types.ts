@@ -728,7 +728,7 @@ export interface DeploymentTarget {
   pushedAt: string | null;
   /** Finished earlier attempts, kept as evidence. */
   history: TargetAttempt[];
-  /** OTA only: the vehicle's whole-vehicle software when the rollout was sent to it. */
+  /** OTA and BASELINE: the vehicle's whole-vehicle software when the configuration was sent to it. */
   software?: string | null;
 }
 

@@ -6,7 +6,8 @@ import { STATE_SCHEMA } from '../src/engine/types.ts';
 
 /**
  * A demo without the test groups' pushes of the set mapped to their software (schema 26): a save
- * from before schema 13 had no triggers, and its migration reads every dispatch as a person's.
+ * from before schema 13 had no triggers, and its migration reads every dispatch as a person's; one
+ * from before schema 21 kept no software on targets.
  */
 function withoutBaselines(demo: Record<string, any>): Record<string, any> {
   for (const [id, d] of Object.entries(demo.deployments) as [string, any][]) if (d.kind === 'BASELINE') delete demo.deployments[id];
@@ -200,7 +201,7 @@ describe('saved state migration', () => {
   });
 
   test('a schema 20 save gives each rollout the start and end its records show, and each vehicle its current software', () => {
-    const current = JSON.parse(JSON.stringify(demoState()));
+    const current = withoutBaselines(JSON.parse(JSON.stringify(demoState())));
     const migrated = migrate(schema20(current))!;
     assert.equal(migrated.schema, STATE_SCHEMA);
     const rollouts = Object.values(migrated.deployments).filter((d) => d.kind === 'OTA');

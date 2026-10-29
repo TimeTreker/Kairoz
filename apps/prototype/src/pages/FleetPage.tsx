@@ -14,7 +14,7 @@ import { GroupFitDrawer, SoftwareUpdateTag, UpdateSoftwareModal, useCanUpdateSof
 import { VersionStatusTag } from '../components/plm.tsx';
 import { HardwareTags } from '../components/tsp.tsx';
 import { tspMismatch } from '../engine/tsp-sync.ts';
-import { fitOf } from '../engine/delivery.ts';
+import { baselineFor, fitOf } from '../engine/delivery.ts';
 import { openChangeOf } from '../engine/software-change.ts';
 import { catalogImages } from '../engine/sim-software.ts';
 import { EnvTag, FeatureName, Hint, LabelTag, Mono, PageHeader, ShortId, configName, when } from '../components/common.tsx';
@@ -83,13 +83,23 @@ function BaselineDeliveryTag({ resourceId }: { resourceId: string }) {
     .filter((d) => d.kind === 'BASELINE' && d.status === 'PENDING')
     .flatMap((d) => d.targets)
     .find((x) => x.resourceId === resourceId && x.status === 'PENDING');
-  return t ? (
-    <Tooltip title={L('测试组没有进行中的测试：云端按车辆软件版本的映射推送这个策略集。', 'Nothing under test in the test group: the cloud pushes the set mapped to the vehicle’s software.')}>
-      <Tag color="processing">{L('按映射推送 · 等回执', 'pushed by mapping · awaiting receipt')}</Tag>
-    </Tooltip>
-  ) : (
-    <Tag color="gold">{L('连云后推送', 'pushed once connected')}</Tag>
-  );
+  if (t) {
+    return (
+      <Tooltip title={L('测试组没有进行中的测试：云端按车辆软件版本的映射推送这个策略集。', 'Nothing under test in the test group: the cloud pushes the set mapped to the vehicle’s software.')}>
+        <Tag color="processing">{L('按映射推送 · 等回执', 'pushed by mapping · awaiting receipt')}</Tag>
+      </Tooltip>
+    );
+  }
+  // Pushed on the vehicle's next report only when nothing else waits for it and the last push of this set did not fail on this software.
+  const pending = Object.values(state.deployments).some((d) => d.status === 'PENDING' && d.targets.some((x) => x.resourceId === resourceId && x.status === 'PENDING'));
+  const configId = baselineFor(state, resourceId);
+  const r = state.resources[resourceId];
+  const failed = Object.values(state.deployments)
+    .filter((d) => d.kind === 'BASELINE' && d.resolvedConfigId === configId)
+    .sort((a, b) => b.id.localeCompare(a.id))[0]
+    ?.targets.some((x) => x.resourceId === resourceId && x.status === 'FAILED' && x.software === r?.integrationVersion);
+  if (!configId || pending) return null;
+  return failed ? <Tag color="red">{L('按映射推送失败 · 换版本后再推送', 'mapped push failed · pushed again on new software')}</Tag> : <Tag color="gold">{L('连云后推送', 'pushed once connected')}</Tag>;
 }
 
 function VehicleTable({ vehicles, extra, workspaceId = '' }: { vehicles: Resource[]; extra?: (r: Resource) => React.ReactNode; workspaceId?: string }) {

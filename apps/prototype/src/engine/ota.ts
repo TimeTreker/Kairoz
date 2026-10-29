@@ -400,7 +400,7 @@ export function answerConfigRequest(s: State, resourceId: string): ConfigAnswer 
   // A Feature publication whose dispatches were all cancelled no longer stands; nor a test group's
   // test that ended (its candidate released or cancelled, its applicability check closed).
   const p = group?.publication?.kind === 'FEATURE' ? livePublication(s, group) : group && isTestRunning(s, group) ? group.publication : null;
-  if (group?.purpose === 'TEST' && !p) {
+  if (group?.purpose === 'TEST' && !p && r.env === 'testing') {
     // Nothing under test: the vehicle runs the set mapped to its software (默认基线).
     const resolved = releaseFor(s, r);
     if (resolved.release) return { configId: resolved.release.resolvedConfigId, reason: 'LATEST_RELEASE', detail: `policy set ${resolved.release.dclVersion}` };

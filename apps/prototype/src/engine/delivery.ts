@@ -136,6 +136,26 @@ export function followGroup(ctx: Ctx, resourceId: string): string | null {
 }
 
 /**
+ * The set a test-group vehicle with nothing under test should run (默认基线): the configuration of
+ * the set mapped to its software, when the cloud would push it on the vehicle's next report.
+ */
+export function baselineFor(s: State, resourceId: string): string | null {
+  const r = s.resources[resourceId];
+  const g = r && s.groupMembers[r.id] ? s.vehicleGroups[s.groupMembers[r.id]!] : undefined;
+  if (!r || !g || g.purpose !== 'TEST' || g.status !== 'ACTIVE' || closedGroup(s, g) || r.env !== 'testing') return null;
+  const answer = answerConfigRequest(s, r.id);
+  return answer.reason === 'LATEST_RELEASE' ? answer.configId : null;
+}
+
+/** Pushes of a mapped set that no longer fit (the mapping changed, a set was withdrawn) give way at once (system context). */
+export function settleBaselines(ctx: Ctx): void {
+  for (const d of Object.values(ctx.s.deployments)) {
+    if (d.kind !== 'BASELINE' || d.status !== 'PENDING') continue;
+    for (const t of d.targets) if (t.status === 'PENDING' && baselineFor(ctx.s, t.resourceId) !== d.resolvedConfigId) supersedeBaseline(ctx, t.resourceId, 'the vehicle’s software maps to another set now', baselineFor(ctx.s, t.resourceId));
+  }
+}
+
+/**
  * After an accepted report (system context): a vehicle of a test group with nothing under test runs
  * the set mapped to its software (默认基线, e.g. the set a PLM test version references). When it
  * runs anything else and nothing else is on its way to it, the cloud pushes that set now, credited
@@ -143,19 +163,23 @@ export function followGroup(ctx: Ctx, resourceId: string): string | null {
  */
 export function followBaseline(ctx: Ctx, resourceId: string): string | null {
   const r = ctx.s.resources[resourceId];
-  const g = r && ctx.s.groupMembers[r.id] ? ctx.s.vehicleGroups[ctx.s.groupMembers[r.id]!] : undefined;
-  if (!r || !g || g.purpose !== 'TEST' || g.status !== 'ACTIVE' || closedGroup(ctx.s, g) || r.env !== 'testing') return null;
-  const answer = answerConfigRequest(ctx.s, r.id);
-  if (answer.reason !== 'LATEST_RELEASE' || !answer.configId || answer.configId === r.appliedConfigId) return null;
-  const waiting = Object.values(ctx.s.deployments).filter((d) => d.status === 'PENDING' && d.targets.some((t) => t.resourceId === r.id && t.status === 'PENDING'));
+  if (!r) return null;
+  const configId = baselineFor(ctx.s, r.id);
+  // An earlier push for another set (or for none any more) gives way: the vehicle's software maps elsewhere now.
+  supersedeBaseline(ctx, r.id, 'the vehicle’s software maps to another set now', configId);
+  if (!configId || configId === r.appliedConfigId) return null;
   // Something else is on its way, or this very set already is.
-  if (waiting.some((d) => d.kind !== 'BASELINE' || d.resolvedConfigId === answer.configId)) return null;
-  // An earlier mapping's push the vehicle never confirmed: its software moved on since.
-  supersedeBaseline(ctx, r.id, 'the vehicle’s software maps to another set now');
-  const release = ctx.s.releases[ctx.s.resolvedConfigs[answer.configId]!.sourceId]!;
+  if (Object.values(ctx.s.deployments).some((d) => d.status === 'PENDING' && d.targets.some((t) => t.resourceId === r.id && t.status === 'PENDING'))) return null;
+  // A push of this set that failed on this software is not retried by itself (a device fault would
+  // fail it on every step); new software or another mapping tries again.
+  const last = Object.values(ctx.s.deployments).filter((d) => d.kind === 'BASELINE' && d.resolvedConfigId === configId && d.targets.some((t) => t.resourceId === r.id)).sort((a, b) => b.id.localeCompare(a.id))[0];
+  if (last?.targets.some((t) => t.resourceId === r.id && t.status === 'FAILED' && t.software === r.integrationVersion)) return null;
+  const g = ctx.s.vehicleGroups[ctx.s.groupMembers[r.id]!]!;
+  const release = ctx.s.releases[ctx.s.resolvedConfigs[configId]!.sourceId]!;
   const confirmed = ctx.s.applicability.filter((a) => a.releaseId === release.id && a.version === r.integrationVersion && a.action === 'ADD' && a.by).sort((a, b) => b.seq - a.seq)[0];
   const target = newTarget(ctx, r, g.id);
   target.pushedAt = ctx.now;
+  target.software = r.integrationVersion;
   const id = newId('dp');
   ctx.s.deployments[id] = {
     id,
@@ -164,7 +188,7 @@ export function followBaseline(ctx: Ctx, resourceId: string): string | null {
     groupId: null,
     subjectId: release.id,
     commitId: null,
-    resolvedConfigId: answer.configId,
+    resolvedConfigId: configId,
     env: g.env,
     status: 'PENDING',
     vehicleGroupIds: [g.id],

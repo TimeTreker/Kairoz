@@ -53,10 +53,13 @@ export function pendingDeploymentOf(s: State, resourceId: string): string | unde
   return Object.values(s.deployments).find((d) => d.kind !== 'BASELINE' && d.status !== 'CANCELLED' && d.targets.some((t) => t.resourceId === resourceId && t.status === 'PENDING'))?.id;
 }
 
-/** A vehicle no longer waits for the set mapped to its software: a dispatch replaced it, or it left its test group. */
-export function supersedeBaseline(ctx: Ctx, resourceId: string, reason: string): void {
+/**
+ * A vehicle no longer waits for the set mapped to its software: a dispatch replaced it, it left its
+ * test group or service, or its software maps to another set now (`keep`: the push that still fits).
+ */
+export function supersedeBaseline(ctx: Ctx, resourceId: string, reason: string, keep: string | null = null): void {
   for (const d of Object.values(ctx.s.deployments)) {
-    if (d.kind !== 'BASELINE' || d.status !== 'PENDING') continue;
+    if (d.kind !== 'BASELINE' || d.status !== 'PENDING' || (keep && d.resolvedConfigId === keep)) continue;
     const t = d.targets.find((x) => x.resourceId === resourceId && x.status === 'PENDING');
     if (!t) continue;
     t.status = 'CANCELLED';
@@ -459,6 +462,8 @@ export function setResourceStatus(ctx: Ctx, resourceId: string, input: { status:
     assertIdle(ctx.s, r.id);
   }
   r.status = input.status;
+  // Out of service, it takes no push of the set mapped to its software.
+  if (input.status !== 'AVAILABLE') supersedeBaseline(ctx, r.id, `the vehicle is ${input.status.toLowerCase()}`);
   // A retired simulation stops running, and no longer counts against any quota.
   if (input.status === 'RETIRED' && r.instance === 'RUNNING') r.instance = 'STOPPED';
   r.updatedAt = ctx.now;

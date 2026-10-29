@@ -450,6 +450,8 @@ export function retargetCall(ctx: Ctx, callId: string, version: string): void {
     || Object.values(ctx.s.vehicleSoftwareRequests).some((q) => q.toVersion === call.targetVersion && ctx.s.resources[q.resourceId]?.vehicleModelId === call.vehicleModelId);
   if (old && old.status === 'PLANNED' && old.callId === call.id && !used) delete ctx.s.softwareVersions[oldKey];
   for (const child of Object.values(ctx.s.integrationCalls)) if (child.parentCallId === call.id && child.status === 'OPEN') child.targetVersion = target;
+  // Test versions linked to the call are builds of its working name, whatever it is called now.
+  for (const v of Object.values(ctx.s.softwareVersions)) if (v.testOf?.callId === call.id) v.testOf.workingName = target;
   const draft = ctx.s.integrationCalls[call.id]!;
   if (draft.title === `${call.vehicleModelId} ${call.targetVersion}`) draft.title = `${call.vehicleModelId} ${target}`;
   draft.targetVersion = target;
@@ -775,8 +777,9 @@ export function linkTestVersion(ctx: Ctx, callId: string, version: string): void
   v.testOf = { workingName: call.targetVersion, callId: call.id, round: (ref.previousRound ?? 0) + 1, linkedBy: ctx.user().username, linkedAt: ctx.now };
   if (!v.manifest && w?.manifest) v.manifest = { signals: [...w.manifest.signals], sources: w.manifest.sources.map((x) => ({ ...x })) };
   if (ref.set) {
-    const reason = ref.changedFrom ? `reference ${call.targetVersion} changed ${ref.changedFrom.dclVersion} ${ref.set.dclVersion}` : `reference ${call.targetVersion}`;
-    inheritSets(ctx, call.vehicleModelId, call.targetVersion, v.version, reason, ctx.user().username);
+    // The change is noted on the set now in effect; the others it stands on are plain references.
+    const changed = ref.changedFrom ? `reference ${call.targetVersion} changed ${ref.changedFrom.dclVersion} ${ref.set.dclVersion}` : null;
+    inheritSets(ctx, call.vehicleModelId, call.targetVersion, v.version, (r) => (changed && r.id === ref.set!.id ? changed : `reference ${call.targetVersion}`), ctx.user().username);
   }
 }
 
