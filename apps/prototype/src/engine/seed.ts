@@ -522,6 +522,11 @@ export function demoState(): State {
     upgradeClient(c, 'SIM-021', '2.3.0');
     restartClient(c, 'SIM-021');
   });
+  // Test-group vehicles with nothing under test were pushed the set mapped to their software as they
+  // reported; they confirm it, so the demo starts settled.
+  for (const d of Object.values(engine.getState().deployments).filter((x) => x.kind === 'BASELINE' && x.status === 'PENDING')) {
+    for (const t of d.targets) engine.run(null, (c) => sendReceipt(c, d.id, t.resourceId, 'APPLIED'));
+  }
 
   return produce(engine.getState(), (s) => {
     s.installation = 'DEMO';

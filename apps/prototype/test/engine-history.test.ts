@@ -54,7 +54,8 @@ describe('release history', () => {
     assert.deepEqual(kinds(later), ['PLM_PUBLISHED']);
     assert.equal(later[0]!.inEffect, null);
     assert.deepEqual(h.softwareVersionsOf(s, 'X89').map((x) => x.version), ['1.1', '1.0']);
-    assert.deepEqual(h.vehiclesRunning(s, r100).map((x) => x.id).sort(), ['VEH-201', 'VEH-202']);
+    // The production cars by rollout; the test groups' vehicles by the set mapped to their software.
+    assert.deepEqual(h.vehiclesRunning(s, r100).map((x) => x.id).sort(), ['SIM-101', 'SIM-141', 'SIM-151', 'VEH-031', 'VEH-141', 'VEH-151', 'VEH-201', 'VEH-202']);
   });
 
   test('a rollout logs every step; a newer set supersedes the older one for the version; a rollback returns to it', () => {

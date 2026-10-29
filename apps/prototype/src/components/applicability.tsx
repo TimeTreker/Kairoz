@@ -22,6 +22,7 @@ import {
   verifyApplicability,
   withdrawApplicability,
 } from '../engine/applicability.ts';
+import { referenceReason } from '../engine/calls.ts';
 import { ungroupedVehicles, vehicleGroupsOf } from '../engine/fleet.ts';
 import { appliesTo, applicableVersions, compareVersions, releaseDiff, releasesOf, setInEffect, takeOverProblem } from '../engine/release.ts';
 import type { ApplicabilityCheck, ApplicabilityRecord, Release } from '../engine/types.ts';
@@ -39,7 +40,14 @@ export function SoftwareVersionsCard({ modelId }: { modelId: string }) {
   const state = useEngineState();
   const { L, B } = useI18n();
   // A PLM version takes over its working name's sets: the record says so in words.
-  const recordReason = (a: ApplicabilityRecord) => (a.checkId === null && a.reason.startsWith('working name ') ? L(`由工作名 ${a.reason.slice(13)} 关联`, `linked from working name ${a.reason.slice(13)}`) : a.reason);
+  const recordReason = (a: ApplicabilityRecord) => {
+    const ref = a.checkId === null ? referenceReason(a.reason) : null;
+    if (ref?.kind === 'LINKED') return L(`由工作名 ${ref.workingName} 关联`, `linked from working name ${ref.workingName}`);
+    if (ref?.kind === 'RELEASED') return L(`随工作名 ${ref.workingName} 的征集发布引用`, `referenced with working name ${ref.workingName}’s release`);
+    if (ref?.kind === 'CONFIRMED') return L(`确认引用（工作名 ${ref.workingName}，DCL 策略集未变）`, `reference confirmed (working name ${ref.workingName}, DCL set unchanged)`);
+    if (ref?.kind === 'CHANGED') return L(`确认引用（工作名 ${ref.workingName}，DCL 策略集自上一轮由 ${ref.from} 变为 ${ref.to}）`, `reference confirmed (working name ${ref.workingName}, DCL set changed from ${ref.from} to ${ref.to})`);
+    return a.reason;
+  };
   const can = useCan();
   const run = useRun();
   const [opening, setOpening] = useState<string | null>(null);
@@ -166,12 +174,14 @@ export function SoftwareVersionsCard({ modelId }: { modelId: string }) {
                       title={
                         v.status === 'PLANNED'
                           ? L('工作名的策略集来自它的集成征集，不做适用性确认；PLM 发布后在 PLM 版本上确认。', 'A working name’s set comes from its integration call; it takes no applicability check. Checks run on the PLM version once PLM publishes.')
+                          : v.status === 'TESTING'
+                          ? L('整车测试版本按所属征集引用策略集（集成管理员关联时确认），不做适用性确认。', 'A test version references the sets of the call it belongs to (confirmed as the integration admin links it); it takes no applicability check.')
                           : eligible(v.version).length === 0
                           ? L('没有可以接管这个软件版本的策略集：补丁只服务本线的软件；主线只有在补丁的修复合入（或写明不合入）后才能接管补丁服务的软件。', 'No policy set may take this software over: a patch only serves its own line’s software, and the mainline takes over from a patch only once the patch’s fixes reached it (or were closed for it).')
                           : undefined
                       }
                     >
-                      <Button type="link" size="small" disabled={eligible(v.version).length === 0 || v.status === 'PLANNED'} onClick={() => (setReleaseId(eligible(v.version)[0]?.id), setOpening(v.version))}>
+                      <Button type="link" size="small" disabled={eligible(v.version).length === 0 || v.status === 'PLANNED' || v.status === 'TESTING'} onClick={() => (setReleaseId(eligible(v.version)[0]?.id), setOpening(v.version))}>
                         {L('开启适用性确认', 'Open a check')}
                       </Button>
                     </Tooltip>

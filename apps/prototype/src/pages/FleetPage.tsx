@@ -56,7 +56,7 @@ import { displayName } from '../engine/config.ts';
 import { devicePublicKey, provisionDevice } from '../engine/simulator.ts';
 import { decideTestRequest, releaseVehicle, testRequestsOf } from '../engine/validation.ts';
 import { deploymentNumber } from '../engine/labels.ts';
-import { answerConfigRequest } from '../engine/ota.ts';
+import { answerConfigRequest, isTestRunning } from '../engine/ota.ts';
 import { compareVersions, releasesOf } from '../engine/release.ts';
 import type { Resource, SoftwareVersion, State, TestRequest } from '../engine/types.ts';
 import { sha256Hex } from '../domain/canonical.ts';
@@ -65,7 +65,7 @@ import { CHANGE_OUTCOME_LABELS, CONFIG_ANSWER_LABELS, ENV_LABELS, GROUP_EVENT_LA
 import { issueLabel } from '../i18n/issues.ts';
 import { navigate } from '../app/router.ts';
 
-const ANSWER_COLORS: Record<string, string> = { PERSONAL: 'purple', GROUP_TARGET: 'blue', REPUBLISH: 'gold', UNKNOWN_SOFTWARE: 'gold', BASE_CONFLICT: 'red', NO_BASE: 'red', HELD: 'purple', TASK: 'processing', APPLIED: 'default', INITIAL: 'default', BLOCKED: 'red' };
+const ANSWER_COLORS: Record<string, string> = { LATEST_RELEASE: 'green', PERSONAL: 'purple', GROUP_TARGET: 'blue', REPUBLISH: 'gold', UNKNOWN_SOFTWARE: 'gold', BASE_CONFLICT: 'red', NO_BASE: 'red', HELD: 'purple', TASK: 'processing', APPLIED: 'default', INITIAL: 'default', BLOCKED: 'red' };
 
 /** The delivery state of the vehicle's pending dispatch: not pushed yet, or pushed and awaiting its receipt. */
 function PendingDeliveryTag({ resourceId }: { resourceId: string }) {
@@ -73,6 +73,23 @@ function PendingDeliveryTag({ resourceId }: { resourceId: string }) {
   const id = pendingDeploymentOf(state, resourceId);
   const t = id ? state.deployments[id]?.targets.find((x) => x.resourceId === resourceId) : undefined;
   return t ? <DeliveryTag target={t} /> : null;
+}
+
+/** A test-group vehicle's push of the set mapped to its software (按版本映射), while no receipt came back. */
+function BaselineDeliveryTag({ resourceId }: { resourceId: string }) {
+  const state = useEngineState();
+  const { L } = useI18n();
+  const t = Object.values(state.deployments)
+    .filter((d) => d.kind === 'BASELINE' && d.status === 'PENDING')
+    .flatMap((d) => d.targets)
+    .find((x) => x.resourceId === resourceId && x.status === 'PENDING');
+  return t ? (
+    <Tooltip title={L('测试组没有进行中的测试：云端按车辆软件版本的映射推送这个策略集。', 'Nothing under test in the test group: the cloud pushes the set mapped to the vehicle’s software.')}>
+      <Tag color="processing">{L('按映射推送 · 等回执', 'pushed by mapping · awaiting receipt')}</Tag>
+    </Tooltip>
+  ) : (
+    <Tag color="gold">{L('连云后推送', 'pushed once connected')}</Tag>
+  );
 }
 
 function VehicleTable({ vehicles, extra, workspaceId = '' }: { vehicles: Resource[]; extra?: (r: Resource) => React.ReactNode; workspaceId?: string }) {
@@ -111,6 +128,16 @@ function VehicleTable({ vehicles, extra, workspaceId = '' }: { vehicles: Resourc
       </Tag>
     );
   };
+  // A PLM test version: which call's round it is (or that no call linked it yet).
+  const testBuild = (r: Resource) => {
+    const v = r.integrationVersion ? state.softwareVersions[`${r.vehicleModelId}::${r.integrationVersion}`] : undefined;
+    if (v?.status !== 'TESTING') return null;
+    return (
+      <Tag color="purple" style={{ marginLeft: 4 }}>
+        {v.testOf ? L(`测试版本 · 工作名 ${v.testOf.workingName} 第 ${v.testOf.round} 轮`, `test version · ${v.testOf.workingName} round ${v.testOf.round}`) : L('测试版本 · 未关联', 'test version · not linked')}
+      </Tag>
+    );
+  };
   const actualSoftware = (r: Resource) =>
     r.softwareStatus === 'PARTIAL_FAILURE' ? (
       <Tooltip title={r.controllers.map((c) => `${c.name} ${c.version} ${c.status}`).join(' · ')}>
@@ -121,6 +148,7 @@ function VehicleTable({ vehicles, extra, workspaceId = '' }: { vehicles: Resourc
         <span>
           {r.vehicleModelId} {r.integrationVersion}
           {isDerivedImage(state, r.imageId) && <Tag color="purple" style={{ marginLeft: 4 }}>{L('派生镜像', 'Derived image')}</Tag>}
+          {testBuild(r)}
         </span>
       </Tooltip>
     ) : isDerivedImage(state, r.imageId) ? (
@@ -516,6 +544,13 @@ function VehicleGroups() {
                     {g.groupId ? `${L('业务分组', 'Business group')}: ${state.groups[g.groupId]?.name} · ` : ''}
                     {L('已下发', 'Dispatched')}: <Mono>{g.publication ? publicationLabel(state, g.publication) : '—'}</Mono> · {L('绑定修订', 'binding rev.')} {g.bindingRevision}
                   </Typography.Text>
+                  {g.purpose === 'TEST' && !isTestRunning(state, g) && (
+                    <Typography.Text type="secondary">
+                      {g.publication
+                        ? L('这次测试已经结束：车辆按软件版本的映射取策略集（默认基线），刷到新版本时由云端推送。', 'That test is over: vehicles take the set mapped to their software (the default baseline), pushed by the cloud when they move to another version.')
+                        : L('没有进行中的测试：车辆按软件版本的映射取策略集（默认基线），刷到新版本时由云端推送。', 'Nothing under test: vehicles take the set mapped to their software (the default baseline), pushed by the cloud when they move to another version.')}
+                    </Typography.Text>
+                  )}
                   {g.publication?.kind === 'FEATURE' && g.publication.disabledPolicies.length > 0 && (
                     <Typography.Text type="secondary">
                       {L('已关闭的策略', 'Switched off')}: {g.publication.disabledPolicies.map((p) => <Tag key={p}>{p}</Tag>)}
@@ -594,11 +629,13 @@ function VehicleGroups() {
                               render: (_: unknown, id: string) => {
                                 const a = answerConfigRequest(state, id);
                                 const due = a.reason === 'GROUP_TARGET' && a.configId !== state.resources[id]!.appliedConfigId;
+                                const mapped = a.reason === 'LATEST_RELEASE';
                                 return (
                                   <Tooltip title={a.detail ? B(issueLabel(a.detail), a.detail) : undefined}>
                                     <Space size={4} wrap>
                                       <Tag color={ANSWER_COLORS[a.reason] ?? 'default'}>{B(CONFIG_ANSWER_LABELS[a.reason])}</Tag>
-                                      {a.reason === 'GROUP_TARGET' && <Mono>{B(configName(state, a.configId))}</Mono>}
+                                      {(a.reason === 'GROUP_TARGET' || mapped) && <Mono>{B(configName(state, a.configId))}</Mono>}
+                                      {mapped && a.configId !== state.resources[id]!.appliedConfigId && <BaselineDeliveryTag resourceId={id} />}
                                       {/* Not applied: a receipt is on its way, or (after an image change) nothing was sent yet. */}
                                       {due && (pendingDeploymentOf(state, id) ? <PendingDeliveryTag resourceId={id} /> : !fitOf(state, id)?.fits && <Tag color="gold">{L('需重新下发', 'dispatch again')}</Tag>)}
                                     </Space>
@@ -1148,7 +1185,7 @@ function Catalogs() {
                   allowClear
                   options={Object.values(state.softwareVersions)
                     .filter((v) => v.vehicleModelId === model)
-                    .map((v) => ({ value: v.version, label: `${v.vehicleModelId} ${v.version}${v.status === 'PLANNED' ? L('（规划中，预发布软件）', ' (planned, pre-release)') : ''}` }))}
+                    .map((v) => ({ value: v.version, label: `${v.vehicleModelId} ${v.version}${v.status === 'PLANNED' ? L('（规划中，预发布软件）', ' (planned, pre-release)') : v.status === 'TESTING' ? L('（整车测试版本）', ' (test version)') : ''}` }))}
                 />
               </Form.Item>
               <Form.Item name="build" label="Build" rules={[{ required: true }]}>

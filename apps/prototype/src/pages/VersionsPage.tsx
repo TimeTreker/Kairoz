@@ -13,13 +13,41 @@ import { Hint, LabelTag, Mono, PageHeader, day, when } from '../components/commo
 import { LineTag } from '../components/patch.tsx';
 import { PromoteModal } from '../components/promote.tsx';
 import { DclPartCell, VersionStatusTag } from '../components/plm.tsx';
-import { PARENT_IN_TEST, callPhase, callsOf, closeUnchanged, cancelCall, defaultModules, excludeModule, isOverdueCall, isStale, moduleName, openCall, openRound, previewCall, remindModules, retargetCall, returnModules, submitDomain, submitGroup, waitingModules } from '../engine/calls.ts';
+import {
+  PARENT_IN_TEST,
+  callPhase,
+  callsOf,
+  closeUnchanged,
+  cancelCall,
+  defaultModules,
+  excludeModule,
+  isOverdueCall,
+  isStale,
+  linkTestVersion,
+  moduleName,
+  nextTestReference,
+  openCall,
+  openRound,
+  previewCall,
+  remindModules,
+  retargetCall,
+  referenceReason,
+  returnModules,
+  roundSoftware,
+  submitDomain,
+  submitGroup,
+  takesTestVersions,
+  testVersionsOf,
+  unlinkedTestVersions,
+  waitingModules,
+} from '../engine/calls.ts';
 import type { CallPhase } from '../engine/calls.ts';
 import { displayName } from '../engine/config.ts';
 import { productionDistribution, releaseHistory, setsOverTime, softwareVersionsOf, vehiclesOnVersion, vehiclesRunning, versionHistory } from '../engine/history.ts';
 import type { HistoryEntry } from '../engine/history.ts';
 import { collectibleSubsystems, defaultScope, isMergeWorkspace, verifiedSources } from '../engine/integration.ts';
 import { applicableVersions, releasesOf, setInEffect, versionsInEffect } from '../engine/release.ts';
+import { partVersion } from '../engine/types.ts';
 import type { CallModule, IntegrationCall, State } from '../engine/types.ts';
 import { useI18n } from '../i18n/i18n.tsx';
 import {
@@ -527,17 +555,146 @@ function CallDetail({ callId }: { callId: string }) {
             { title: L('预览', 'Preview'), render: (_, r) => <LabelTag map={PLAN_STATUS_LABELS} value={state.mergePlans[r.planId]?.status ?? '—'} /> },
             { title: L('测试', 'Testing'), render: (_, r) => (r.candidateId ? <LabelTag map={CANDIDATE_STATUS_LABELS} value={state.candidates[r.candidateId]!.status} /> : '—') },
             { title: L('结果', 'Outcome'), render: (_, r) => <LabelTag map={ROUND_OUTCOME_LABELS} value={r.outcome} color={r.outcome === 'RELEASED' ? 'green' : r.outcome === 'CANCELLED' ? 'default' : 'processing'} /> },
+            {
+              title: L('测试车软件', 'Tested on'),
+              render: (_, r) => {
+                const software = r.candidateId ? roundSoftware(state, r.candidateId) : [];
+                return software.length ? (
+                  <Space size={4} wrap>
+                    {software.map((x) => {
+                      const link = state.softwareVersions[`${call.vehicleModelId}::${x}`]?.testOf;
+                      return <Tag key={x}>{link ? L(`${x}（整车第 ${link.round} 轮）`, `${x} (round ${link.round})`) : x}</Tag>;
+                    })}
+                  </Space>
+                ) : (
+                  '—'
+                );
+              },
+            },
             { title: L('原因', 'Reason'), render: (_, r) => callNote(L, r.reason) || '—' },
             { title: L('时间', 'When'), render: (_, r) => `${state.accounts[r.by]?.displayName ?? r.by} · ${when(r.at)}${r.closedAt ? ` → ${when(r.closedAt)}` : ''}` },
           ]}
         />
       </Card>
 
+      {call.scope === 'Vehicle' && <TestVersionsCard call={call} />}
+
       {promoting && candidate && <PromoteModal candidate={candidate} onClose={() => setPromoting(false)} />}
       {submitting && <SubmitModal call={call} module={submitting} onClose={() => setSubmitting(null)} />}
       {childFor && <OpenChildModal call={call} workspaceId={childFor} onClose={() => setChildFor(null)} />}
       {asking && <AskModal call={call} ask={asking} onClose={() => setAsking(null)} />}
     </Space>
+  );
+}
+
+/**
+ * The whole-vehicle test versions PLM issued for the call's integration test rounds (整车测试版本), as
+ * the integration admin linked them, with the set each references. DCL rounds are separate.
+ */
+function TestVersionsCard({ call }: { call: IntegrationCall }) {
+  const state = useEngineState();
+  const { L, B } = useI18n();
+  const can = useCan();
+  const run = useRun();
+  const [linking, setLinking] = useState(false);
+  const [choice, setChoice] = useState<string | undefined>();
+  const linked = testVersionsOf(state, call);
+  const canLink = takesTestVersions(state, call) && can('call.manage', { workspaceId: call.workspaceId, scope: call.scope });
+  const unlinked = unlinkedTestVersions(state, call.vehicleModelId);
+  const next = nextTestReference(state, call);
+  const picked = choice ? state.softwareVersions[`${call.vehicleModelId}::${choice}`] : undefined;
+  const pickedPart = picked?.dclPart;
+  const partSet = pickedPart ? state.releases[picked.dclModule?.releaseId ?? ''] : undefined;
+  const start = () => {
+    setChoice(unlinked[0]?.version);
+    setLinking(true);
+  };
+  const link = () => {
+    if (!choice) return;
+    const ok = next.set ? L(`已关联为整车第 ${(next.previousRound ?? 0) + 1} 轮，确认引用 ${next.set.dclVersion}`, `Linked as round ${(next.previousRound ?? 0) + 1}; the reference to ${next.set.dclVersion} is confirmed`) : L(`已关联为整车第 ${(next.previousRound ?? 0) + 1} 轮`, `Linked as round ${(next.previousRound ?? 0) + 1}`);
+    if (run((c) => linkTestVersion(c, call.id, choice), ok) !== undefined) setLinking(false);
+  };
+  return (
+    <Card
+      title={L('整车测试版本（PLM）', 'Whole-vehicle test versions (PLM)')}
+      extra={
+        canLink && (
+          <Button size="small" disabled={!unlinked.length} onClick={start}>
+            {L('关联 PLM 测试版本', 'Link a PLM test version')}
+          </Button>
+        )
+      }
+    >
+      <Hint>
+        {L(
+          'PLM 为整车集成测试的每一轮出一个测试版本，通过的那一轮以同号发布。集成管理员把它关联为整车的某一轮：测试车跑它时算作工作名的测试，它按工作名引用策略集，测试组的车刷到它就按映射取策略。DCL 的轮次与整车轮次各自独立。',
+          'PLM issues a test version for every whole-vehicle integration test round and releases the passing one under the same number. The integration admin links each as a round: tests on vehicles running it count for the working name, it references the working name’s sets, and test-group vehicles flashed with it take their set by that mapping. DCL rounds are separate from vehicle rounds.',
+        )}
+      </Hint>
+      <Table
+        rowKey="version"
+        size="small"
+        pagination={false}
+        scroll={{ x: 'max-content' }}
+        dataSource={linked}
+        locale={{ emptyText: unlinked.length && canLink ? L(`PLM 已出测试版本 ${unlinked.map((v) => v.version).join('、')}，还没关联。`, `PLM issued ${unlinked.map((v) => v.version).join(', ')}, not linked yet.`) : L('还没有关联的整车测试版本。', 'No whole-vehicle test version linked yet.') }}
+        columns={[
+          { title: L('整车轮次', 'Round'), render: (_, v) => L(`第 ${v.testOf.round} 轮`, `Round ${v.testOf.round}`) },
+          {
+            title: L('PLM 版本', 'PLM version'),
+            render: (_, v) => (
+              <Space size={4} wrap>
+                <a onClick={() => navigate(`versions/history/version/${v.version}`)}>
+                  <Mono>{`${v.vehicleModelId} ${v.version}`}</Mono>
+                </a>
+                <VersionStatusTag v={v} />
+              </Space>
+            ),
+          },
+          {
+            title: L('引用的策略集', 'References'),
+            render: (_, v) => {
+              const set = setInEffect(state, v.vehicleModelId, v.version);
+              return set ? <Tag color="green">{B(setName(set.dclVersion))}</Tag> : <Typography.Text type="secondary">{call.status === 'RELEASED' ? '—' : L('征集发布时引用', 'referenced on release')}</Typography.Text>;
+            },
+          },
+          { title: L('DCL 件', 'DCL part'), render: (_, v) => <DclPartCell v={v} /> },
+          { title: L('关联', 'Linked'), render: (_, v) => `${state.accounts[v.testOf.linkedBy]?.displayName ?? v.testOf.linkedBy} · ${when(v.testOf.linkedAt)}` },
+        ]}
+      />
+      <Modal open={linking} title={L(`关联 PLM 测试版本 · ${call.title}`, `Link a PLM test version · ${call.title}`)} okText={L('关联', 'Link')} okButtonProps={{ disabled: !choice }} onCancel={() => setLinking(false)} onOk={link}>
+        <Space orientation="vertical" style={{ width: '100%' }}>
+          <Typography.Text>{L(`作为整车第 ${(next.previousRound ?? 0) + 1} 轮`, `As round ${(next.previousRound ?? 0) + 1}`)}</Typography.Text>
+          <Select
+            style={{ width: '100%' }}
+            value={choice}
+            onChange={setChoice}
+            options={unlinked.map((v) => ({ value: v.version, label: `${v.vehicleModelId} ${v.version}${v.dclPart ? ` · DCL ${partVersion(v.dclPart)}` : ''}` }))}
+            aria-label={L('PLM 测试版本', 'PLM test version')}
+          />
+          {next.set ? (
+            <Alert
+              type={next.changedFrom ? 'warning' : 'info'}
+              showIcon
+              title={
+                next.changedFrom
+                  ? L(`DCL 策略集自第 ${next.previousRound} 轮由 ${next.changedFrom.dclVersion} 变为 ${next.set.dclVersion}：关联即引用 ${next.set.dclVersion}。`, `The DCL set changed from ${next.changedFrom.dclVersion} to ${next.set.dclVersion} since round ${next.previousRound}: linking references ${next.set.dclVersion}.`)
+                  : L(`DCL 策略集没变：关联即确认引用 ${next.set.dclVersion}（工作名 ${call.targetVersion} 当前生效）。`, `The DCL set did not change: linking confirms the reference to ${next.set.dclVersion} (in effect for working name ${call.targetVersion}).`)
+              }
+            />
+          ) : (
+            <Alert type="info" showIcon title={L('征集还没发布：先记为这一轮，征集发布时一并引用新策略集。', 'The call is not released yet: the round is recorded now, and the release references the new set.')} />
+          )}
+          {next.set && pickedPart && partSet?.id !== next.set.id && (
+            <Alert
+              type="warning"
+              showIcon
+              title={L(`这一轮包里的 DCL 件是 ${partVersion(pickedPart)}：出厂配置${partSet ? ` ${partSet.dclVersion}` : ''}不是当前策略集，测试车连云后推送 ${next.set.dclVersion}。`, `This round’s package carries DCL ${partVersion(pickedPart)}: its factory configuration${partSet ? ` ${partSet.dclVersion}` : ''} is not the set in effect; test vehicles get ${next.set.dclVersion} once connected.`)}
+            />
+          )}
+        </Space>
+      </Modal>
+    </Card>
   );
 }
 
@@ -946,6 +1103,9 @@ function useEntryText(): (e: HistoryEntry) => ReactNode {
     return key.startsWith('domain:') ? key.slice(7) : (state.groups[key]?.code ?? key);
   };
   const cars = (ids: string[]) => (ids.length ? ids.join(', ') : '');
+  // The whole-vehicle software a DCL round was tested on.
+  const tested = (e: HistoryEntry) => (e.software?.length ? `（测试车软件 ${e.software.join('、')}）` : '');
+  const testedEn = (e: HistoryEntry) => (e.software?.length ? ` (tested on ${e.software.join(', ')})` : '');
   return (e) => {
     const v = e.version ? `${workspace?.vehicleModelId ?? ''} ${e.version}`.trim() : '';
     const reason = e.reason ? `：${callNote(L, e.reason)}` : '';
@@ -961,8 +1121,18 @@ function useEntryText(): (e: HistoryEntry) => ReactNode {
         return e.reason ? L(`PLM 发布整车集成版本 ${v}，BOM 含 DCL 件 ${e.reason}`, `PLM published ${v}; its BOM carries DCL part ${e.reason}`) : L(`PLM 发布整车集成版本 ${v}（不带 DCL 件）`, `PLM published ${v} (no DCL part)`);
       case 'PART_DELIVERED':
         return L(`DCL 导出 DCL 件 ${e.reason}，交给 PLM`, `DCL exported DCL part ${e.reason} for PLM`);
-      case 'LINKED':
-        return L(`按配置摘要关联：工作名 ${e.reason} 即 PLM 版本 ${v}`, `Linked by the configuration digest: working name ${e.reason} is PLM version ${v}`);
+      case 'LINKED': {
+        const round = e.version ? state.softwareVersions[`${workspace?.vehicleModelId ?? ''}::${e.version}`]?.testOf?.round : undefined;
+        return round
+          ? L(`关联：工作名 ${e.reason} 即 PLM 版本 ${v}（整车第 ${round} 轮通过后同号发布）`, `Linked: working name ${e.reason} is PLM version ${v} (round ${round} passed and was released under its number)`)
+          : L(`按配置摘要关联：工作名 ${e.reason} 即 PLM 版本 ${v}`, `Linked by the configuration digest: working name ${e.reason} is PLM version ${v}`);
+      }
+      case 'PLM_TEST_ISSUED':
+        return e.reason ? L(`PLM 出整车测试版本 ${v}，BOM 含 DCL 件 ${e.reason}`, `PLM issued test version ${v}; its BOM carries DCL part ${e.reason}`) : L(`PLM 出整车测试版本 ${v}（不带 DCL 件）`, `PLM issued test version ${v} (no DCL part)`);
+      case 'TEST_VERSION_LINKED':
+        return L(`整车第 ${e.reason} 轮：关联 PLM 测试版本 ${v}`, `Whole-vehicle round ${e.reason}: PLM test version ${v} linked`);
+      case 'PLM_RELEASED':
+        return L(`测试通过，PLM 以同号发布 ${v}`, `Passed: PLM released ${v} under the same number`);
       case 'MODULE_SUBMITTED':
         return L(`${mod(e.module)} 提交 ${submissionText(state, { featureId: e.featureId, commitId: null, subsystemReleaseId: e.subsystemReleaseId })}${reason}`, `${mod(e.module)} submitted ${submissionText(state, { featureId: e.featureId, commitId: null, subsystemReleaseId: e.subsystemReleaseId })}${reasonEn}`);
       case 'MODULE_NO_CHANGE':
@@ -974,9 +1144,9 @@ function useEntryText(): (e: HistoryEntry) => ReactNode {
       case 'ROUND_FROZEN':
         return L(`送测：测试集成版本 ${e.reason}`, `Sent to testing: test integration version ${e.reason}`);
       case 'ROUND_PASSED':
-        return L(`${e.reason} 集成测试通过`, `${e.reason} passed integration testing`);
+        return L(`${e.reason} 集成测试通过${tested(e)}`, `${e.reason} passed integration testing${testedEn(e)}`);
       case 'ROUND_CANCELLED':
-        return L(`本轮取消${reason}`, `Round cancelled${reasonEn}`);
+        return L(`本轮取消${reason}${tested(e)}`, `Round cancelled${reasonEn}${testedEn(e)}`);
       case 'CALL_CANCELLED':
         return L(`集成征集取消${reason}`, `Integration call cancelled${reasonEn}`);
       case 'CALL_NO_CHANGE':
@@ -1000,10 +1170,14 @@ function useEntryText(): (e: HistoryEntry) => ReactNode {
         return L(`适用性确认取消${reason}`, `Applicability check cancelled${reasonEn}`);
       case 'CHECK_SUPERSEDED':
         return L('适用性确认被更新的确认取代', 'Applicability check superseded');
-      case 'APPLICABILITY_ADDED':
-        return e.reason?.startsWith('working name ') && !e.checkId
-          ? L(`${set(e.releaseId)} 随工作名 ${e.reason.slice(13)} 适用 ${v}`, `${set(e.releaseId)} applies to ${v} with working name ${e.reason.slice(13)}`)
-          : L(`${set(e.releaseId)} 追加适用 ${v}`, `${set(e.releaseId)} added for ${v}`);
+      case 'APPLICABILITY_ADDED': {
+        const ref = !e.checkId && e.reason ? referenceReason(e.reason) : null;
+        if (ref?.kind === 'LINKED') return L(`${set(e.releaseId)} 随工作名 ${ref.workingName} 适用 ${v}`, `${set(e.releaseId)} applies to ${v} with working name ${ref.workingName}`);
+        if (ref?.kind === 'RELEASED') return L(`${v} 随征集发布引用 ${set(e.releaseId)}（工作名 ${ref.workingName} 的测试版本）`, `${v} references ${set(e.releaseId)} with the call’s release (a test version of working name ${ref.workingName})`);
+        if (ref?.kind === 'CONFIRMED') return L(`确认引用：${v} ↔ ${set(e.releaseId)}（DCL 策略集未变）`, `Reference confirmed: ${v} ↔ ${set(e.releaseId)} (DCL set unchanged)`);
+        if (ref?.kind === 'CHANGED') return L(`确认引用：${v} ↔ ${set(e.releaseId)}（DCL 策略集自上一轮由 ${ref.from} 变为 ${ref.to}）`, `Reference confirmed: ${v} ↔ ${set(e.releaseId)} (DCL set changed from ${ref.from} to ${ref.to} since the previous round)`);
+        return L(`${set(e.releaseId)} 追加适用 ${v}`, `${set(e.releaseId)} added for ${v}`);
+      }
       case 'APPLICABILITY_WITHDRAWN':
         return L(`${set(e.releaseId)} 撤销适用 ${v}${reason}`, `${set(e.releaseId)} withdrawn from ${v}${reasonEn}`);
       case 'IN_EFFECT':

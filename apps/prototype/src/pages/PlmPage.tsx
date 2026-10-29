@@ -1,31 +1,33 @@
 // The simulated PLM (PLM（模拟）, prototype only): plays the company's version record so the
-// platform has published versions to sync. PLM maps every module's version (the BOM) to one
-// whole-vehicle version number; the DCL part DCL hands over is one of those modules. Nothing here
-// is the platform's: the platform learns a published version only by syncing.
+// platform has versions to sync. PLM maps every module's version (the BOM) to one whole-vehicle
+// version number; the DCL part DCL hands over is one of those modules. Every whole-vehicle
+// integration test round gets a test version, and the passing one is released under the same
+// number. Nothing here is the platform's: the platform learns a version only by syncing.
 
 import { MinusCircleOutlined, PlusOutlined } from '@ant-design/icons';
-import { App, Button, Card, Input, Modal, Select, Space, Table, Tag, Tooltip, Typography } from 'antd';
+import { App, Button, Card, Input, Modal, Radio, Select, Space, Table, Tag, Tooltip, Typography } from 'antd';
 import { useState } from 'react';
 import { useErrorText } from '../app/hooks.ts';
 import { engine, useEngineState } from '../app/store.ts';
 import { Hint, Mono, PageHeader, ShortId, when } from '../components/common.tsx';
 import { sha256Hex } from '../domain/canonical.ts';
 import type { Ctx } from '../engine/engine.ts';
-import { latestPlmVersion, publishPlmVersion, syncPlmIfChanged } from '../engine/plm.ts';
+import { latestPlmVersion, publishPlmVersion, releasePlmVersion, syncPlmIfChanged } from '../engine/plm.ts';
 import { compareVersions } from '../engine/release.ts';
 import { partVersion } from '../engine/types.ts';
 import type { PlmVersion } from '../engine/types.ts';
 import { useI18n } from '../i18n/i18n.tsx';
+import { PLM_STAGE_LABELS } from '../i18n/vocab.ts';
 
 type Part = NonNullable<PlmVersion['dclPart']>;
-type Publishing = { model: string; version: string; modules: { name: string; version: string }[]; part: string };
+type Publishing = { model: string; version: string; modules: { name: string; version: string }[]; part: string; stage: PlmVersion['stage'] };
 
 const NONE = 'none';
 const UNKNOWN = 'unknown';
 
 export function PlmPage() {
   const state = useEngineState();
-  const { L } = useI18n();
+  const { L, B } = useI18n();
   const { message } = App.useApp();
   const errorText = useErrorText();
   const [form, setForm] = useState<Publishing | null>(null);
@@ -62,7 +64,7 @@ export function PlmPage() {
     if (v.dclPart && !choices.has(v.dclPart.digest)) choices.set(v.dclPart.digest, { model: v.vehicleModelId, part: v.dclPart, label: L(`DCL ${partVersion(v.dclPart)} · 同 ${v.version}`, `DCL ${partVersion(v.dclPart)} · as in ${v.version}`) });
   }
 
-  const start = (model: string) => setForm({ model, version: '', modules: (latestPlmVersion(state.plm, model)?.modules ?? []).map((m) => ({ ...m })), part: NONE });
+  const start = (model: string) => setForm({ model, version: '', modules: (latestPlmVersion(state.plm, model)?.modules ?? []).map((m) => ({ ...m })), part: NONE, stage: form?.stage ?? 'TEST' });
   const publish = () => {
     if (!form) return;
     const known = choices.get(form.part);
@@ -72,7 +74,8 @@ export function PlmPage() {
         : known
           ? { clientVersion: known.part.clientVersion, setVersion: known.part.setVersion, digest: known.part.digest }
           : null;
-    if (system((c) => publishPlmVersion(c, { vehicleModelId: form.model, version: form.version, modules: form.modules, dclPart }), L('PLM 已发布（待同步到平台）', 'Published in PLM (to sync)')) !== undefined) setForm(null);
+    const ok = form.stage === 'TEST' ? L('PLM 已出测试版本（待同步到平台）', 'Test version issued in PLM (to sync)') : L('PLM 已发布（待同步到平台）', 'Published in PLM (to sync)');
+    if (system((c) => publishPlmVersion(c, { vehicleModelId: form.model, version: form.version, modules: form.modules, dclPart, stage: form.stage }), ok) !== undefined) setForm(null);
   };
   const setModule = (i: number, key: 'name' | 'version', value: string) => form && setForm({ ...form, modules: form.modules.map((m, j) => (j === i ? { ...m, [key]: value } : m)) });
 
@@ -82,7 +85,7 @@ export function PlmPage() {
         <Typography.Text strong>{L('模拟区 · 仅原型', 'Simulation zone · prototype only')}</Typography.Text>
         <Typography.Text>
           {' '}
-          {L('这里扮演公司的 PLM（版本管理），不属于平台。平台只读取 PLM 发布的整车版本；DCL 件由 DCL 在平台导出后交给 PLM。', 'This plays the company’s PLM (version record); it is not part of the platform. The platform only reads the versions PLM publishes; DCL exports the DCL part from the platform and hands it to PLM.')}
+          {L('这里扮演公司的 PLM（版本管理），不属于平台。平台只读取 PLM 的整车版本（每轮的测试版本和已发布版本）；DCL 件由 DCL 在平台导出后交给 PLM。', 'This plays the company’s PLM (version record); it is not part of the platform. The platform only reads PLM’s versions (each round’s test version and the released ones); DCL exports the DCL part from the platform and hands it to PLM.')}
         </Typography.Text>
       </div>
       <PageHeader
@@ -97,7 +100,7 @@ export function PlmPage() {
               {L('同步到平台', 'Sync to platform')}
             </Button>
             <Button type="primary" icon={<PlusOutlined />} disabled={!models.length} onClick={() => start(models[0]!)}>
-              {L('发布整车版本', 'Publish a version')}
+              {L('新建整车版本', 'New version')}
             </Button>
           </Space>
         }
@@ -106,8 +109,8 @@ export function PlmPage() {
         <Card title={L('整车集成版本与 BOM', 'Integration versions and their BOM')}>
           <Hint>
             {L(
-              'PLM 把各模块的版本映射成一个整车集成版本号，DCL 件是其中一个模块。模拟器自动运行时每一步都会同步；也可以手动同步。',
-              'PLM maps every module’s version to one whole-vehicle version number; the DCL part is one of the modules. The simulator syncs on every step when it runs; you can also sync by hand.',
+              'PLM 把各模块的版本映射成一个整车集成版本号，DCL 件是其中一个模块。整车集成测试每一轮出一个测试版本，通过的那一轮以同号发布。模拟器自动运行时每一步都会同步；也可以手动同步。',
+              'PLM maps every module’s version to one whole-vehicle version number; the DCL part is one of the modules. Every whole-vehicle integration test round gets a test version, and the passing one is released under the same number. The simulator syncs on every step when it runs; you can also sync by hand.',
             )}
           </Hint>
           <Table
@@ -136,7 +139,21 @@ export function PlmPage() {
                   </Space>
                 ),
               },
-              { title: L('发布时间', 'Published'), render: (_, v) => when(v.publishedAt) },
+              {
+                title: L('阶段', 'Stage'),
+                render: (_, v) => <Tag color={v.stage === 'TEST' ? 'purple' : 'green'}>{B(PLM_STAGE_LABELS[v.stage ?? 'RELEASED'])}</Tag>,
+              },
+              { title: L('出号时间', 'Issued'), render: (_, v) => when(v.publishedAt) },
+              { title: L('发布时间', 'Released'), render: (_, v) => (v.releasedAt ? when(v.releasedAt) : '—') },
+              {
+                title: L('操作', 'Actions'),
+                render: (_, v) =>
+                  v.stage === 'TEST' ? (
+                    <Button size="small" onClick={() => system((c) => releasePlmVersion(c, { vehicleModelId: v.vehicleModelId, version: v.version }), L(`PLM 已发布 ${v.version}（待同步到平台）`, `PLM released ${v.version} (to sync)`))}>
+                      {L('测试通过，发布', 'Passed: release')}
+                    </Button>
+                  ) : null,
+              },
             ]}
           />
         </Card>
@@ -158,9 +175,24 @@ export function PlmPage() {
           />
         </Card>
       </Space>
-      <Modal open={form !== null} title={L('PLM 发布整车版本', 'PLM publishes a version')} okText={L('发布', 'Publish')} onCancel={() => setForm(null)} onOk={publish}>
+      <Modal
+        open={form !== null}
+        title={L('PLM 新建整车版本', 'PLM issues a version')}
+        okText={form?.stage === 'TEST' ? L('出测试版本', 'Issue the test version') : L('发布', 'Publish')}
+        onCancel={() => setForm(null)}
+        onOk={publish}
+      >
         {form && (
           <Space orientation="vertical" style={{ width: '100%' }}>
+            <Radio.Group
+              value={form.stage}
+              onChange={(e) => setForm({ ...form, stage: e.target.value })}
+              options={[
+                { value: 'TEST', label: L('集成测试版本（每轮一个）', 'Integration test version (one per round)') },
+                { value: 'RELEASED', label: L('直接发布', 'Publish at once') },
+              ]}
+              aria-label={L('阶段', 'Stage')}
+            />
             <Typography.Text>{L('车型', 'Vehicle model')}</Typography.Text>
             <Select style={{ width: '100%' }} value={form.model} onChange={start} options={models.map((m) => ({ value: m, label: m }))} aria-label={L('车型', 'Vehicle model')} />
             <Typography.Text>{L('PLM 版本号', 'PLM version number')}</Typography.Text>

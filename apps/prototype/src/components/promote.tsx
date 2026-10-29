@@ -5,6 +5,7 @@ import { Alert, Checkbox, Descriptions, Form, Input, Modal, Space, Tag, Tooltip 
 import { useRun } from '../app/hooks.ts';
 import { useEngineState } from '../app/store.ts';
 import { ShortId, when } from './common.tsx';
+import { testVersionsOf } from '../engine/calls.ts';
 import { compareVersions, highestVersion, nextDclVersion, promoteCandidate, promoteVersionProblem, setInEffect, targetMoved, testedVersions, versionLine, versionsInEffect } from '../engine/release.ts';
 import type { Candidate } from '../engine/types.ts';
 import { useI18n } from '../i18n/i18n.tsx';
@@ -24,9 +25,11 @@ export function PromoteModal({ candidate, onClose }: { candidate: Candidate; onC
   const target = candidate.patch && candidate.targetReleaseId ? state.releases[candidate.targetReleaseId] : undefined;
   const serving = target ? new Set(versionsInEffect(state, target)) : null;
   const call = candidate.callId ? state.integrationCalls[candidate.callId] : undefined;
+  // The call's whole-vehicle test versions reference the new set with the release.
+  const builds = call ? testVersionsOf(state, call).map((v) => v.version) : [];
   const versions = Object.values(state.softwareVersions)
     .filter((v) => v.vehicleModelId === candidate.vehicleModelId && (!serving || serving.has(v.version)))
-    .filter((v) => (call ? v.version === call.targetVersion : v.status !== 'PLANNED'))
+    .filter((v) => (call ? v.version === call.targetVersion : v.status !== 'PLANNED' && v.status !== 'TESTING'))
     .map((v) => v.version)
     .sort(compareVersions);
   const [form] = Form.useForm<{ dclVersion: string; versions: string[]; notes: string }>();
@@ -94,8 +97,8 @@ export function PromoteModal({ candidate, onClose }: { candidate: Candidate; onC
           description={
             state.softwareVersions[`${call.vehicleModelId}::${call.targetVersion}`]?.status === 'PLANNED'
               ? L(
-                  `发布后记录新策略集与工作名 ${call.vehicleModelId} ${call.targetVersion} 的对应关系，并导出配置。工作名保持规划：DCL 导出 DCL 件交给 PLM，PLM 发布整车版本后，平台按配置摘要自动关联，刷这个版本的车随软件运行新策略集，弱网或离线也不受影响。`,
-                  `Publishing relates the new policy set to working name ${call.vehicleModelId} ${call.targetVersion} and exports its configuration. The working name stays planned: DCL exports the DCL part for PLM, and once PLM publishes the version the platform links them by the configuration digest; vehicles flashed with it run the set with the software, weak signal or none.`,
+                  `发布后记录新策略集与工作名 ${call.vehicleModelId} ${call.targetVersion} 的对应关系，并导出配置。${builds.length ? `已关联的整车测试版本 ${builds.join('、')} 随发布一并引用新策略集。` : ''}工作名保持规划：DCL 导出 DCL 件交给 PLM，PLM 发布整车版本后，平台自动关联，刷这个版本的车随软件运行新策略集，弱网或离线也不受影响。`,
+                  `Publishing relates the new policy set to working name ${call.vehicleModelId} ${call.targetVersion} and exports its configuration.${builds.length ? ` The linked test versions ${builds.join(', ')} reference the new set with it.` : ''} The working name stays planned: DCL exports the DCL part for PLM, and once PLM publishes the version the platform links them; vehicles flashed with it run the set with the software, weak signal or none.`,
                 )
               : L(
                   `PLM 已发布 ${call.vehicleModelId} ${call.targetVersion}，它的 BOM 不再改变：新策略集只记录对应关系，由配置 OTA 送到车上。`,

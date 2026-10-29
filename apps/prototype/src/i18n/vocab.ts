@@ -979,7 +979,13 @@ export const SOFTWARE_STATUS_LABELS: Record<string, Bilingual> = {
   TO_DELIVER: b('已发布 · 待导出 DCL 件', 'Released · DCL part to export'),
   DELIVERED: b('DCL 件已交付 · 待 PLM 发布', 'DCL part handed over · waiting for PLM'),
   LINKED: b('已关联 PLM 版本', 'Linked to a PLM version'),
+  TESTING: b('整车测试版本', 'Test version'),
   RECORDED: b('PLM 已发布', 'Published by PLM'),
+};
+/** How a PLM version stands in PLM itself (the simulated PLM page). */
+export const PLM_STAGE_LABELS: Record<string, Bilingual> = {
+  TEST: b('集成测试版本', 'Test version'),
+  RELEASED: b('已发布', 'Released'),
 };
 Object.assign(ERROR_LABELS, {
   TARGET_RECORDED: b('PLM 已经有这个版本号（已发布或测试版本）：征集的目标是新软件的工作名，PLM 版本的 BOM 不再改变', 'PLM already has this number (released or a test version): a call targets a working name for new software, and a PLM version’s BOM no longer changes'),

@@ -15,17 +15,20 @@ import { SOFTWARE_STATUS_LABELS, setName } from '../i18n/vocab.ts';
 import { Hint, Mono, when } from './common.tsx';
 import { downloadJson } from './JsonExport.tsx';
 
-const STATUS_COLORS: Record<string, string> = { PLANNED: 'gold', TO_DELIVER: 'orange', DELIVERED: 'blue', LINKED: 'default', RECORDED: 'green' };
+const STATUS_COLORS: Record<string, string> = { PLANNED: 'gold', TO_DELIVER: 'orange', DELIVERED: 'blue', LINKED: 'default', TESTING: 'purple', RECORDED: 'green' };
 
 /** A version's status: a working name by where it stands, or published by PLM (with the working name it was linked from). */
 export function VersionStatusTag({ v }: { v: SoftwareVersion }) {
   const { L, B } = useI18n();
-  const status = workingNameState(v) ?? 'RECORDED';
+  const status = workingNameState(v) ?? (v.status === 'TESTING' ? 'TESTING' : 'RECORDED');
   const tips: Record<string, string> = {
     PLANNED: L('集成征集的工作名：PLM 还没有这个版本号；只有该征集的发布能列入它，量产车不能使用。', 'An integration call’s working name: PLM has no number for it yet; only that call’s release lists it, and production vehicles never run it.'),
     TO_DELIVER: L('征集已发布：DCL 导出 DCL 件，在平台外合入 DCL 软件并交给 PLM。', 'The call is released: DCL exports the DCL part, merges it into the DCL software and hands it to PLM outside the platform.'),
     DELIVERED: L('DCL 件已导出交付；PLM 发布带这个件的整车版本后，平台按配置摘要自动关联。', 'The DCL part is exported for PLM; once PLM publishes a version carrying it, the platform links them by the configuration digest.'),
     LINKED: L('PLM 已发布这个软件；以后使用 PLM 版本号。', 'PLM published this software; use the PLM number from now on.'),
+    TESTING: v.testOf
+      ? L(`PLM 为整车集成测试出的测试版本，是工作名 ${v.testOf.workingName} 第 ${v.testOf.round} 轮的构建：研发车、测试车可以运行，按工作名引用策略集；量产车不能使用。通过后 PLM 以同号发布。`, `A test build PLM issued for whole-vehicle integration testing, round ${v.testOf.round} of working name ${v.testOf.workingName}: development and testing vehicles run it and it references the working name’s sets; production vehicles never run it. PLM releases it under the same number if it passes.`)
+      : L('PLM 为整车集成测试出的测试版本，还没关联到集成征集：由集成管理员在征集里关联为整车的某一轮。量产车不能使用。', 'A test build PLM issued for whole-vehicle integration testing, not linked to a call yet: the integration admin links it as a round of the call. Production vehicles never run it.'),
     RECORDED: L('PLM 发布的整车集成版本。', 'A whole-vehicle integration version PLM published.'),
   };
   return (
@@ -36,7 +39,12 @@ export function VersionStatusTag({ v }: { v: SoftwareVersion }) {
           {status === 'LINKED' ? ` ${v.linkedTo}` : ''}
         </Tag>
       </Tooltip>
-      {v.status === 'RECORDED' && v.workingName && v.workingName !== v.version && <Tag>{L(`工作名 ${v.workingName}`, `working name ${v.workingName}`)}</Tag>}
+      {v.testOf ? (
+        <Tag>{L(`工作名 ${v.testOf.workingName} · 第 ${v.testOf.round} 轮`, `working name ${v.testOf.workingName} · round ${v.testOf.round}`)}</Tag>
+      ) : v.status === 'TESTING' ? (
+        <Tag color="orange">{L('未关联征集', 'not linked to a call')}</Tag>
+      ) : null}
+      {v.status === 'RECORDED' && v.workingName && v.workingName !== v.version && !v.testOf && <Tag>{L(`工作名 ${v.workingName}`, `working name ${v.workingName}`)}</Tag>}
     </Space>
   );
 }

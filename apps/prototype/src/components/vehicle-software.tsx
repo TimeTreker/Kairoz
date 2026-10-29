@@ -12,7 +12,7 @@ import { dispatchToVehicle, fitOf } from '../engine/delivery.ts';
 import { pendingSoftwareUpdateOf } from '../engine/fleet.ts';
 import { compareVersions } from '../engine/release.ts';
 import { cancelVehicleSoftware, previewVehicleSoftware, requestVehicleSoftware } from '../engine/vehicle-software.ts';
-import type { Resource, State } from '../engine/types.ts';
+import type { Resource, SoftwareVersion, State } from '../engine/types.ts';
 import { useI18n } from '../i18n/i18n.tsx';
 import { issueLabel } from '../i18n/issues.ts';
 import { CHANGE_OUTCOME_LABELS, FOLLOW_REASON_LABELS, SOFTWARE_REQUEST_STATUS_COLORS, SOFTWARE_REQUEST_STATUS_LABELS } from '../i18n/vocab.ts';
@@ -33,11 +33,11 @@ export function useCanUpdateSoftware() {
   };
 }
 
-/** Versions the vehicle OTA system can put the vehicle on: PLM's, and working names PLM has not published yet. */
-function targetVersions(s: State, r: Resource): { version: string; planned: boolean }[] {
+/** Versions the vehicle OTA system can put the vehicle on: PLM's (its test builds included), and working names PLM has not published yet. */
+function targetVersions(s: State, r: Resource): { version: string; planned: boolean; test: SoftwareVersion['testOf'] | false }[] {
   return Object.values(s.softwareVersions)
     .filter((v) => v.vehicleModelId === r.vehicleModelId && v.version !== r.integrationVersion && !v.linkedTo)
-    .map((v) => ({ version: v.version, planned: v.status === 'PLANNED' }))
+    .map((v) => ({ version: v.version, planned: v.status === 'PLANNED', test: v.status === 'TESTING' && v.testOf }))
     .sort((a, b) => compareVersions(a.version, b.version));
 }
 
@@ -96,7 +96,16 @@ export function UpdateSoftwareModal({ workspaceId, resourceId, onClose }: { work
             placeholder={L('选择目标版本', 'Choose the target version')}
             value={version}
             onChange={setVersion}
-            options={targetVersions(state, r).map((v) => ({ value: v.version, label: v.planned ? L(`${r.vehicleModelId} ${v.version}（工作名，预发布软件）`, `${r.vehicleModelId} ${v.version} (working name, pre-release)`) : `${r.vehicleModelId} ${v.version}` }))}
+            options={targetVersions(state, r).map((v) => ({
+              value: v.version,
+              label: v.planned
+                ? L(`${r.vehicleModelId} ${v.version}（工作名，预发布软件）`, `${r.vehicleModelId} ${v.version} (working name, pre-release)`)
+                : v.test === null
+                  ? L(`${r.vehicleModelId} ${v.version}（整车测试版本，未关联征集）`, `${r.vehicleModelId} ${v.version} (test version, not linked to a call)`)
+                  : v.test
+                    ? L(`${r.vehicleModelId} ${v.version}（整车测试版本 · 工作名 ${v.test.workingName} 第 ${v.test.round} 轮）`, `${r.vehicleModelId} ${v.version} (test version · working name ${v.test.workingName}, round ${v.test.round})`)
+                    : `${r.vehicleModelId} ${v.version}`,
+            }))}
           />
           {preview && (
             <Alert
