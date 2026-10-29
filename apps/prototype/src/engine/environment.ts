@@ -9,7 +9,7 @@ import type { Env } from '../domain/vocabulary.ts';
 import { rule } from '../domain/errors.ts';
 import { newId } from '../domain/ids.ts';
 import type { Ctx } from './engine.ts';
-import { getResource, openOtaOf, pendingDeploymentOf, pendingImageChangeOf, pendingSoftwareUpdateOf, softwareKey } from './fleet.ts';
+import { getResource, isUnreleased, openOtaOf, pendingDeploymentOf, pendingImageChangeOf, pendingSoftwareUpdateOf } from './fleet.ts';
 import { applicableVersions } from './release.ts';
 import type { EnvironmentChange, Resource, State } from './types.ts';
 
@@ -42,7 +42,7 @@ export function environmentMoveProblems(s: State, r: Resource, to: Env): string[
       if (ws.kind === 'TEAM' && (s.workspaceResources[ws.id] ?? []).includes(r.id)) problems.push(`team workspace ${ws.name} uses it; production vehicles never serve team workspaces`);
     }
     if (!r.integrationVersion || r.softwareStatus !== 'CONSISTENT') problems.push('software version unknown');
-    else if (s.softwareVersions[softwareKey(r.vehicleModelId, r.integrationVersion)]?.status === 'PLANNED') problems.push(`runs planned software ${r.integrationVersion}, not released yet`);
+    else if (isUnreleased(s, r.vehicleModelId, r.integrationVersion)) problems.push(`runs software ${r.integrationVersion} PLM has not released yet`);
     else {
       const applied = r.appliedConfigId ? s.resolvedConfigs[r.appliedConfigId] : undefined;
       const release = applied?.kind === 'RELEASE' ? s.releases[applied.sourceId] : undefined;

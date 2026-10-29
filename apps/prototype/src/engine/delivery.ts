@@ -7,8 +7,9 @@
 
 import { authorize } from '../domain/authz.ts';
 import { rule } from '../domain/errors.ts';
+import { newId } from '../domain/ids.ts';
 import type { Actor, Ctx } from './engine.ts';
-import { getResource, livePublication, membersOf, publicationDispatches } from './fleet.ts';
+import { getResource, livePublication, membersOf, publicationDispatches, supersedeBaseline } from './fleet.ts';
 import { getGroup } from './org.ts';
 import { answerConfigRequest } from './ota.ts';
 import type { ConfigAnswer } from './ota.ts';
@@ -132,6 +133,48 @@ export function followGroup(ctx: Ctx, resourceId: string): string | null {
   target.pushedAt = ctx.now;
   const by = publicationDispatches(ctx.s, g)[0]?.dispatchedBy ?? feature.createdBy;
   return createFeatureDeployment(ctx, feature, p.commitId, fit.answer.configId!, g.env, [g.id], [target], 'GROUP_FOLLOW', by);
+}
+
+/**
+ * After an accepted report (system context): a vehicle of a test group with nothing under test runs
+ * the set mapped to its software (默认基线, e.g. the set a PLM test version references). When it
+ * runs anything else and nothing else is on its way to it, the cloud pushes that set now, credited
+ * to whoever last confirmed the mapping (else to whoever published the set).
+ */
+export function followBaseline(ctx: Ctx, resourceId: string): string | null {
+  const r = ctx.s.resources[resourceId];
+  const g = r && ctx.s.groupMembers[r.id] ? ctx.s.vehicleGroups[ctx.s.groupMembers[r.id]!] : undefined;
+  if (!r || !g || g.purpose !== 'TEST' || g.status !== 'ACTIVE' || closedGroup(ctx.s, g) || r.env !== 'testing') return null;
+  const answer = answerConfigRequest(ctx.s, r.id);
+  if (answer.reason !== 'LATEST_RELEASE' || !answer.configId || answer.configId === r.appliedConfigId) return null;
+  const waiting = Object.values(ctx.s.deployments).filter((d) => d.status === 'PENDING' && d.targets.some((t) => t.resourceId === r.id && t.status === 'PENDING'));
+  // Something else is on its way, or this very set already is.
+  if (waiting.some((d) => d.kind !== 'BASELINE' || d.resolvedConfigId === answer.configId)) return null;
+  // An earlier mapping's push the vehicle never confirmed: its software moved on since.
+  supersedeBaseline(ctx, r.id, 'the vehicle’s software maps to another set now');
+  const release = ctx.s.releases[ctx.s.resolvedConfigs[answer.configId]!.sourceId]!;
+  const confirmed = ctx.s.applicability.filter((a) => a.releaseId === release.id && a.version === r.integrationVersion && a.action === 'ADD' && a.by).sort((a, b) => b.seq - a.seq)[0];
+  const target = newTarget(ctx, r, g.id);
+  target.pushedAt = ctx.now;
+  const id = newId('dp');
+  ctx.s.deployments[id] = {
+    id,
+    kind: 'BASELINE',
+    workspaceId: g.workspaceId,
+    groupId: null,
+    subjectId: release.id,
+    commitId: null,
+    resolvedConfigId: answer.configId,
+    env: g.env,
+    status: 'PENDING',
+    vehicleGroupIds: [g.id],
+    targets: [target],
+    trigger: 'GROUP_FOLLOW',
+    dispatchedBy: confirmed?.by ?? release.publishedBy,
+    createdAt: ctx.now,
+    updatedAt: ctx.now,
+  };
+  return id;
 }
 
 /**

@@ -1,8 +1,8 @@
 {
-  "runAt": "2026-10-28T12:11:38.883Z",
+  "runAt": "2026-10-29T01:08:07.577Z",
   "layer": "engine",
   "counts": {
-    "PASS": 231,
+    "PASS": 233,
     "FAIL": 0,
     "GAP": 0,
     "BLOCKED": 0,
@@ -1813,8 +1813,8 @@
         },
         {
           "id": "IC04",
-          "title": "收齐后合并、DCL 确认，送测第一轮",
-          "actor": "integrator；dcl；integration_admin；resource",
+          "title": "PLM 出第 1 轮整车测试版本，关联后送测",
+          "actor": "PLM（模拟）；integration_admin；integrator；dcl；resource",
           "adaptation": null,
           "status": "PASS",
           "detail": null,
@@ -1840,7 +1840,7 @@
         },
         {
           "id": "IC07",
-          "title": "发布：策略集对应工作名，配置导出",
+          "title": "发布：策略集对应工作名，并引用到已关联的测试版本",
           "actor": "release / 孙立；resource",
           "adaptation": null,
           "status": "PASS",
@@ -1858,8 +1858,8 @@
         },
         {
           "id": "IC09",
-          "title": "PLM 发布 X89 1.2.0：按摘要关联工作名，量产车随包运行 1.1.0",
-          "actor": "PLM（模拟）；车辆模拟器 · VEH-201",
+          "title": "PLM 出第 2 轮测试版本：直接确认引用，测试车按映射取到 1.1.0",
+          "actor": "PLM（模拟）；integration_admin / 郑书杰；车辆模拟器 · VEH-031",
           "adaptation": null,
           "status": "PASS",
           "detail": null,
@@ -1867,8 +1867,8 @@
         },
         {
           "id": "IC10",
-          "title": "发布记录",
-          "actor": "integration_admin / 郑书杰",
+          "title": "第 2 轮通过：PLM 同号发布 1.2.0.2，量产车随包运行 1.1.0",
+          "actor": "PLM（模拟）；车辆模拟器 · VEH-201",
           "adaptation": null,
           "status": "PASS",
           "detail": null,
@@ -1876,6 +1876,15 @@
         },
         {
           "id": "IC11",
+          "title": "第 2 轮通过：PLM 同号发布 1.2.0.2，量产车随包运行 1.1.0",
+          "actor": "PLM（模拟）；车辆模拟器 · VEH-201",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "IC12",
           "title": "PLM 发布 1.2.1，复用同一个 DCL 件",
           "actor": "PLM（模拟）；release / 孙立",
           "adaptation": null,
@@ -2016,6 +2025,15 @@
           "id": "EX04",
           "title": "TSP 应为版本与车端实为版本",
           "actor": "TSP（模拟）；车辆模拟器；resource；release",
+          "adaptation": null,
+          "status": "PASS",
+          "detail": null,
+          "notes": []
+        },
+        {
+          "id": "EX05",
+          "title": "PLM 的整车测试版本：等征集关联，量产车不刷",
+          "actor": "PLM（模拟）；integration_admin / 郑书杰；release",
           "adaptation": null,
           "status": "PASS",
           "detail": null,

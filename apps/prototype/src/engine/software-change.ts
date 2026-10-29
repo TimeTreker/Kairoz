@@ -11,7 +11,7 @@ import { covered, policyCompatibility } from '../domain/compatibility.ts';
 import { conflict, notFound, rule } from '../domain/errors.ts';
 import { newId } from '../domain/ids.ts';
 import type { Actor, Ctx } from './engine.ts';
-import { afterSoftwareChange, isPlanned, recordSoftwareChange, softwareKey } from './fleet.ts';
+import { afterSoftwareChange, isUnreleased, recordSoftwareChange, softwareKey } from './fleet.ts';
 import { releaseDiff } from './release.ts';
 import { commitSnapshot, resolveFiles } from './snapshots.ts';
 import type { VersionItem } from '../domain/client-report.ts';
@@ -58,9 +58,9 @@ export function noteReportedSoftware(ctx: Ctx, resourceId: string, reported: str
     return;
   }
   if (reported === r.integrationVersion && r.softwareStatus === 'CONSISTENT') return;
-  // A production vehicle runs PLM-published software only: a working name it reports waits, like a
-  // version PLM has not published.
-  if (ctx.s.softwareVersions[softwareKey(r.vehicleModelId, reported)] && !(r.env === 'production' && isPlanned(ctx.s, r.vehicleModelId, reported))) {
+  // A production vehicle runs PLM-released software only: a working name or a test version it
+  // reports waits, like a version PLM has not published.
+  if (ctx.s.softwareVersions[softwareKey(r.vehicleModelId, reported)] && !(r.env === 'production' && isUnreleased(ctx.s, r.vehicleModelId, reported))) {
     const previous = r.integrationVersion;
     // After a partial or unknown stretch, the change starts from the last version the vehicle ran whole.
     const changeId = recordSoftwareChange(ctx, r, reported, 'CLIENT_REPORT', previous ?? lastWholeVersion(ctx.s, r));

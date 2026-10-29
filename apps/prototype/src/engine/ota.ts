@@ -11,7 +11,7 @@ import { directTargetProblems, livePublication, membersOf, openOtaOf, pendingDep
 
 export { openOtaOf };
 import { appliesTo, getRelease, releaseFor } from './release.ts';
-import type { Deployment, DeploymentTarget, Release, Resource, RolloutEvent, State } from './types.ts';
+import type { Deployment, DeploymentTarget, Release, Resource, RolloutEvent, State, VehicleGroup } from './types.ts';
 import { featureTarget, featureTargetDigest } from './validation.ts';
 
 /**
@@ -346,8 +346,9 @@ export interface ConfigAnswer {
   /**
    * HELD: a paused, cancelled or rolled-back rollout stops chasing newer configurations; the
    * vehicle keeps what it confirmed. TASK: a running rollout's fixed target. LATEST_RELEASE: the
-   * policy set in effect for the vehicle's software. GROUP_TARGET: what was published to a development
-   * or testing group, on the vehicle's own base. REPUBLISH: the vehicle's software or its set changed
+   * policy set in effect for the vehicle's software (a production vehicle, or a test group's
+   * vehicle with nothing under test: 默认基线). GROUP_TARGET: what was published to a development
+   * group, on the vehicle's own base, or the test a testing group is running. REPUBLISH: the vehicle's software or its set changed
    * since; UNKNOWN_SOFTWARE: the vehicle's software is unknown, so nothing was dispatched for it yet;
    * BASE_CONFLICT: the new base changed the Feature's own group; NO_BASE: no set applies to the
    * software and the group names no base. These keep the applied configuration until someone
@@ -356,6 +357,20 @@ export interface ConfigAnswer {
    */
   reason: 'HELD' | 'TASK' | 'LATEST_RELEASE' | 'GROUP_TARGET' | 'REPUBLISH' | 'UNKNOWN_SOFTWARE' | 'BASE_CONFLICT' | 'NO_BASE' | 'PERSONAL' | 'APPLIED' | 'INITIAL' | 'BLOCKED';
   detail: string | null;
+}
+
+/**
+ * Whether a vehicle group's own publication stands. A development group's Feature publication is
+ * checked elsewhere; a test group runs a candidate while it is under test and an unchanged set
+ * while its applicability check is open, then falls back to the set mapped to each vehicle's software.
+ */
+export function isTestRunning(s: State, g: VehicleGroup): boolean {
+  const p = g.publication;
+  if (!p || p.kind === 'FEATURE' || g.purpose !== 'TEST') return !!p;
+  if (p.kind === 'CANDIDATE') return ['CANDIDATE', 'TESTING', 'VERIFIED'].includes(s.candidates[p.candidateId]?.status ?? '');
+  return Object.values(s.deployments).some(
+    (d) => d.kind === 'APPLICABILITY' && d.vehicleGroupIds.includes(g.id) && d.resolvedConfigId === p.configId && ['OPEN', 'TESTING', 'VERIFIED'].includes(s.applicabilityChecks[d.subjectId]?.status ?? ''),
+  );
 }
 
 /** What the platform answers when a vehicle asks which configuration to run. */
@@ -382,8 +397,14 @@ export function answerConfigRequest(s: State, resourceId: string): ConfigAnswer 
     return resolved.release ? { configId: resolved.release.resolvedConfigId, reason: 'LATEST_RELEASE', detail: `policy set ${resolved.release.dclVersion}` } : { configId: null, reason: 'BLOCKED', detail: resolved.problem };
   }
   const group = s.groupMembers[r.id] ? s.vehicleGroups[s.groupMembers[r.id]!] : undefined;
-  // A Feature publication whose dispatches were all cancelled no longer stands.
-  const p = group?.publication?.kind === 'FEATURE' ? livePublication(s, group) : group?.publication;
+  // A Feature publication whose dispatches were all cancelled no longer stands; nor a test group's
+  // test that ended (its candidate released or cancelled, its applicability check closed).
+  const p = group?.publication?.kind === 'FEATURE' ? livePublication(s, group) : group && isTestRunning(s, group) ? group.publication : null;
+  if (group?.purpose === 'TEST' && !p) {
+    // Nothing under test: the vehicle runs the set mapped to its software (默认基线).
+    const resolved = releaseFor(s, r);
+    if (resolved.release) return { configId: resolved.release.resolvedConfigId, reason: 'LATEST_RELEASE', detail: `policy set ${resolved.release.dclVersion}` };
+  }
   if (group && p) {
     if (p.kind !== 'FEATURE') return { configId: p.configId, reason: 'GROUP_TARGET', detail: group.name };
     const feature = s.features[p.featureId];

@@ -4,6 +4,15 @@ import { migrate } from '../src/engine/migrate.ts';
 import { demoState } from '../src/engine/seed.ts';
 import { STATE_SCHEMA } from '../src/engine/types.ts';
 
+/**
+ * A demo without the test groups' pushes of the set mapped to their software (schema 26): a save
+ * from before schema 13 had no triggers, and its migration reads every dispatch as a person's.
+ */
+function withoutBaselines(demo: Record<string, any>): Record<string, any> {
+  for (const [id, d] of Object.entries(demo.deployments) as [string, any][]) if (d.kind === 'BASELINE') delete demo.deployments[id];
+  return demo;
+}
+
 /** A schema 20 save: a copy of a demo (today's by default) without the rollout logs schema 21 added. */
 function schema20(demo: unknown = demoState()): Record<string, any> {
   const s = JSON.parse(JSON.stringify(demo)) as Record<string, any>;
@@ -232,7 +241,7 @@ describe('saved state migration', () => {
   });
 
   test('a schema 12 save counts finished targets as pushed and gains empty loans and follows', () => {
-    const current = JSON.parse(JSON.stringify(demoState()));
+    const current = withoutBaselines(JSON.parse(JSON.stringify(demoState())));
     const migrated = migrate(schema12(current))!;
     assert.equal(migrated.schema, STATE_SCHEMA);
     assert.deepEqual([migrated.groupFollows, migrated.vehicleSoftwareRequests, migrated.loans, migrated.clockOffsetMs], [{}, {}, {}, 0]);
@@ -241,7 +250,7 @@ describe('saved state migration', () => {
   });
 
   test('a schema 11 save gains empty notification read marks', () => {
-    const current = JSON.parse(JSON.stringify(demoState()));
+    const current = withoutBaselines(JSON.parse(JSON.stringify(demoState())));
     const migrated = migrate(schema11(current))!;
     assert.equal(migrated.schema, STATE_SCHEMA);
     assert.deepEqual(migrated.notificationReads, {});
@@ -249,7 +258,7 @@ describe('saved state migration', () => {
   });
 
   test('a schema 10 save gains device software (a car runs what was recorded) and an empty change log', () => {
-    const current = JSON.parse(JSON.stringify(demoState()));
+    const current = withoutBaselines(JSON.parse(JSON.stringify(demoState())));
     const migrated = migrate(schema10(current))!;
     assert.equal(migrated.schema, STATE_SCHEMA);
     for (const [id, d] of Object.entries(migrated.devices)) {
@@ -261,7 +270,7 @@ describe('saved state migration', () => {
   });
 
   test('a schema 9 save pins old test results to the image the vehicle runs', () => {
-    const current = JSON.parse(JSON.stringify(demoState()));
+    const current = withoutBaselines(JSON.parse(JSON.stringify(demoState())));
     const migrated = migrate(schema9(current))!;
     assert.equal(migrated.schema, STATE_SCHEMA);
     for (const t of migrated.testRuns) assert.equal(t.imageId, migrated.resources[t.resourceId]!.imageId, t.id);
@@ -270,12 +279,31 @@ describe('saved state migration', () => {
   });
 
   test('a schema 8 save gains personal simulation defaults and keeps everything else', () => {
-    const current = JSON.parse(JSON.stringify(demoState()));
+    const current = withoutBaselines(JSON.parse(JSON.stringify(demoState())));
     const migrated = migrate(schema8(current))!;
     assert.equal(migrated.schema, STATE_SCHEMA);
     for (const r of Object.values(migrated.resources)) assert.equal(r.personal, null, r.id);
     for (const c of Object.values(migrated.resolvedConfigs)) assert.equal(c.draft, null, c.id);
     assert.deepEqual([migrated.personalCaptures, migrated.personalTests], [{}, {}]);
+    assert.deepEqual(migrated, current);
+  });
+
+  test('a schema 25 save reads PLM’s versions as released and links no test version', () => {
+    const current = JSON.parse(JSON.stringify(demoState()));
+    const old = JSON.parse(JSON.stringify(current));
+    old.schema = 25;
+    for (const v of old.plm.versions) {
+      delete v.stage;
+      delete v.releasedAt;
+    }
+    for (const v of Object.values(old.softwareVersions) as any[]) {
+      delete v.testOf;
+      delete v.issuedForTest;
+      delete v.releasedAt;
+    }
+    const migrated = migrate(old)!;
+    assert.equal(migrated.schema, STATE_SCHEMA);
+    assert.ok(migrated.plm.versions.every((v) => v.stage === 'RELEASED' && v.releasedAt === v.publishedAt));
     assert.deepEqual(migrated, current);
   });
 

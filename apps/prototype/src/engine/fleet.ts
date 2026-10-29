@@ -25,8 +25,14 @@ type ManifestInput = { signals: string[]; sources: { unit: string; directory: st
 
 export const softwareKey = (vehicleModelId: string, version: string) => `${vehicleModelId}::${version}`;
 
-/** Whether a version is an integration call's working name, not published by PLM yet (or linked to the PLM version that was). */
-export const isPlanned = (s: State, vehicleModelId: string, version: string) => s.softwareVersions[softwareKey(vehicleModelId, version)]?.status === 'PLANNED';
+/**
+ * Whether a version is software PLM has not released: an integration call's working name (or one
+ * linked to the PLM version that was), or a PLM test version. Production vehicles never run it.
+ */
+export const isUnreleased = (s: State, vehicleModelId: string, version: string) => {
+  const status = s.softwareVersions[softwareKey(vehicleModelId, version)]?.status;
+  return status === 'PLANNED' || status === 'TESTING';
+};
 
 /** A working name PLM has published is not chosen any more: the PLM version stands for it. */
 export function assertNotLinked(s: State, vehicleModelId: string, version: string): void {
@@ -42,7 +48,23 @@ export function getResource(s: State, id: string): Resource {
 
 /** A vehicle waits on at most one dispatch at a time. */
 export function pendingDeploymentOf(s: State, resourceId: string): string | undefined {
-  return Object.values(s.deployments).find((d) => d.status !== 'CANCELLED' && d.targets.some((t) => t.resourceId === resourceId && t.status === 'PENDING'))?.id;
+  // A test group's push of the set mapped to the vehicle's software holds nothing up: whatever is
+  // dispatched next replaces it (`supersedeBaseline`).
+  return Object.values(s.deployments).find((d) => d.kind !== 'BASELINE' && d.status !== 'CANCELLED' && d.targets.some((t) => t.resourceId === resourceId && t.status === 'PENDING'))?.id;
+}
+
+/** A vehicle no longer waits for the set mapped to its software: a dispatch replaced it, or it left its test group. */
+export function supersedeBaseline(ctx: Ctx, resourceId: string, reason: string): void {
+  for (const d of Object.values(ctx.s.deployments)) {
+    if (d.kind !== 'BASELINE' || d.status !== 'PENDING') continue;
+    const t = d.targets.find((x) => x.resourceId === resourceId && x.status === 'PENDING');
+    if (!t) continue;
+    t.status = 'CANCELLED';
+    t.error = reason;
+    t.updatedAt = ctx.now;
+    if (d.targets.every((x) => x.status !== 'PENDING')) d.status = 'CANCELLED';
+    d.updatedAt = ctx.now;
+  }
 }
 
 /** An unfinished OTA rollout the vehicle is still part of (queued, waiting or failed). */
@@ -605,6 +627,7 @@ export function leaveGroup(
 ): void {
   delete ctx.s.groupMembers[resourceId];
   delete ctx.s.groupFollows[resourceId];
+  supersedeBaseline(ctx, resourceId, 'the vehicle left its test group');
   groupEvent(ctx, vehicleGroupId, kind, resourceId, reason);
 }
 

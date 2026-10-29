@@ -331,7 +331,21 @@ function to25(s: Saved): void {
   s.schema = 25;
 }
 
-const STEPS: Record<number, (s: Saved) => void> = { 6: to7, 7: to8, 8: to9, 9: to10, 10: to11, 11: to12, 12: to13, 13: to14, 14: to15, 15: to16, 16: to17, 17: to18, 18: to19, 19: to20, 20: to21, 21: to22, 22: to23, 23: to24, 24: to25 };
+function to26(s: Saved): void {
+  const plm = s.plm as { versions?: Record<string, unknown>[] } | undefined;
+  for (const v of plm?.versions ?? []) {
+    v.stage = 'RELEASED';
+    v.releasedAt = v.publishedAt ?? null;
+  }
+  for (const v of Object.values((s.softwareVersions ?? {}) as Record<string, Record<string, unknown>>)) {
+    v.testOf = null;
+    v.issuedForTest = false;
+    v.releasedAt = v.status === 'RECORDED' ? (v.createdAt ?? null) : null;
+  }
+  s.schema = 26;
+}
+
+const STEPS: Record<number, (s: Saved) => void> = { 6: to7, 7: to8, 8: to9, 9: to10, 10: to11, 11: to12, 12: to13, 13: to14, 14: to15, 15: to16, 16: to17, 17: to18, 18: to19, 19: to20, 20: to21, 21: to22, 22: to23, 23: to24, 24: to25, 25: to26 };
 
 /** Why `migrate` cannot read a save: not a platform state, older than the oldest readable schema, or from a newer version. */
 export function unreadableReason(raw: unknown): 'NOT_STATE' | 'TOO_OLD' | 'NEWER' | null {

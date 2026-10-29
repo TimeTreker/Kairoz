@@ -13,11 +13,12 @@ import type { Domain, Scope } from '../domain/vocabulary.ts';
 import { todayOf } from './clock.ts';
 import type { Ctx } from './engine.ts';
 import { softwareKey } from './fleet.ts';
+import { inheritSets } from './plm-sync.ts';
 import { closeCandidate, collectibleSubsystems, defaultScope, isCollectible, isMergeWorkspace, previewMerge, verifiedSources } from './integration.ts';
 import { getWorkspace } from './org.ts';
 import { compareVersions, setInEffect } from './release.ts';
 import { partVersion } from './types.ts';
-import type { Candidate, CallModule, CallModuleEvent, DclModule, DclPart, IntegrationCall, MergePlan, SoftwareVersion, State } from './types.ts';
+import type { Candidate, CallModule, CallModuleEvent, DclModule, DclPart, IntegrationCall, MergePlan, Release, SoftwareVersion, State } from './types.ts';
 
 const VERSION = /^[0-9]+(\.[0-9]+){0,3}$/;
 const CLIENT_VERSION = /^[0-9]+(\.[0-9]+){1,3}$/;
@@ -25,15 +26,16 @@ const DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 /** A call's target is a working name (工作名) for software PLM has not published yet. */
 function assertWorkingName(s: State, vehicleModelId: string, target: string): void {
-  if (s.softwareVersions[softwareKey(vehicleModelId, target)]?.status === 'RECORDED') {
-    throw rule('TARGET_RECORDED', `PLM already published ${vehicleModelId} ${target}; a call targets a working name for new software`);
+  const status = s.softwareVersions[softwareKey(vehicleModelId, target)]?.status;
+  if (status === 'RECORDED' || status === 'TESTING') {
+    throw rule('TARGET_RECORDED', `PLM already issued ${vehicleModelId} ${target}; a call targets a working name for new software`);
   }
 }
 
 /** The working name of a call's target, planned until PLM publishes the software. */
 function plannedVersion(ctx: Ctx, vehicleModelId: string, version: string, callId: string, manifest: SoftwareVersion['manifest']): SoftwareVersion {
   const by = ctx.user().username;
-  return { vehicleModelId, version, source: '', manifest, status: 'PLANNED', callId, dclModule: null, moduleLog: [], plannedBy: by, plannedAt: ctx.now, recordedBy: by, createdAt: ctx.now, dclPart: null, workingName: null, linkedTo: null };
+  return { vehicleModelId, version, source: '', manifest, status: 'PLANNED', callId, dclModule: null, moduleLog: [], plannedBy: by, plannedAt: ctx.now, recordedBy: by, createdAt: ctx.now, dclPart: null, workingName: null, linkedTo: null, testOf: null, issuedForTest: false, releasedAt: null };
 }
 
 export function getCall(s: State, id: string): IntegrationCall {
@@ -149,6 +151,10 @@ function allowManage(ctx: Ctx, call: Pick<IntegrationCall, 'id' | 'workspaceId' 
 
 function assertOpen(call: IntegrationCall): void {
   if (call.status !== 'OPEN') throw rule('CALL_CLOSED', `the call for ${call.targetVersion} is closed`);
+}
+
+function assertOpenOrReleased(call: IntegrationCall): void {
+  if (call.status !== 'OPEN' && call.status !== 'RELEASED') throw rule('CALL_CLOSED', `the call for ${call.targetVersion} is closed`);
 }
 
 function event(ctx: Ctx, kind: CallModuleEvent['kind'], note: string | null, x: Partial<Pick<CallModuleEvent, 'featureId' | 'commitId' | 'subsystemReleaseId'>> = {}): CallModuleEvent {
@@ -611,6 +617,9 @@ export function plannedVersionProblems(s: State, c: Candidate, versions: string[
   }
   const planned = versions.filter((v) => s.softwareVersions[softwareKey(c.vehicleModelId, v)]?.status === 'PLANNED' && v !== call?.targetVersion);
   if (planned.length) return { code: 'VERSION_PLANNED', message: 'planned versions are listed only by their own call’s release', issues: planned.map((v) => `${c.vehicleModelId} ${v}`) };
+  // A test version references its call's sets; no release lists it.
+  const testing = versions.filter((v) => s.softwareVersions[softwareKey(c.vehicleModelId, v)]?.status === 'TESTING');
+  if (testing.length) return { code: 'VERSION_IN_TEST', message: 'PLM test versions reference the sets of the call they are linked to; list the working name', issues: testing.map((v) => `${c.vehicleModelId} ${v}`) };
   return null;
 }
 
@@ -629,6 +638,8 @@ export function onCallReleased(ctx: Ctx, c: Candidate, releaseId: string): void 
     sv.dclModule = moduleOf(ctx, releaseId);
     sv.moduleLog.push({ ...sv.dclModule });
   }
+  // The call's test versions are builds of the working name: they reference the new set with it.
+  for (const t of testVersionsOf(ctx.s, call)) inheritSets(ctx, call.vehicleModelId, call.targetVersion, t.version, `released with ${call.targetVersion}`, ctx.user().username);
   closeReleased(ctx, call, c.id);
   call.releaseId = releaseId;
   closeChildren(ctx, call, `the whole-vehicle call was released`);
@@ -703,6 +714,83 @@ function closeReleased(ctx: Ctx, call: IntegrationCall, candidateId: string): vo
   call.status = 'RELEASED';
   call.closedBy = ctx.user().username;
   call.closedAt = ctx.now;
+}
+
+/** The PLM test versions linked to a call (整车测试版本), by round. */
+export function testVersionsOf(s: State, call: Pick<IntegrationCall, 'id' | 'vehicleModelId'>): (SoftwareVersion & { testOf: NonNullable<SoftwareVersion['testOf']> })[] {
+  return Object.values(s.softwareVersions)
+    .filter((v): v is SoftwareVersion & { testOf: NonNullable<SoftwareVersion['testOf']> } => v.vehicleModelId === call.vehicleModelId && v.testOf?.callId === call.id)
+    .sort((a, b) => a.testOf.round - b.testOf.round);
+}
+
+/** The whole-vehicle software the test vehicles ran when a round's candidate was tested (整车版本), oldest first. */
+export function roundSoftware(s: State, candidateId: string): string[] {
+  const versions = s.testRuns.filter((t) => t.subjectKind === 'CANDIDATE' && t.subjectId === candidateId && t.integrationVersion).map((t) => t.integrationVersion!);
+  return [...new Set(versions)].sort(compareVersions);
+}
+
+/** PLM test versions of a model no call has linked yet, newest first. */
+export function unlinkedTestVersions(s: State, vehicleModelId: string): SoftwareVersion[] {
+  return Object.values(s.softwareVersions)
+    .filter((v) => v.vehicleModelId === vehicleModelId && v.status === 'TESTING' && !v.testOf)
+    .sort((a, b) => compareVersions(b.version, a.version));
+}
+
+/**
+ * What linking another test version to the call references: the set in effect for its working name
+ * (none before the call is released), and the set the previous round referenced, when it differs.
+ */
+export function nextTestReference(s: State, call: IntegrationCall): { set: Release | null; changedFrom: Release | null; previousRound: number | null } {
+  const set = setInEffect(s, call.vehicleModelId, call.targetVersion);
+  const previous = testVersionsOf(s, call).at(-1);
+  const before = previous ? setInEffect(s, call.vehicleModelId, previous.version) : null;
+  return { set, changedFrom: set && before && before.id !== set.id ? before : null, previousRound: previous?.testOf.round ?? null };
+}
+
+/** Whether a call can still take test versions: a whole-vehicle call, open or released, whose working name PLM has not released yet. */
+export function takesTestVersions(s: State, call: IntegrationCall): boolean {
+  if (call.scope !== 'Vehicle' || (call.status !== 'OPEN' && call.status !== 'RELEASED')) return false;
+  return !s.softwareVersions[softwareKey(call.vehicleModelId, call.targetVersion)]?.linkedTo;
+}
+
+/**
+ * The integration admin links a PLM test version to the call as its next whole-vehicle test round
+ * (整车第 n 轮). It is a build of the call's working name from then on. Once the call is released,
+ * the link also confirms the reference: the test version takes the sets that apply to the working
+ * name (直接确认引用), noting whether the set changed since the previous round. Before the release,
+ * the call's release references it.
+ */
+export function linkTestVersion(ctx: Ctx, callId: string, version: string): void {
+  const call = getCall(ctx.s, callId);
+  allowManage(ctx, call);
+  if (call.scope !== 'Vehicle') throw rule('NOT_VEHICLE_CALL', 'whole-vehicle test versions are linked to the whole-vehicle call');
+  assertOpenOrReleased(call);
+  const w = ctx.s.softwareVersions[softwareKey(call.vehicleModelId, call.targetVersion)];
+  if (w?.linkedTo) throw rule('WORKING_NAME_LINKED', `${call.vehicleModelId} ${call.targetVersion} is published by PLM as ${w.linkedTo}`);
+  const v = ctx.s.softwareVersions[softwareKey(call.vehicleModelId, version.trim())];
+  if (!v) throw notFound('software version', version);
+  if (v.status !== 'TESTING') throw rule('NOT_A_TEST_VERSION', `${call.vehicleModelId} ${v.version} is not a PLM test version`);
+  if (v.testOf) throw conflict('TEST_VERSION_LINKED', `${call.vehicleModelId} ${v.version} is round ${v.testOf.round} of working name ${v.testOf.workingName}`);
+  const ref = nextTestReference(ctx.s, call);
+  v.testOf = { workingName: call.targetVersion, callId: call.id, round: (ref.previousRound ?? 0) + 1, linkedBy: ctx.user().username, linkedAt: ctx.now };
+  if (!v.manifest && w?.manifest) v.manifest = { signals: [...w.manifest.signals], sources: w.manifest.sources.map((x) => ({ ...x })) };
+  if (ref.set) {
+    const reason = ref.changedFrom ? `reference ${call.targetVersion} changed ${ref.changedFrom.dclVersion} ${ref.set.dclVersion}` : `reference ${call.targetVersion}`;
+    inheritSets(ctx, call.vehicleModelId, call.targetVersion, v.version, reason, ctx.user().username);
+  }
+}
+
+/**
+ * How an applicability record that references a working name's sets reads: a test version linked
+ * after the release (unchanged, or changed since the previous round), one referenced by the
+ * release, or a PLM version linked from its working name. Null for any other record.
+ */
+export function referenceReason(reason: string): { kind: 'CONFIRMED' | 'CHANGED' | 'RELEASED' | 'LINKED'; workingName: string; from: string | null; to: string | null } | null {
+  const changed = /^reference (\S+) changed (\S+) (\S+)$/.exec(reason);
+  if (changed) return { kind: 'CHANGED', workingName: changed[1]!, from: changed[2]!, to: changed[3]! };
+  const m = /^(reference|released with|working name) (\S+)$/.exec(reason);
+  if (!m) return null;
+  return { kind: m[1] === 'reference' ? 'CONFIRMED' : m[1] === 'released with' ? 'RELEASED' : 'LINKED', workingName: m[2]!, from: null, to: null };
 }
 
 /** Calls whose module this workspace answers and has not yet: the to-dos of its submitters. */

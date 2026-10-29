@@ -1,10 +1,10 @@
 # 验收结果（引擎层逐幕回放）
 
-运行时间：2026-10-28T12:11:38.883Z。由 `npm run acceptance` 生成；每次重新执行，不沿用历史结果。
+运行时间：2026-10-29T01:08:07.577Z。由 `npm run acceptance` 生成；每次重新执行，不沿用历史结果。
 
 状态：PASS 通过；FAIL 失败；GAP 设计要求尚未实现；BLOCKED 前置幕未通过；NOT_APPLICABLE 浏览器原型不适用（如服务端部署）。
 
-合计：PASS 231 · FAIL 0 · GAP 0 · BLOCKED 0 · NOT_APPLICABLE 3 · NOT_WRITTEN 0
+合计：PASS 233 · FAIL 0 · GAP 0 · BLOCKED 0 · NOT_APPLICABLE 3 · NOT_WRITTEN 0
 
 ## 从零启动 · 角色协作
 
@@ -292,14 +292,15 @@
 | IC01 集成管理员为 X89 1.2 发起集成征集 | integration_admin / 郑书杰 · 工作区管理员 | PASS |  |
 | IC02 叶子模块由本组研发提交 | steering；business；integrator；integration_admin | PASS |  |
 | IC03 上层模块：ADC 开子征集，CDC 直接答复 | adc_integrator；adc_parking；adc_system；cdc_integrator | PASS |  |
-| IC04 收齐后合并、DCL 确认，送测第一轮 | integrator；dcl；integration_admin；resource | PASS |  |
+| IC04 PLM 出第 1 轮整车测试版本，关联后送测 | PLM（模拟）；integration_admin；integrator；dcl；resource | PASS |  |
 | IC05 第一轮不通过：退回转向组 | integration_tester；integration_admin；steering；steering_tester | PASS |  |
 | IC06 第二轮通过 | integrator；dcl；integration_tester | PASS |  |
-| IC07 发布：策略集对应工作名，配置导出 | release / 孙立；resource | PASS |  |
+| IC07 发布：策略集对应工作名，并引用到已关联的测试版本 | release / 孙立；resource | PASS |  |
 | IC08 DCL 导出 DCL 件，交给 PLM | dcl / 林书涵 | PASS |  |
-| IC09 PLM 发布 X89 1.2.0：按摘要关联工作名，量产车随包运行 1.1.0 | PLM（模拟）；车辆模拟器 · VEH-201 | PASS |  |
-| IC10 发布记录 | integration_admin / 郑书杰 | PASS |  |
-| IC11 PLM 发布 1.2.1，复用同一个 DCL 件 | PLM（模拟）；release / 孙立 | PASS |  |
+| IC09 PLM 出第 2 轮测试版本：直接确认引用，测试车按映射取到 1.1.0 | PLM（模拟）；integration_admin / 郑书杰；车辆模拟器 · VEH-031 | PASS |  |
+| IC10 第 2 轮通过：PLM 同号发布 1.2.0.2，量产车随包运行 1.1.0 | PLM（模拟）；车辆模拟器 · VEH-201 | PASS |  |
+| IC11 第 2 轮通过：PLM 同号发布 1.2.0.2，量产车随包运行 1.1.0 | PLM（模拟）；车辆模拟器 · VEH-201 | PASS |  |
+| IC12 PLM 发布 1.2.1，复用同一个 DCL 件 | PLM（模拟）；release / 孙立 | PASS |  |
 | N01 反向：越权与已结束的征集 | cdc_integrator；steering；integration_tester；release；integration_admin | PASS |  |
 
 ## 多车型独立发布
@@ -324,6 +325,7 @@
 | EX02 PLM 版本带了平台不认识的 DCL 件 | PLM（模拟）；release / 孙立；dcl / 林书涵 | PASS |  |
 | EX03 车辆资源从 TSP 登记车辆 | resource / 刘子衡；车辆模拟器 | PASS |  |
 | EX04 TSP 应为版本与车端实为版本 | TSP（模拟）；车辆模拟器；resource；release | PASS |  |
+| EX05 PLM 的整车测试版本：等征集关联，量产车不刷 | PLM（模拟）；integration_admin / 郑书杰；release | PASS |  |
 | N01 反向：车型不符、重复登记、越权、PLM 版本号重复 | resource；business；PLM（模拟） | PASS |  |
 
 ## 反向用例 T-N01–T-N24

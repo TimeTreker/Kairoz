@@ -66,6 +66,7 @@ export const NOTIFICATION_CATEGORY: Record<NotificationKind, string> = {
   CALL_RETURNED: 'INTEGRATION',
   CALL_COMPLETE: 'INTEGRATION',
   CALL_WAITING: 'INTEGRATION',
+  TEST_VERSION_UNLINKED: 'INTEGRATION',
 };
 
 export function useCategoryLabels(): Record<string, string> {
@@ -140,6 +141,11 @@ export function useNotificationText() {
         return { title: L(`集成征集 ${s} 已收齐`, `Integration call ${s} is complete`), body: L('可以生成集成预览，确认后送测。', 'Preview the merge, then send it to testing.') };
       case 'CALL_WAITING':
         return { title: L(`集成征集 ${s} 还没收齐`, `Integration call ${s} is not complete`), body: d ? L(`未提交：${d}`, `Waiting for: ${d}`) : L('有提交已失效，需要重新提交。', 'Some submissions changed and must be submitted again.') };
+      case 'TEST_VERSION_UNLINKED':
+        return {
+          title: L(`PLM 出了整车测试版本 ${d}，还没关联到征集`, `PLM issued test version(s) ${d}, not linked to a call yet`),
+          body: L(`在集成征集 ${s} 里关联为整车的下一轮；征集已发布的，关联即确认引用当前策略集。`, `Link it in integration call ${s} as the next whole-vehicle round; once the call is released, linking confirms the reference to the set in effect.`),
+        };
       case 'CANDIDATE_TO_TEST':
         return { title: L(`集成候选 ${s} 等待验证`, `Candidate ${s} waits for testing`), body: L('只使用测试环境的集成车辆。', 'Testing-environment integration vehicles only.') };
       case 'CHECK_TO_TEST':
@@ -191,13 +197,16 @@ export function useNotificationText() {
           OPEN: L('TSP 记录的应为版本：适用性确认已开启，确认适用后车辆到达即可下发。', 'The version TSP says they should run: an applicability check is open; once it is confirmed, the vehicles get a set on arrival.'),
           PLANNED: L('TSP 记录的应为版本是一个工作名：PLM 还没发布它，量产车不会运行它。请与 TSP 或整车 OTA 核对版本号。', 'The version TSP holds is a working name PLM has not published; production vehicles never run it. Check the number with TSP or the vehicle OTA program.'),
           LINKED: L(`TSP 记录的应为版本是工作名，PLM 已把它发布为 ${linked}：请让 TSP 或整车 OTA 改用 ${linked}。`, `The version TSP holds is a working name PLM published as ${linked}: have TSP or the vehicle OTA program use ${linked}.`),
+          TESTING: L('TSP 记录的应为版本是 PLM 的整车测试版本：量产车只运行 PLM 已发布的软件。请与 TSP 或整车 OTA 核对版本号。', 'The version TSP holds is a PLM test version; production vehicles run released software only. Check the number with TSP or the vehicle OTA program.'),
           UNKNOWN: L('PLM 没有这个版本：请与 TSP 或整车 OTA 核对版本号；PLM 发布后再开启适用性确认。', 'PLM has no such version: check the number with TSP or the vehicle OTA program, and open an applicability check once PLM publishes it.'),
         };
         const workingName = why === 'PLANNED' || why === 'LINKED';
         return {
           title: workingName
             ? L(`${count} 辆量产车将升到工作名 ${s}`, `${count} production vehicle(s) are to move to working name ${s}`)
-            : L(`${count} 辆量产车将升到 ${s}，它还没有适用的策略集`, `${count} production vehicle(s) are to move to ${s}, which no policy set applies to yet`),
+            : why === 'TESTING'
+              ? L(`${count} 辆量产车将升到测试版本 ${s}`, `${count} production vehicle(s) are to move to test version ${s}`)
+              : L(`${count} 辆量产车将升到 ${s}，它还没有适用的策略集`, `${count} production vehicle(s) are to move to ${s}, which no policy set applies to yet`),
           body: bodies[why ?? ''] ?? bodies.CHECK!,
         };
       }
@@ -213,6 +222,8 @@ export function useNotificationText() {
       }
       case 'UNRECORDED_SOFTWARE': {
         const [reported, linked] = d.split(' → ');
+        const test = state.softwareVersions[`${state.resources[s]?.vehicleModelId}::${reported}`]?.status === 'TESTING';
+        if (test) return { title: L(`量产车 ${s} 上报了整车测试版本 ${reported}`, `Production vehicle ${s} reported test version ${reported}`), body: L('测试包不应到量产车：平台不认这份上报，请与整车 OTA 核对；PLM 同号发布后才生效。', 'A test build should never reach a production vehicle: the platform does not take this report; check with the vehicle OTA program. It counts only if PLM releases that number.') };
         return linked
           ? { title: L(`${s} 上报了工作名 ${reported}`, `${s} reported the working name ${reported}`), body: L(`PLM 已把它发布为 ${linked}；请为车辆刷写 ${linked}。`, `PLM published it as ${linked}; flash the vehicle with ${linked}.`) }
           : { title: L(`${s} 上报了 PLM 未发布的软件版本`, `${s} reported a version PLM has not published`), body: L(`${reported} 不在 PLM 的发布记录里；PLM 发布并同步后，这份上报即生效。`, `${reported} is not in PLM's record; once PLM publishes it and the platform syncs, this report takes effect.`) };

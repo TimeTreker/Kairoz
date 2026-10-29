@@ -8,7 +8,7 @@ import type { PolicyCompatibility } from '../domain/compatibility.ts';
 import { conflict, notFound, rule } from '../domain/errors.ts';
 import { newId } from '../domain/ids.ts';
 import type { Ctx } from './engine.ts';
-import { directTargetProblems, membersOf, occupancyProblems, pendingDeploymentOf, pendingImageChangeOf, recordGroupBinding, softwareKey } from './fleet.ts';
+import { directTargetProblems, membersOf, occupancyProblems, pendingDeploymentOf, pendingImageChangeOf, recordGroupBinding, softwareKey, supersedeBaseline } from './fleet.ts';
 import { mainlineRelease } from './config.ts';
 import { appliesTo, getRelease, releasesOf, setInEffect, supersedeMovedPlans, takeOverProblem } from './release.ts';
 import { commitSnapshot, resolveFiles } from './snapshots.ts';
@@ -116,6 +116,9 @@ export function openApplicabilityCheck(ctx: Ctx, input: { releaseId: string; ver
   if (ctx.s.softwareVersions[softwareKey(release.vehicleModelId, version)]!.status === 'PLANNED') {
     throw rule('VERSION_PLANNED', `${release.vehicleModelId} ${version} is planned by an integration call; its policy set comes from that call`);
   }
+  if (ctx.s.softwareVersions[softwareKey(release.vehicleModelId, version)]!.status === 'TESTING') {
+    throw rule('VERSION_IN_TEST', `${release.vehicleModelId} ${version} is a PLM test version; it references the sets of the call it is linked to`);
+  }
   if (appliesTo(ctx.s, release, version)) throw rule('ALREADY_APPLIES', `policy set ${release.dclVersion} already applies to ${version}`);
   const problem = takeOverProblem(ctx.s, release, version);
   if (problem) throw rule(problem.code, problem.message);
@@ -177,6 +180,7 @@ export function dispatchApplicability(ctx: Ctx, checkId: string, input: { vehicl
   for (const vgId of vehicleGroupIds) recordGroupBinding(ctx, vgId, { kind: 'RELEASE', releaseId: release.id, configId: release.resolvedConfigId });
   for (const m of members) {
     delete ctx.s.groupFollows[m.resourceId];
+    supersedeBaseline(ctx, m.resourceId, `replaced by ${id}`);
     const existing = ctx.s.testTargets.find((t) => t.subjectId === check.id && t.resourceId === m.resourceId);
     if (existing) existing.deploymentId = id;
     else ctx.s.testTargets.push({ subjectKind: 'APPLICABILITY', subjectId: check.id, versionId: check.id, resourceId: m.resourceId, deploymentId: id });

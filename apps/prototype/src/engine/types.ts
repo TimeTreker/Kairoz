@@ -11,7 +11,7 @@ import type { FileType, Privacy } from '../domain/file-types.ts';
 import type { ReviewControls } from '../domain/intake.ts';
 import type { Domain, Env, GroupPurpose, Role, Scope, WorkspaceKind } from '../domain/vocabulary.ts';
 
-export const STATE_SCHEMA = 25;
+export const STATE_SCHEMA = 26;
 
 export interface Account {
   username: string;
@@ -368,9 +368,11 @@ export interface SoftwareVersion {
    * PLANNED: an integration call's working name (工作名, 规划版本). Development and testing vehicles
    * may run its pre-release builds; production vehicles never do, and only that call's release may
    * list it. It stays planned after the release and is linked once PLM publishes the software.
-   * RECORDED: a version PLM published.
+   * TESTING: a test version PLM issued for one integration test round (整车测试版本); development
+   * and testing vehicles run it, production vehicles never do. PLM releases the passing round under
+   * the same number. RECORDED: a version PLM published.
    */
-  status: 'PLANNED' | 'RECORDED';
+  status: 'PLANNED' | 'TESTING' | 'RECORDED';
   /** The integration call that planned (and, once released, produced) it; null when recorded from outside. */
   callId: string | null;
   /** The DCL configuration module bundled into this version's vehicle OTA package; null when none. */
@@ -392,6 +394,25 @@ export interface SoftwareVersion {
   workingName: string | null;
   /** A working name PLM has published: the PLM version it is linked to. */
   linkedTo: string | null;
+  /**
+   * A PLM test version the integration admin linked to a call (整车第 n 轮): it is a build of that
+   * call's working name, and references the sets that apply to the working name. Kept once PLM
+   * releases it.
+   */
+  testOf: TestVersionLink | null;
+  /** PLM issued it as an integration test version first (it may have been released since). */
+  issuedForTest: boolean;
+  /** When the platform learned PLM released it; null while planned or a test version. */
+  releasedAt: string | null;
+}
+
+export interface TestVersionLink {
+  workingName: string;
+  callId: string;
+  /** 1 for the first test version linked to the call. */
+  round: number;
+  linkedBy: string;
+  linkedAt: string;
 }
 
 /**
@@ -725,11 +746,12 @@ export interface RolloutEvent {
 
 /**
  * One dispatch of a fixed configuration to a frozen list of vehicles. APPLICABILITY: an unchanged
- * set tested on vehicles running a software version it does not list yet.
+ * set tested on vehicles running a software version it does not list yet. BASELINE: a vehicle of a
+ * test group with nothing under test was pushed the set mapped to its software (按版本映射).
  */
 export interface Deployment {
   id: string;
-  kind: 'FEATURE' | 'CANDIDATE' | 'APPLICABILITY' | 'OTA' | 'PERSONAL';
+  kind: 'FEATURE' | 'CANDIDATE' | 'APPLICABILITY' | 'OTA' | 'PERSONAL' | 'BASELINE';
   workspaceId: string;
   groupId: string | null;
   subjectId: string;
@@ -1460,7 +1482,12 @@ export interface PlmVersion {
   modules: { name: string; version: string }[];
   /** The DCL part in the version's BOM; null when the version carries none. */
   dclPart: Pick<DclPart, 'clientVersion' | 'setVersion' | 'digest'> | null;
+  /** TEST: issued for an integration test round; RELEASED: published (a passing round keeps its number). */
+  stage: 'TEST' | 'RELEASED';
+  /** When PLM issued the number. */
   publishedAt: string;
+  /** When PLM released it; null while it is a test version. */
+  releasedAt: string | null;
 }
 
 /** The company directory (prototype only, like HR or LDAP). The platform reads it only by syncing. */

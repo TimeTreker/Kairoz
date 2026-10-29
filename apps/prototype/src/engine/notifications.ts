@@ -6,14 +6,14 @@
 import { authorize } from '../domain/authz.ts';
 import type { Role } from '../domain/vocabulary.ts';
 import { blockedProductionVehicles, isOpenCheck } from './applicability.ts';
-import { callPhase, callProblems, callsFor, isOverdueCall, moduleName, waitingModules } from './calls.ts';
+import { callPhase, callProblems, callsFor, isOverdueCall, moduleName, takesTestVersions, unlinkedTestVersions, waitingModules } from './calls.ts';
 import { usageOf } from './budget.ts';
 import { DAY_MS, nowOf } from './clock.ts';
 import { mismatchesFor } from './delivery.ts';
 import type { Actor, Ctx } from './engine.ts';
 import { emergencyStopsOf } from './emergency.ts';
 import { carriesData } from './events.ts';
-import { isOverdue, managedResources, softwareKey, workspaceVehicles } from './fleet.ts';
+import { isOverdue, isUnreleased, managedResources, softwareKey, workspaceVehicles } from './fleet.ts';
 import { workspaceAccess } from './identity.ts';
 import { intakeQueue } from './intake.ts';
 import { isConfirmed, isMergeWorkspace, verifiedSources } from './integration.ts';
@@ -77,7 +77,8 @@ export type NotificationKind =
   | 'CALL_SUBMIT'
   | 'CALL_RETURNED'
   | 'CALL_COMPLETE'
-  | 'CALL_WAITING';
+  | 'CALL_WAITING'
+  | 'TEST_VERSION_UNLINKED';
 
 export interface Notification {
   /** Role, kind, object and state: stable while nothing changes, new when the state does. */
@@ -326,6 +327,15 @@ export function notificationsFor(s: State, actor: Actor, workspaceId: string): N
       }
     }
   }
+  // PLM issued test versions no call has linked yet: the call's admin says which round they are.
+  for (const call of callsFor(s, workspaceId).filter((c) => c.workspaceId === workspaceId && takesTestVersions(s, c))) {
+    const manager = (['WORKSPACE_ADMIN', 'CONFIG_INTEGRATOR'] as const).find((r) => has(r) && authorize(actor.grants, 'call.manage', { workspaceId, scope: call.scope }).ok);
+    const unlinked = unlinkedTestVersions(s, call.vehicleModelId);
+    if (manager && unlinked.length) {
+      const versions = unlinked.map((v) => v.version);
+      add(manager, 'TEST_VERSION_UNLINKED', [call.id, versions.join(',')], { severity: 'INFO', subject: call.title, detail: versions.join(', '), link: `versions/calls/${call.id}`, at: unlinked[0]!.createdAt });
+    }
+  }
   if (has('CONFIG_INTEGRATOR') && isMergeWorkspace(s, workspaceId)) {
     for (const f of verifiedSources(s, workspaceId)) {
       add('CONFIG_INTEGRATOR', 'FEATURE_COLLECTIBLE', [f.id, f.verifiedCommitId], { severity: 'INFO', subject: f.name, detail: s.groups[f.groupId]?.code ?? f.groupId, link: 'integration/merge', at: f.updatedAt });
@@ -368,15 +378,15 @@ export function notificationsFor(s: State, actor: Actor, workspaceId: string): N
         if (r.vehicleModelId !== ws.vehicleModelId || r.env !== 'production' || r.status === 'RETIRED' || !target || target === r.integrationVersion) continue;
         const reported = reportedSoftware(s, r);
         if (reported && !reported.partial && reported.version === target) continue;
-        // A working name is never production software, whatever set its call released.
-        const planned = s.softwareVersions[softwareKey(r.vehicleModelId, target)]?.status === 'PLANNED';
+        // A working name or a test build is never production software, whatever set its call released.
+        const planned = isUnreleased(s, r.vehicleModelId, target);
         if (planned || !setInEffect(s, r.vehicleModelId, target)) coming.set(target, (coming.get(target) ?? 0) + 1);
       }
       for (const [version, count] of coming) {
         // What release can do about it: a check when PLM published the version; otherwise TSP's number needs a look.
         const sv = s.softwareVersions[softwareKey(ws.vehicleModelId, version)];
         const open = Object.values(s.applicabilityChecks).some((c) => c.vehicleModelId === ws.vehicleModelId && c.version === version && isOpenCheck(c));
-        const why = !sv ? 'UNKNOWN' : sv.linkedTo ? 'LINKED' : sv.status === 'PLANNED' ? 'PLANNED' : open ? 'OPEN' : 'CHECK';
+        const why = !sv ? 'UNKNOWN' : sv.linkedTo ? 'LINKED' : sv.status === 'PLANNED' ? 'PLANNED' : sv.status === 'TESTING' ? 'TESTING' : open ? 'OPEN' : 'CHECK';
         add('CONFIG_RELEASE', 'EXPECTED_WITHOUT_SET', [version, count, why], { severity: 'WARNING', subject: `${ws.vehicleModelId} ${version}`, detail: `${count}|${why}|${sv?.linkedTo ?? ''}`, link: 'release/applicability', at: null });
       }
       for (const c of (s.plmSync.conflicts ?? []).filter((x) => x.vehicleModelId === ws.vehicleModelId)) {

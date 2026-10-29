@@ -70,11 +70,18 @@ export function versionsInEffect(s: State, release: Release): string[] {
   return applicableVersions(s, release).filter((v) => setInEffect(s, release.vehicleModelId, v)?.id === release.id);
 }
 
-/** Whole-vehicle software versions the candidate passed its integration tests on. */
+/**
+ * Whole-vehicle software versions the candidate passed its integration tests on. A PLM test version
+ * linked to a call is a build of the call's working name: a pass on it counts for the working name.
+ */
 export function testedVersions(s: State, c: Candidate): string[] {
   const versions = candidateTestStatus(s, c)
     .filter((t) => t.latest?.result === 'PASS' && t.latest.integrationVersion)
-    .map((t) => t.latest!.integrationVersion!);
+    .flatMap((t) => {
+      const v = t.latest!.integrationVersion!;
+      const link = s.softwareVersions[`${c.vehicleModelId}::${v}`]?.testOf;
+      return link ? [v, link.workingName] : [v];
+    });
   return [...new Set(versions)].sort(compareVersions);
 }
 

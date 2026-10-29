@@ -438,6 +438,9 @@ export function simulateSoftwareOta(ctx: Ctx, resourceId: string, version: strin
   }
   const v = version.trim();
   if (!/^[A-Za-z0-9._-]{1,40}$/.test(v)) throw rule('INVALID_VERSION', 'a software version is letters, digits, . _ - (up to 40)');
+  // The vehicle OTA system takes its packages from PLM: a test build never goes to a customer car.
+  const plm = ctx.s.plm.versions.find((x) => x.vehicleModelId === r.vehicleModelId && x.version === v);
+  if (r.env === 'production' && plm?.stage === 'TEST') throw rule('TEST_VERSION_FOR_PRODUCTION', `${r.vehicleModelId} ${v} is a PLM test build; production vehicles take released software only`);
   flash(ctx, r, v, failed);
   return v;
 }

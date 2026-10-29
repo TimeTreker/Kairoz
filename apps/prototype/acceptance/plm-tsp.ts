@@ -1,13 +1,16 @@
-// 外部系统：PLM 与 TSP (EX01–EX04, N01) on the demo installation: whole-vehicle versions come from
+// 外部系统：PLM 与 TSP (EX01–EX05, N01) on the demo installation: whole-vehicle versions come from
 // PLM, cars from TSP. TSP says which version a car should run; only the car's own signed report says
-// which it runs.
+// which it runs. PLM's test builds of integration test rounds wait for the call they belong to.
 
+import * as ap from '../src/engine/applicability.ts';
+import * as calls from '../src/engine/calls.ts';
 import * as fleet from '../src/engine/fleet.ts';
 import { notificationsFor } from '../src/engine/notifications.ts';
 import { publishPlmVersion, syncPlmIfChanged } from '../src/engine/plm.ts';
+import { releasesOf } from '../src/engine/release.ts';
 import { demoState } from '../src/engine/seed.ts';
 import { registerDeviceKey } from '../src/engine/client-report.ts';
-import { devicePublicKey, provisionDevice, reportNow } from '../src/engine/simulator.ts';
+import { devicePublicKey, provisionDevice, reportNow, simulateSoftwareOta } from '../src/engine/simulator.ts';
 import { syncTspIfChanged, updateTspVehicle } from '../src/engine/tsp.ts';
 import { tspMismatch } from '../src/engine/tsp-sync.ts';
 import type { State } from '../src/engine/types.ts';
@@ -69,6 +72,24 @@ export const scenes: Record<string, SceneSpec> = {
       w.eq([r().softwareStatus, r().integrationVersion], ['PARTIAL_FAILURE', null], 'a partial update, reported by the car');
       carRuns(w.engine, 'VEH-201', '1.1');
       w.eq([r().softwareStatus, r().integrationVersion, tspMismatch(w.s, r())], ['CONSISTENT', '1.1', false], 'updated: TSP and the car agree');
+    },
+  },
+  EX05: {
+    run: (w) => {
+      // PLM issues the test build of an integration test round; no call links it yet.
+      w.sys((c) => publishPlmVersion(c, { vehicleModelId: 'X89', version: '1.4.0.1', dclPart: null, stage: 'TEST' }));
+      w.sys((c) => syncPlmIfChanged(c));
+      const t = () => w.s.softwareVersions['X89::1.4.0.1']!;
+      w.eq([t().status, t().testOf], ['TESTING', null], 'a test version, linked to no call');
+      w.eq(Object.values(w.s.applicabilityChecks).filter((c) => c.version === '1.4.0.1').length, 0, 'no applicability check for a test build');
+      w.fails('VERSION_IN_TEST', () => w.as('release', (c) => ap.openApplicabilityCheck(c, { releaseId: releasesOf(w.s, 'X89')[0]!.id, version: '1.4.0.1' })));
+      w.fails('TEST_VERSION_FOR_PRODUCTION', () => w.sys((c) => simulateSoftwareOta(c, 'VEH-201', '1.4.0.1')));
+      // The integration admin opens the call for the working name and links the build as round 1.
+      const callId = w.as('integration_admin', (c) => calls.openCall(c, { workspaceId: 'x89-project', targetVersion: '1.4', baseVersion: '1.2' }));
+      w.check(notes(w, 'integration_admin').some((n) => n.kind === 'TEST_VERSION_UNLINKED' && n.detail === '1.4.0.1'), 'the admin is told PLM issued a build no call has linked');
+      w.as('integration_admin', (c) => calls.linkTestVersion(c, callId, '1.4.0.1'));
+      w.check(!notes(w, 'integration_admin').some((n) => n.kind === 'TEST_VERSION_UNLINKED'), 'linked: nothing left to do');
+      w.eq(t().testOf?.round, 1, 'round 1 of working name 1.4');
     },
   },
   N01: {

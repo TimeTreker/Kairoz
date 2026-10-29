@@ -41,13 +41,38 @@ function partFor(s: State, part: NonNullable<PlmVersion['dclPart']>): DclPart {
   const delivered = Object.values(s.softwareVersions).find((v) => v.dclPart?.digest === part.digest && v.dclPart.deliveredBy)?.dclPart;
   return { ...part, deliveredBy: delivered?.deliveredBy ?? null, deliveredAt: delivered?.deliveredAt ?? null };
 }
+/** The sets that apply to a working name, applied to the software that stands for it (a PLM version, a test version). */
+export function inheritSets(ctx: Ctx, vehicleModelId: string, from: string, to: string, reason: string, by: string | null): number {
+  let added = 0;
+  for (const r of [...releasesOf(ctx.s, vehicleModelId)].reverse().filter((x) => appliesTo(ctx.s, x, from) && !appliesTo(ctx.s, x, to))) {
+    ctx.s.applicability.push({ id: newId('ap'), seq: ctx.seq(), releaseId: r.id, vehicleModelId, version: to, action: 'ADD', checkId: null, reason, by, at: ctx.now });
+    added += 1;
+  }
+  return added;
+}
+
+/** Vehicles already reporting a version PLM just issued or released waited for it: their latest signed report now counts. */
+function settleWaiting(ctx: Ctx, v: PlmVersion): void {
+  for (const c of Object.values(ctx.s.softwareChanges).filter((x) => x.status === 'UNRECORDED' && x.toVersion === v.version)) {
+    const latest = ctx.s.clientReports[c.resourceId]?.latest?.payload;
+    if (ctx.s.resources[c.resourceId]?.vehicleModelId !== v.vehicleModelId) continue;
+    // The vehicle reported something else since: that report counted, this one no longer waits.
+    if (latest?.vehicleIntegrationVersion !== v.version) {
+      c.status = 'RESOLVED';
+      continue;
+    }
+    noteReportedSoftware(ctx, c.resourceId, v.version, latest.configuration?.digest ?? null, latest.domains);
+  }
+}
 
 /**
- * Applies PLM's published versions (system context; it never throws, it runs inside the simulator
- * step). A new version is recorded with the set its DCL part carries as its factory configuration.
- * A part delivered for a working name links the name: the PLM version takes over every set that
- * applies to it. A version no set applies to opens an applicability check, as any new software
- * does. Returns how many versions were recorded.
+ * Applies PLM's versions (system context; it never throws, it runs inside the simulator step). A
+ * new version is recorded with the set its DCL part carries as its factory configuration. A test
+ * version (整车测试版本) is recorded as such until PLM releases it under the same number; one the
+ * integration admin linked to a call then links the call's working name. A part delivered for a
+ * working name links the name too: the PLM version takes over every set that applies to it. A
+ * version no set applies to opens an applicability check, as any new software does. Returns how
+ * many versions were recorded or released.
  */
 export function syncPlm(ctx: Ctx, snapshot: PlmCatalog): number {
   let recorded = 0;
@@ -56,6 +81,10 @@ export function syncPlm(ctx: Ctx, snapshot: PlmCatalog): number {
   const conflicts: PlmConflict[] = [];
   const missingParts = ctx.s.plmSync.missingParts ?? [];
   const missingBefore = missingParts.length;
+  const clash = (v: PlmVersion, kind: PlmConflict['kind'], other: string | null) => {
+    const at = before.find((c) => c.vehicleModelId === v.vehicleModelId && c.version === v.version)?.at ?? ctx.now;
+    conflicts.push({ vehicleModelId: v.vehicleModelId, version: v.version, kind, other, at });
+  };
   for (const v of snapshot.versions) {
     const key = softwareKey(v.vehicleModelId, v.version);
     const raw = ctx.s.softwareVersions[key];
@@ -67,13 +96,64 @@ export function syncPlm(ctx: Ctx, snapshot: PlmCatalog): number {
     const release = v.dclPart ? releaseOfDigest(ctx.s, v.vehicleModelId, v.dclPart.digest) : null;
     const module = release ? moduleFor(ctx.s, release, v.dclPart!.digest) : null;
     const part = v.dclPart ? partFor(ctx.s, v.dclPart) : null;
+    if ((v.stage ?? 'RELEASED') === 'TEST') {
+      if (existing?.status === 'TESTING') continue;
+      // A test build whose number is one of our working names: the platform cannot hold both.
+      if (existing) {
+        clash(v, existing.linkedTo ? 'LINKED' : 'OTHER_NAME', existing.linkedTo ?? null);
+        continue;
+      }
+      ctx.s.softwareVersions[key] = {
+        vehicleModelId: v.vehicleModelId,
+        version: v.version,
+        source: 'PLM',
+        manifest: raw?.manifest ? { signals: [...raw.manifest.signals], sources: raw.manifest.sources.map((x) => ({ ...x })) } : null,
+        status: 'TESTING',
+        callId: null,
+        dclModule: module,
+        moduleLog: [],
+        plannedBy: null,
+        plannedAt: null,
+        recordedBy: null,
+        createdAt: ctx.now,
+        dclPart: part,
+        workingName: null,
+        linkedTo: null,
+        testOf: null,
+        issuedForTest: true,
+        releasedAt: null,
+      };
+      // Development and testing vehicles that reported the build count now; production ones keep waiting.
+      settleWaiting(ctx, v);
+      recorded += 1;
+      continue;
+    }
+    if (existing?.status === 'TESTING') {
+      // PLM released the passing round under its test number (同号发布).
+      existing.status = 'RECORDED';
+      existing.releasedAt = ctx.now;
+      existing.dclModule = module;
+      existing.dclPart = part;
+      const link = existing.testOf;
+      const w = link ? ctx.s.softwareVersions[softwareKey(v.vehicleModelId, link.workingName)] : undefined;
+      if (link && w && w.status === 'PLANNED' && !w.linkedTo) {
+        w.linkedTo = v.version;
+        existing.workingName = w.version;
+        existing.callId = w.callId;
+        // It references the working name's sets since its round was linked; anything added to the name since comes too.
+        inheritSets(ctx, v.vehicleModelId, w.version, v.version, `working name ${w.version}`, null);
+      }
+      openCheckForNewSoftware(ctx, v.vehicleModelId, v.version);
+      settleWaiting(ctx, v);
+      recorded += 1;
+      continue;
+    }
     const owner = release ? unlinkedWorkingName(ctx.s, release, v.dclPart!.digest) : null;
     // PLM's number is one of our working names, but not for that working name's software: a working
     // name PLM already published under another number, or a part delivered for another name. The
     // platform cannot hold both; it records the conflict for people to settle with PLM.
     if (existing && (existing.linkedTo || (release && owner?.version !== existing.version))) {
-      const at = before.find((c) => c.vehicleModelId === v.vehicleModelId && c.version === v.version)?.at ?? ctx.now;
-      conflicts.push(existing.linkedTo ? { vehicleModelId: v.vehicleModelId, version: v.version, kind: 'LINKED', other: existing.linkedTo, at } : { vehicleModelId: v.vehicleModelId, version: v.version, kind: 'OTHER_NAME', other: owner?.version ?? null, at });
+      clash(v, existing.linkedTo ? 'LINKED' : 'OTHER_NAME', existing.linkedTo ?? owner?.version ?? null);
       continue;
     }
     if (existing) {
@@ -87,6 +167,7 @@ export function syncPlm(ctx: Ctx, snapshot: PlmCatalog): number {
       existing.source = 'PLM';
       existing.recordedBy = null;
       existing.createdAt = ctx.now;
+      existing.releasedAt = ctx.now;
       existing.workingName = existing.callId ? existing.version : null;
       existing.dclModule = module;
       existing.dclPart = part;
@@ -109,38 +190,18 @@ export function syncPlm(ctx: Ctx, snapshot: PlmCatalog): number {
         dclPart: part,
         workingName: w?.version ?? null,
         linkedTo: null,
+        testOf: null,
+        issuedForTest: false,
+        releasedAt: ctx.now,
       };
       if (w) {
         ctx.s.softwareVersions[softwareKey(w.vehicleModelId, w.version)]!.linkedTo = v.version;
         // The PLM version is the software the working name stood for: the same sets apply to it.
-        for (const r of [...releasesOf(ctx.s, v.vehicleModelId)].reverse().filter((x) => appliesTo(ctx.s, x, w.version))) {
-          ctx.s.applicability.push({
-            id: newId('ap'),
-            seq: ctx.seq(),
-            releaseId: r.id,
-            vehicleModelId: v.vehicleModelId,
-            version: v.version,
-            action: 'ADD',
-            checkId: null,
-            reason: `working name ${w.version}`,
-            by: null,
-            at: ctx.now,
-          });
-        }
+        inheritSets(ctx, v.vehicleModelId, w.version, v.version, `working name ${w.version}`, null);
       }
     }
     openCheckForNewSoftware(ctx, v.vehicleModelId, v.version);
-    // Vehicles already reporting this version waited for PLM: their latest signed report now counts.
-    for (const c of Object.values(ctx.s.softwareChanges).filter((x) => x.status === 'UNRECORDED' && x.toVersion === v.version)) {
-      const latest = ctx.s.clientReports[c.resourceId]?.latest?.payload;
-      if (ctx.s.resources[c.resourceId]?.vehicleModelId !== v.vehicleModelId) continue;
-      // The vehicle reported something else since: that report counted, this one no longer waits.
-      if (latest?.vehicleIntegrationVersion !== v.version) {
-        c.status = 'RESOLVED';
-        continue;
-      }
-      noteReportedSoftware(ctx, c.resourceId, v.version, latest.configuration?.digest ?? null, latest.domains);
-    }
+    settleWaiting(ctx, v);
     recorded += 1;
   }
   // A retry that settled nothing changes nothing, so an idle simulator step does not rewrite the state.

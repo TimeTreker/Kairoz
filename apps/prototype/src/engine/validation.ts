@@ -10,7 +10,7 @@ import { newId } from '../domain/ids.ts';
 import type { Env } from '../domain/vocabulary.ts';
 import { authorizeFeature, changesRequested, displayName, latestRelease, submitIssues } from './config.ts';
 import type { Ctx } from './engine.ts';
-import { authorizePersonal, directTargetProblems, getResource, livePublication, membersOf, occupancyProblems, pendingDeploymentOf, pendingImageChangeOf, recordGroupBinding, softwareKey } from './fleet.ts';
+import { authorizePersonal, directTargetProblems, getResource, livePublication, membersOf, occupancyProblems, pendingDeploymentOf, pendingImageChangeOf, recordGroupBinding, softwareKey, supersedeBaseline } from './fleet.ts';
 import { getGroup } from './org.ts';
 import { commitSnapshot, resolveFiles } from './snapshots.ts';
 import { intakeStage, reviewItems } from './approvals.ts';
@@ -307,6 +307,7 @@ export function createFeatureDeployment(
 ): string {
   const id = newId('dp');
   for (const t of targets) {
+    supersedeBaseline(ctx, t.resourceId, `replaced by ${id}`);
     const existing = ctx.s.testTargets.find((x) => x.subjectId === feature.id && x.versionId === commitId && x.resourceId === t.resourceId);
     if (existing) existing.deploymentId = id;
     else ctx.s.testTargets.push({ subjectKind: 'FEATURE', subjectId: feature.id, versionId: commitId, resourceId: t.resourceId, deploymentId: id });
@@ -778,6 +779,7 @@ export function dispatchCandidate(ctx: Ctx, candidateId: string, input: { vehicl
   for (const vgId of vehicleGroupIds) recordGroupBinding(ctx, vgId, { kind: 'CANDIDATE', candidateId: c.id, configId: c.resolvedConfigId });
   for (const m of members) {
     delete ctx.s.groupFollows[m.resourceId];
+    supersedeBaseline(ctx, m.resourceId, `replaced by ${id}`);
     if (!ctx.s.testTargets.some((t) => t.subjectId === c.id && t.resourceId === m.resourceId)) {
       ctx.s.testTargets.push({ subjectKind: 'CANDIDATE', subjectId: c.id, versionId: c.id, resourceId: m.resourceId, deploymentId: id });
     }
