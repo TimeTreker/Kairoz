@@ -93,9 +93,9 @@ export function TechnicalChanges() {
         title={L('新建技术变更', 'New technical change')}
         onCancel={() => setOpen(false)}
         onOk={() =>
-          form.validateFields().then((v) => {
+          form.validateFields().then(async (v) => {
             const [workspaceId, groupId] = v.target.split('/') as [string, string];
-            const id = run((c) => createTechnicalChange(c, { workspaceId, groupId, name: v.name, description: v.description, baseReleaseId: v.baseReleaseId || null }), L('已新建技术变更，调整处理绑定后提交', 'Technical change opened; rebind and submit it'));
+            const id = (await run((c) => createTechnicalChange(c, { workspaceId, groupId, name: v.name, description: v.description, baseReleaseId: v.baseReleaseId || null }), L('已新建技术变更，调整处理绑定后提交', 'Technical change opened; rebind and submit it')));
             if (id) {
               setOpen(false);
               setSession({ workspaceId });

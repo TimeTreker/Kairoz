@@ -241,8 +241,8 @@ function TrainingTab({ workspaceId }: { workspaceId: string }) {
   const results = trainingQuery(state, actor, workspaceId, filter);
   const chosen = selected.filter((id) => results.some((r) => r.eventId === id && r.blockers.length === 0));
 
-  const download = () => {
-    const manifest = run((c) => exportManifest(c, chosen), L(`已导出 ${chosen.length} 条数据清单`, `Exported a manifest of ${chosen.length}`));
+  const download = async () => {
+    const manifest = (await run((c) => exportManifest(c, chosen), L(`已导出 ${chosen.length} 条数据清单`, `Exported a manifest of ${chosen.length}`)));
     if (!manifest) return;
     const file = { name: `kairoz-data-manifest-${manifest.generatedAt.slice(0, 10)}.json`, json: JSON.stringify(manifest, null, 2) };
     setExported(file);

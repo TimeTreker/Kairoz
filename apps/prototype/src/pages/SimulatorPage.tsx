@@ -4,7 +4,7 @@
 import { App, Alert, Button, Card, Checkbox, Dropdown, Input, Modal, Select, Space, Switch, Table, Tag, Tooltip, Typography } from 'antd';
 import { useEffect, useState } from 'react';
 import { useErrorText } from '../app/hooks.ts';
-import { engine, useEngineState } from '../app/store.ts';
+import { engine, runOperation, useEngineState } from '../app/store.ts';
 import { EnvTag, LabelTag, Mono, PageHeader, configName, when } from '../components/common.tsx';
 import { CompanyDirectoryCard } from '../components/company-directory.tsx';
 import type { Ctx } from '../engine/engine.ts';
@@ -27,7 +27,7 @@ import { BUDGET_NOTE_LABELS, DEVICE_FAULT_LABELS, ERROR_LABELS, EVENT_STATUS_COL
 
 
 /** The vehicle OTA system (整车 OTA, outside the platform): carries out requested software updates. */
-function VehicleOtaCard({ system }: { system: <R>(op: (c: Ctx) => R, ok?: string) => R | undefined }) {
+function VehicleOtaCard({ system }: { system: <R>(op: (c: Ctx) => R, ok?: string) => Promise<R | undefined> }) {
   const state = useEngineState();
   const { L } = useI18n();
   const requests = pendingSoftwareRequests(state);
@@ -74,7 +74,7 @@ function VehicleOtaCard({ system }: { system: <R>(op: (c: Ctx) => R, ok?: string
 }
 
 /** Simulated time (模拟时间): moves the platform clock forward so loans can run out. */
-function ClockCard({ system }: { system: <R>(op: (c: Ctx) => R, ok?: string) => R | undefined }) {
+function ClockCard({ system }: { system: <R>(op: (c: Ctx) => R, ok?: string) => Promise<R | undefined> }) {
   const state = useEngineState();
   const { L } = useI18n();
   const hours = Math.round(state.clockOffsetMs / 3_600_000);
@@ -105,7 +105,7 @@ function ClockCard({ system }: { system: <R>(op: (c: Ctx) => R, ok?: string) => 
 }
 
 /** The mock CI and simulation provider: answers module builds and image changes. */
-function SoftwareProviderCard({ system }: { system: <R>(op: (c: Ctx) => R, ok?: string) => R | undefined }) {
+function SoftwareProviderCard({ system }: { system: <R>(op: (c: Ctx) => R, ok?: string) => Promise<R | undefined> }) {
   const state = useEngineState();
   const { L, B } = useI18n();
   const builds = Object.values(state.softwareBuilds)
@@ -192,9 +192,9 @@ export function SimulatorPage() {
   const [otaVersion, setOtaVersion] = useState('');
   const [otaFailed, setOtaFailed] = useState<string[]>([]);
 
-  const system = <R,>(op: (c: Ctx) => R, ok?: string) => {
+  const system = async <R,>(op: (c: Ctx) => R, ok?: string) => {
     try {
-      const r = engine.run(null, op);
+      const r = await runOperation(null, op);
       if (ok) message.success(ok);
       return r;
     } catch (e) {
@@ -226,16 +226,16 @@ export function SimulatorPage() {
     if (all.every((e) => e.status === 'UPLOADING') && !note) message.success(all.length === 1 ? L('事件已触发，开始上传', 'Event fired; uploading') : text);
     else message.warning(`${text}${note}`);
   };
-  const fire = () => {
-    const id = system((c) => captureEvent(c, { resourceId: vehicle!, policyId: policy!, failParse }));
+  const fire = async () => {
+    const id = (await system((c) => captureEvent(c, { resourceId: vehicle!, policyId: policy!, failParse })));
     if (id) outcome([id]);
   };
-  const graded = () => {
-    const id = system((c) => graderCapture(c, vehicle!, policy!));
+  const graded = async () => {
+    const id = (await system((c) => graderCapture(c, vehicle!, policy!)));
     if (id) outcome([id]);
   };
-  const burst = () => {
-    const ids = system((c) => Array.from({ length: 10 }, () => captureEvent(c, { resourceId: vehicle!, policyId: policy!, failParse })));
+  const burst = async () => {
+    const ids = (await system((c) => Array.from({ length: 10 }, () => captureEvent(c, { resourceId: vehicle!, policyId: policy!, failParse }))));
     if (ids) outcome(ids);
   };
 
@@ -388,8 +388,8 @@ export function SimulatorPage() {
                   const d = deviceSummary(state, r.id);
                   const stopped = r.instance === 'STOPPED';
                   const result = (x: string) => (REPORT_RESULT_LABELS[x] ? B(REPORT_RESULT_LABELS[x]!) : x);
-                  const fault = (f: ReportFault) => {
-                    const out = system((c) => sendFault(c, r.id, f));
+                  const fault = async (f: ReportFault) => {
+                    const out = (await system((c) => sendFault(c, r.id, f)));
                     if (out !== undefined) message.info(result(out));
                   };
                   const next = d ? d.clientVersion.replace(/^(\d+)\.(\d+)\..*$/, (_m, a: string, b: string) => `${a}.${Number(b) + 1}.0`) : '2.4.0';
@@ -408,8 +408,8 @@ export function SimulatorPage() {
                       <Button
                         size="small"
                         disabled={stopped}
-                        onClick={() => {
-                          const out = system((c) => reportNow(c, r.id));
+                        onClick={async () => {
+                          const out = (await system((c) => reportNow(c, r.id)));
                           if (out !== undefined) message.success(result(out));
                         }}
                       >
@@ -418,8 +418,8 @@ export function SimulatorPage() {
                       <Button
                         size="small"
                         disabled={stopped}
-                        onClick={() => {
-                          const out = system((c) => restartClient(c, r.id));
+                        onClick={async () => {
+                          const out = (await system((c) => restartClient(c, r.id)));
                           if (out !== undefined) message.success(`${L('已重启客户端', 'Client restarted')} · ${result(out)}`);
                         }}
                       >
@@ -429,8 +429,8 @@ export function SimulatorPage() {
                         <Button
                           size="small"
                           disabled={stopped}
-                          onClick={() => {
-                            const out = system((c) => flushOutbox(c, r.id));
+                          onClick={async () => {
+                            const out = (await system((c) => flushOutbox(c, r.id)));
                             if (out) message.info(L(`已补报 ${out.sent} 份，仍待 ${out.waiting} 份`, `Sent ${out.sent}; ${out.waiting} still queued`));
                           }}
                         >
@@ -650,8 +650,8 @@ export function SimulatorPage() {
           title={`${L('模拟整车软件 OTA', 'Simulate a vehicle software OTA')} · ${otaOf ?? ''}`}
           okText={L('刷写', 'Flash')}
           onCancel={() => setOtaOf(null)}
-          onOk={() => {
-            const done = system((c) => simulateSoftwareOta(c, otaOf!, otaVersion, otaFailed), otaFailed.length ? L('部分域控升级失败；下一次上报会带上各域控状态', 'Some controllers failed; the next report carries each controller’s state') : L('车辆已运行新版本；下一次上报会带上它', 'The vehicle runs the new version; its next report carries it'));
+          onOk={async () => {
+            const done = (await system((c) => simulateSoftwareOta(c, otaOf!, otaVersion, otaFailed), otaFailed.length ? L('部分域控升级失败；下一次上报会带上各域控状态', 'Some controllers failed; the next report carries each controller’s state') : L('车辆已运行新版本；下一次上报会带上它', 'The vehicle runs the new version; its next report carries it')));
             if (done !== undefined) setOtaOf(null);
           }}
         >

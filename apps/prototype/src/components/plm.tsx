@@ -74,8 +74,8 @@ export function DclPartCell({ v }: { v: SoftwareVersion }) {
       </Tag>
     </Tooltip>
   );
-  const deliver = () => {
-    const p = run((c) => deliverDclPart(c, { vehicleModelId: v.vehicleModelId, version: v.version, clientVersion: client }), L('已导出 DCL 件，交给 PLM', 'DCL part exported for PLM'));
+  const deliver = async () => {
+    const p = (await run((c) => deliverDclPart(c, { vehicleModelId: v.vehicleModelId, version: v.version, clientVersion: client }), L('已导出 DCL 件，交给 PLM', 'DCL part exported for PLM')));
     if (p === undefined) return;
     setOpen(false);
     // The part carries the set in effect for the working name, which may be newer than the one first exported.

@@ -2,7 +2,7 @@ import { PlusOutlined } from '@ant-design/icons';
 import { Button, Card, Col, Collapse, Descriptions, Empty, Form, Input, InputNumber, Modal, Popconfirm, Row, Select, Space, Switch, Table, Tabs, Tag, Timeline, Tooltip, Typography } from 'antd';
 import { useState } from 'react';
 import { useActor, useCan, useRun, useWorkspace } from '../app/hooks.ts';
-import { engine, useEngineState } from '../app/store.ts';
+import { runOperation, useEngineState } from '../app/store.ts';
 import { ClientReportDrawer } from '../components/client-report.tsx';
 import { PersonalSims } from '../components/personal-sim.tsx';
 import { SimSoftwareDrawer, isDerivedImage } from '../components/sim-software.tsx';
@@ -389,8 +389,8 @@ function WorkspaceVehicles() {
         open={reserving !== null}
         title={`${L('预约车辆', 'Reserve vehicle')} · ${reserving?.id}`}
         onCancel={() => setReserving(null)}
-        onOk={() => {
-          if (run((c) => reserveVehicle(c, workspace.id, reserving!.id, purpose), L('已预约', 'Reserved')) !== undefined) setReserving(null);
+        onOk={async () => {
+          if ((await run((c) => reserveVehicle(c, workspace.id, reserving!.id, purpose), L('已预约', 'Reserved'))) !== undefined) setReserving(null);
         }}
       >
         <Hint>{L('预约期间车辆不能移出工作区或车辆组；任务结束后解除预约。', 'While reserved the vehicle cannot leave the workspace or its group; release it when the task ends.')}</Hint>
@@ -400,8 +400,8 @@ function WorkspaceVehicles() {
         open={quotaOpen}
         title={`${L('仿真运行配额', 'Simulation run quota')} · ${workspace.name}`}
         onCancel={() => setQuotaOpen(false)}
-        onOk={() => {
-          if (run((c) => setSimulationQuota(c, workspace.id, quotaValue), quotaValue === null ? L('已取消配额限制', 'Quota lifted') : L('配额已保存', 'Quota saved')) !== undefined) setQuotaOpen(false);
+        onOk={async () => {
+          if ((await run((c) => setSimulationQuota(c, workspace.id, quotaValue), quotaValue === null ? L('已取消配额限制', 'Quota lifted') : L('配额已保存', 'Quota saved'))) !== undefined) setQuotaOpen(false);
         }}
       >
         <Hint>{L(`同时运行的仿真（团队与个人一起）不超过配额；不能低于正在运行的数量（现在 ${simRunning}）。留空表示不限。`, `Simulations running at once (team and personal together) stay within the quota; it cannot go below those running now (${simRunning}). Leave it empty for no limit.`)}</Hint>
@@ -437,8 +437,8 @@ function WorkspaceVehicles() {
         title={L('创建仿真车', 'New simulation instance')}
         onCancel={() => setCreating(false)}
         onOk={() =>
-          form.validateFields().then((v) => {
-            if (run((c) => createSimulation(c, { ...v, workspaceId: workspace.id }), L('已创建', 'Created')) !== undefined) setCreating(false);
+          form.validateFields().then(async (v) => {
+            if ((await run((c) => createSimulation(c, { ...v, workspaceId: workspace.id }), L('已创建', 'Created'))) !== undefined) setCreating(false);
           })
         }
       >
@@ -697,8 +697,8 @@ function VehicleGroups() {
         title={L('创建车辆组', 'New vehicle group')}
         onCancel={() => setCreating(false)}
         onOk={() =>
-          form.validateFields().then((v) => {
-            if (run((c) => createVehicleGroup(c, { workspaceId: workspace.id, groupId: v.groupId ?? null, name: v.name, purpose: v.purpose, env: v.env, requiresApproval: !!v.requiresApproval }), L('已创建', 'Created')) !== undefined) setCreating(false);
+          form.validateFields().then(async (v) => {
+            if ((await run((c) => createVehicleGroup(c, { workspaceId: workspace.id, groupId: v.groupId ?? null, name: v.name, purpose: v.purpose, env: v.env, requiresApproval: !!v.requiresApproval }), L('已创建', 'Created'))) !== undefined) setCreating(false);
           })
         }
       >
@@ -729,12 +729,12 @@ function VehicleGroups() {
         title={member?.action === 'add' ? L('加入车辆', 'Add vehicle') : L('移出车辆', 'Remove vehicle')}
         onCancel={() => setMember(null)}
         onOk={() =>
-          memberForm.validateFields().then((v) => {
+          memberForm.validateFields().then(async (v) => {
             const m = member!;
             const ok =
               m.action === 'add'
-                ? run((c) => addGroupMember(c, m.groupId, v.resourceId, v.reason), L('已加入', 'Added'))
-                : run((c) => removeGroupMember(c, m.groupId, m.resourceId!, v.reason), L('已移出', 'Removed'));
+                ? (await run((c) => addGroupMember(c, m.groupId, v.resourceId, v.reason), L('已加入', 'Added')))
+                : (await run((c) => removeGroupMember(c, m.groupId, m.resourceId!, v.reason), L('已移出', 'Removed')));
             if (ok !== undefined) setMember(null);
           })
         }
@@ -829,8 +829,8 @@ function TestRequests({ workspaceId }: { workspaceId: string }) {
         open={deciding !== null}
         title={deciding?.decision === 'APPROVED' ? L('批准团队测试申请', 'Approve team test request') : L('驳回团队测试申请', 'Reject team test request')}
         onCancel={() => setDeciding(null)}
-        onOk={() => {
-          if (run((c) => decideTestRequest(c, deciding!.req.id, { decision: deciding!.decision, note }), L('已处理', 'Decided')) !== undefined) setDeciding(null);
+        onOk={async () => {
+          if ((await run((c) => decideTestRequest(c, deciding!.req.id, { decision: deciding!.decision, note }), L('已处理', 'Decided'))) !== undefined) setDeciding(null);
         }}
       >
         <Hint>
@@ -874,8 +874,8 @@ function Registry() {
         okText={L('解除', 'Release')}
         okButtonProps={{ danger: true, disabled: !releaseNote.trim() }}
         onCancel={() => setReleasing(null)}
-        onOk={() => {
-          if (releasing && run((c) => releaseVehicle(c, releasing.id, releaseNote), L('已解除：该车不再等待这次下发', 'Released: the vehicle no longer waits for this dispatch')) !== undefined) setReleasing(null);
+        onOk={async () => {
+          if (releasing && (await run((c) => releaseVehicle(c, releasing.id, releaseNote), L('已解除：该车不再等待这次下发', 'Released: the vehicle no longer waits for this dispatch'))) !== undefined) setReleasing(null);
         }}
       >
         <Hint>
@@ -932,8 +932,8 @@ function Registry() {
         title={L(`登记设备密钥 · ${keying?.id ?? ''}`, `Register device key · ${keying?.id ?? ''}`)}
         onCancel={() => setKeying(null)}
         onOk={() =>
-          kf.validateFields().then((v) => {
-            if (run((c) => registerDeviceKey(c, keying!.id, v), L('已登记设备密钥', 'Device key registered')) !== undefined) setKeying(null);
+          kf.validateFields().then(async (v) => {
+            if ((await run((c) => registerDeviceKey(c, keying!.id, v), L('已登记设备密钥', 'Device key registered'))) !== undefined) setKeying(null);
           })
         }
       >
@@ -952,8 +952,8 @@ function Registry() {
           </Form.Item>
           <Button
             size="small"
-            onClick={() => {
-              const key = engine.run(null, (c) => {
+            onClick={async () => {
+              const key = await runOperation(null, (c) => {
                 provisionDevice(c, keying!.id);
                 return devicePublicKey(c.s, keying!.id);
               });
@@ -969,8 +969,8 @@ function Registry() {
         title={L('从 TSP 登记实车', 'Register a vehicle from TSP')}
         onCancel={() => setRegistering(false)}
         onOk={() =>
-          form.validateFields().then((v) => {
-            if (run((c) => registerPhysical(c, v), L('已登记；登记设备密钥后，车辆上报实际软件', 'Registered; once its device key is registered, the car reports its software')) !== undefined) setRegistering(false);
+          form.validateFields().then(async (v) => {
+            if ((await run((c) => registerPhysical(c, v), L('已登记；登记设备密钥后，车辆上报实际软件', 'Registered; once its device key is registered, the car reports its software'))) !== undefined) setRegistering(false);
           })
         }
       >
@@ -1019,8 +1019,8 @@ function Registry() {
         title={`${L('车辆状态', 'Vehicle status')} · ${statusOf?.id}`}
         onCancel={() => setStatusOf(null)}
         onOk={() =>
-          sf.validateFields().then((v) => {
-            if (run((c) => setResourceStatus(c, statusOf!.id, v), L('已更新', 'Updated')) !== undefined) setStatusOf(null);
+          sf.validateFields().then(async (v) => {
+            if ((await run((c) => setResourceStatus(c, statusOf!.id, v), L('已更新', 'Updated'))) !== undefined) setStatusOf(null);
           })
         }
       >
@@ -1156,14 +1156,14 @@ function Catalogs() {
         }
         onCancel={() => setOpen(null)}
         onOk={() =>
-          form.validateFields().then((v) => {
+          form.validateFields().then(async (v) => {
             const ok =
               open === 'manifest'
-                  ? run(
+                  ? (await run(
                       (c) => setSoftwareManifest(c, { vehicleModelId: manifestFor!.vehicleModelId, version: manifestFor!.version, manifest: parseManifest(v.signals, v.sources) ?? { signals: [], sources: [] } }),
                       L('已补录软件清单', 'Manifest recorded'),
-                    )
-                  : run(
+                    ))
+                  : (await run(
                     (c) =>
                       registerImage(c, {
                         id: v.id,
@@ -1174,7 +1174,7 @@ function Catalogs() {
                         digest: v.digest?.trim() || `sha256:${sha256Hex(`${v.id}:${v.build}`)}`,
                       }),
                     L('已登记', 'Registered'),
-                  );
+                  ));
             if (ok !== undefined) setOpen(null);
           })
         }

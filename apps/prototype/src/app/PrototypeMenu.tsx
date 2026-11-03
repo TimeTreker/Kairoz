@@ -111,8 +111,8 @@ export function PrototypeMenu({ compact = false }: { compact?: boolean }) {
             ),
             okText: L('替换', 'Replace'),
             okButtonProps: { danger: true },
-            onOk: () => {
-              importState(s);
+            onOk: async () => {
+              await importState(s);
               setImporting(false);
               setJson('');
               message.success(L('已导入', 'Imported'));

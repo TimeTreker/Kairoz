@@ -125,8 +125,8 @@ export function NewFeatureOnBaseModal({ feature, baseId, open, onClose, onCreate
       title={L('在新基线上新建 Feature', 'Start a Feature on the new base')}
       okText={L('创建', 'Create')}
       onCancel={onClose}
-      onOk={() => {
-        const id = run((x) => createFeature(x, { workspaceId: feature.workspaceId, groupId: feature.groupId, name, baseReleaseId: baseId }), L('已在新基线上新建 Feature', 'Feature started on the new base'));
+      onOk={async () => {
+        const id = (await run((x) => createFeature(x, { workspaceId: feature.workspaceId, groupId: feature.groupId, name, baseReleaseId: baseId }), L('已在新基线上新建 Feature', 'Feature started on the new base')));
         if (id) {
           onClose();
           onCreated?.();

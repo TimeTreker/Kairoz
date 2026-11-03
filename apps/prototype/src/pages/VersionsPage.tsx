@@ -212,8 +212,8 @@ function OpenCallModal({ onClose, parentCallId }: { onClose: () => void; parentC
       okText={L('发起', 'Open')}
       onCancel={onClose}
       onOk={() =>
-        form.validateFields().then((v) => {
-          const id = run(
+        form.validateFields().then(async (v) => {
+          const id = (await run(
             (c) =>
               openCall(c, {
                 workspaceId: ws.id,
@@ -226,7 +226,7 @@ function OpenCallModal({ onClose, parentCallId }: { onClose: () => void; parentC
                 exclude: modules.map((m) => m.key).filter((k) => !(v.modules ?? []).includes(k)),
               }),
             L('已发起；各模块会收到待提交的通知', 'Opened; every module is asked to submit'),
-          );
+          ));
           if (id !== undefined) {
             onClose();
             navigate(`versions/calls/${id}`);
@@ -412,8 +412,8 @@ function CallDetail({ callId }: { callId: string }) {
           {merge && phase === 'COMPLETE' && (
             <Button
               type="primary"
-              onClick={() => {
-                if (run((c) => previewCall(c, call.id), L('已生成集成预览，等待 DCL 确认处理', 'Merge previewed; DCL confirms the processing set next')) !== undefined) navigate('integration/merge');
+              onClick={async () => {
+                if ((await run((c) => previewCall(c, call.id), L('已生成集成预览，等待 DCL 确认处理', 'Merge previewed; DCL confirms the processing set next'))) !== undefined) navigate('integration/merge');
               }}
             >
               {L('收齐，生成集成预览', 'Complete: preview the merge')}
@@ -609,10 +609,10 @@ function TestVersionsCard({ call }: { call: IntegrationCall }) {
     setChoice(unlinked[0]?.version);
     setLinking(true);
   };
-  const link = () => {
+  const link = async () => {
     if (!choice) return;
     const ok = next.set ? L(`已关联为整车第 ${(next.previousRound ?? 0) + 1} 轮，确认引用 ${next.set.dclVersion}`, `Linked as round ${(next.previousRound ?? 0) + 1}; the reference to ${next.set.dclVersion} is confirmed`) : L(`已关联为整车第 ${(next.previousRound ?? 0) + 1} 轮`, `Linked as round ${(next.previousRound ?? 0) + 1}`);
-    if (run((c) => linkTestVersion(c, call.id, choice), ok) !== undefined) setLinking(false);
+    if ((await run((c) => linkTestVersion(c, call.id, choice), ok)) !== undefined) setLinking(false);
   };
   return (
     <Card
@@ -717,12 +717,12 @@ function SubmitModal({ call, module: m, onClose }: { call: IntegrationCall; modu
   const [mode, setMode] = useState<'version' | 'none'>(options.length ? 'version' : 'none');
   const [choice, setChoice] = useState<string | undefined>(options[0]?.value);
   const [note, setNote] = useState('');
-  const submit = () => {
+  const submit = async () => {
     const chosen = mode === 'version' ? (choice ?? null) : null;
-    const ok = run(
+    const ok = (await run(
       (c) => (m.kind === 'GROUP' ? submitGroup(c, call.id, m.groupId!, { featureId: chosen, note }) : submitDomain(c, call.id, m.domain!, { subsystemReleaseId: chosen, note })),
       L('已提交', 'Submitted'),
-    );
+    ));
     if (ok !== undefined) onClose();
   };
   return (
@@ -765,8 +765,8 @@ function OpenChildModal({ call, workspaceId, onClose }: { call: IntegrationCall;
       okText={L('发起', 'Open')}
       okButtonProps={{ disabled: chosen.length === 0 }}
       onCancel={onClose}
-      onOk={() => {
-        const id = run((c) => openCall(c, { workspaceId: ws.id, scope, parentCallId: call.id, exclude: modules.map((m) => m.key).filter((k) => !chosen.includes(k)) }), L('已开子征集', 'Domain call opened'));
+      onOk={async () => {
+        const id = (await run((c) => openCall(c, { workspaceId: ws.id, scope, parentCallId: call.id, exclude: modules.map((m) => m.key).filter((k) => !chosen.includes(k)) }), L('已开子征集', 'Domain call opened')));
         if (id !== undefined) {
           onClose();
           navigate(`versions/calls/${id}`);
@@ -805,13 +805,13 @@ function AskModal({ call, ask, onClose }: { call: IntegrationCall; ask: { kind: 
     cancel: L('已取消征集', 'Call cancelled'),
     retarget: L('目标版本已修改', 'Target changed'),
   };
-  const submit = () => {
-    const ok = run((c) => {
+  const submit = async () => {
+    const ok = (await run((c) => {
       if (ask.kind === 'return') return returnModules(c, call.id, [ask.module!.key], text);
       if (ask.kind === 'exclude') return excludeModule(c, call.id, ask.module!.key, text);
       if (ask.kind === 'cancel') return cancelCall(c, call.id, text);
       return retargetCall(c, call.id, text);
-    }, done[ask.kind]);
+    }, done[ask.kind]));
     if (ok !== undefined) onClose();
   };
   return (

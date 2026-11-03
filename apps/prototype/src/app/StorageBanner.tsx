@@ -18,7 +18,7 @@ export function StorageBanner() {
       <Alert
         type="error"
         banner
-        title={L('浏览器存储不可用或已满：修改只保留到关闭页面为止。请用“原型工具 → 导出状态 JSON”备份。', 'Browser storage is unavailable or full: changes last only until the page is closed. Back them up with Prototype → Export state JSON.')}
+        title={L('浏览器存储不可用或已满，刚才的修改未保存。', 'Browser storage is unavailable or full. The attempted change was not saved.')}
       />
     );
   }

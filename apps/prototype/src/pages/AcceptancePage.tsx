@@ -181,8 +181,8 @@ export function AcceptancePage() {
                   modal.confirm({
                     title: script.start === 'demo' ? L('重置为演示数据？', 'Reset to demo data?') : L('重置为干净安装？', 'Reset to a clean installation?'),
                     content: L('当前浏览器中的原型数据会被替换；验收记录保留。', 'Prototype data in this browser is replaced; the acceptance record stays.'),
-                    onOk: () => {
-                      resetPlatform(script.start!);
+                    onOk: async () => {
+                      await resetPlatform(script.start!);
                       message.success(L('已重置，请重新选择账号', 'Reset; choose an account again'));
                     },
                   })

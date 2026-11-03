@@ -127,7 +127,7 @@ export function PersonalSims({ workspaceId }: { workspaceId: string }) {
         onCancel={() => setCreating(false)}
         onOk={async () => {
           const v = await form.validateFields();
-          const id = run((c) => createPersonalSim(c, { workspaceId, groupId: v.groupId, imageId: v.imageId, displayName: v.displayName }), L('已创建个人仿真', 'Personal simulation created'));
+          const id = (await run((c) => createPersonalSim(c, { workspaceId, groupId: v.groupId, imageId: v.imageId, displayName: v.displayName }), L('已创建个人仿真', 'Personal simulation created')));
           if (id) {
             setCreating(false);
             setOpen(id);
@@ -334,7 +334,7 @@ function PersonalSimDrawer({ id, onClose }: { id: string | null; onClose: () => 
             <Space wrap style={{ marginBottom: 12 }}>
               <Radio.Group value={result} onChange={(e) => setResult(e.target.value)} options={['PASS', 'FAIL']} optionType="button" />
               <Input style={{ width: 320 }} value={note} onChange={(e) => setNote(e.target.value)} placeholder={L('测了什么、结果如何', 'What you tested and what happened')} />
-              <Button onClick={() => run((c) => recordPersonalTest(c, r.id, { result, note }), L('已记录个人自测', 'Self-test recorded')) && setNote('')}>{L('记录', 'Record')}</Button>
+              <Button onClick={async () => (await run((c) => recordPersonalTest(c, r.id, { result, note }), L('已记录个人自测', 'Self-test recorded'))) && setNote('')}>{L('记录', 'Record')}</Button>
             </Space>
           )}
           <Table

@@ -61,7 +61,7 @@ export function AccountsPage() {
   };
 
   const save = () =>
-    form.validateFields().then((v) => {
+    form.validateFields().then(async (v) => {
       const list: GrantInput[] = (v.grants ?? []).map((g: GrantInput) => ({
         role: g.role,
         workspaces: g.workspaces ?? [],
@@ -72,11 +72,11 @@ export function AccountsPage() {
       }));
       const ok =
         editing === 'new'
-          ? run((c) => createAccount(c, { username: v.username, displayName: v.displayName, grants: list }), L('已创建', 'Created'))
-          : run((c) => {
+          ? (await run((c) => createAccount(c, { username: v.username, displayName: v.displayName, grants: list }), L('已创建', 'Created')))
+          : (await run((c) => {
               updateAccount(c, editing!, { displayName: v.displayName });
               replaceGrants(c, editing!, list);
-            }, L('已保存', 'Saved'));
+            }, L('已保存', 'Saved')));
       if (ok !== undefined) setEditing(null);
     });
 

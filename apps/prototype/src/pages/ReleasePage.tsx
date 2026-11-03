@@ -426,8 +426,8 @@ function CreateOtaModal({ projectId, onClose }: { projectId: string; onClose: ()
       title={L('新建配置 OTA', 'New rollout')}
       okText={L('开始下发', 'Start rollout')}
       onCancel={onClose}
-      onOk={() => {
-        if (run((c) => createOta(c, { releaseId: releaseId!, workspaceId: projectId, vehicleGroupIds: groupIds, resourceIds: direct, firstWave }), L('已开始灰度，等待车辆回执', 'Rollout started; waiting for receipts')) !== undefined) onClose();
+      onOk={async () => {
+        if ((await run((c) => createOta(c, { releaseId: releaseId!, workspaceId: projectId, vehicleGroupIds: groupIds, resourceIds: direct, firstWave }), L('已开始灰度，等待车辆回执', 'Rollout started; waiting for receipts'))) !== undefined) onClose();
       }}
     >
       <Hint>
@@ -516,15 +516,15 @@ function RolloutCard({ deployment: d, canManage }: { deployment: Deployment; can
   const rollbackIssues = rollbackProblems(state, d);
   const counts = (status: string) => d.targets.filter((t) => t.status === status).length;
 
-  const submit = () => {
+  const submit = async () => {
     const ok =
       prompt?.kind === 'pause'
-        ? run((c) => pauseOta(c, d.id, reason), L('已暂停', 'Paused'))
+        ? (await run((c) => pauseOta(c, d.id, reason), L('已暂停', 'Paused')))
         : prompt?.kind === 'cancel'
-          ? run((c) => cancelOta(c, d.id, reason), L('已取消', 'Cancelled'))
+          ? (await run((c) => cancelOta(c, d.id, reason), L('已取消', 'Cancelled')))
           : prompt?.kind === 'rollback'
-            ? run((c) => rollbackOta(c, d.id, reason), L('已创建回滚 OTA，等待车辆回执', 'Rollback started; waiting for receipts'))
-            : run((c) => expandOta(c, d.id, chosen), L('已扩大下发范围', 'Rollout expanded'));
+            ? (await run((c) => rollbackOta(c, d.id, reason), L('已创建回滚 OTA，等待车辆回执', 'Rollback started; waiting for receipts')))
+            : (await run((c) => expandOta(c, d.id, chosen), L('已扩大下发范围', 'Rollout expanded')));
     if (ok !== undefined) setPrompt(null);
   };
 

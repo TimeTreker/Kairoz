@@ -92,8 +92,8 @@ export function ProcessingPage({ tab = 'templates' }: { tab?: string }) {
         title={L('发布处理版本', 'Publish a pipeline version')}
         onCancel={() => setPipelineOpen(false)}
         onOk={() =>
-          pf.validateFields().then((v) => {
-            const id = run((c) => createPipeline(c, { ...v, formats: v.formats, steps: v.steps, schemas: v.schemas }), L('已发布', 'Published'));
+          pf.validateFields().then(async (v) => {
+            const id = (await run((c) => createPipeline(c, { ...v, formats: v.formats, steps: v.steps, schemas: v.schemas }), L('已发布', 'Published')));
             if (id) setPipelineOpen(false);
           })
         }
@@ -138,8 +138,8 @@ export function ProcessingPage({ tab = 'templates' }: { tab?: string }) {
         title={L('发布模板版本', 'Publish a template version')}
         onCancel={() => setTemplateOpen(false)}
         onOk={() =>
-          tf.validateFields().then((v) => {
-            const id = run((c) => createTemplate(c, v), L('已发布', 'Published'));
+          tf.validateFields().then(async (v) => {
+            const id = (await run((c) => createTemplate(c, v), L('已发布', 'Published')));
             if (id) setTemplateOpen(false);
           })
         }
@@ -201,8 +201,8 @@ function BudgetTab() {
   // Vehicles that can fire: those running a confirmed configuration.
   const vehicles = Object.values(state.resources).filter((r) => r.appliedConfigId && !r.personal && r.status !== 'RETIRED').sort((a, b) => a.id.localeCompare(b.id));
   const initial: Budget | null = editing ? (editing.kind === 'model' ? modelBudget(state, editing.id).budget : budgetOf(state, editing.id).budget) : null;
-  const save = (b: Budget) =>
-    run((c) => (editing!.kind === 'model' ? setModelBudget(c, editing!.id, b) : setVehicleBudget(c, editing!.id, b)), L('预算已保存，下一次触发起生效', 'Budget saved; it applies from the next trigger')) !== undefined;
+  const save = async (b: Budget) =>
+    (await run((c) => (editing!.kind === 'model' ? setModelBudget(c, editing!.id, b) : setVehicleBudget(c, editing!.id, b)), L('预算已保存，下一次触发起生效', 'Budget saved; it applies from the next trigger'))) !== undefined;
   return (
     <Space orientation="vertical" size={16} style={{ width: '100%' }}>
       <Card title={L('车型采集预算', 'Collection budget per vehicle model')}>

@@ -4,7 +4,7 @@
 import { App, Button, Card, Input, Modal, Select, Space, Table, Tag, Typography } from 'antd';
 import { useState } from 'react';
 import { useErrorText } from '../app/hooks.ts';
-import { engine, useEngineState } from '../app/store.ts';
+import { runOperation, useEngineState } from '../app/store.ts';
 import { addDepartment, hirePerson, mergeDepartment, personLeaves, renameDepartment, syncIfChanged, transferPerson } from '../engine/company-directory.ts';
 import type { Ctx } from '../engine/engine.ts';
 import { useI18n } from '../i18n/i18n.tsx';
@@ -26,9 +26,9 @@ export function CompanyDirectoryCard() {
   const [text, setText] = useState({ username: '', name: '', dept: '' });
   const dir = state.directory;
 
-  const system = <R,>(op: (c: Ctx) => R, ok?: string) => {
+  const system = async <R,>(op: (c: Ctx) => R, ok?: string) => {
     try {
-      const r = engine.run(null, op);
+      const r = await runOperation(null, op);
       if (ok) message.success(ok);
       return r;
     } catch (e) {
@@ -50,18 +50,18 @@ export function CompanyDirectoryCard() {
   const open = (p: Prompt) => (setText({ username: '', name: '', dept: '' }), setPrompt(p));
   const pending = dir.revision !== state.directorySync.revision;
 
-  const submit = () => {
+  const submit = async () => {
     if (!prompt) return;
     const ok =
       prompt.kind === 'hire'
-        ? system((c) => hirePerson(c, { username: text.username, displayName: text.name, deptExtId: text.dept }), L('已入职（待同步）', 'Hired (to sync)'))
+        ? (await system((c) => hirePerson(c, { username: text.username, displayName: text.name, deptExtId: text.dept }), L('已入职（待同步）', 'Hired (to sync)')))
         : prompt.kind === 'department'
-          ? system((c) => addDepartment(c, { name: text.name, parentExtId: text.dept }), L('已新建部门（待同步）', 'Department added (to sync)'))
+          ? (await system((c) => addDepartment(c, { name: text.name, parentExtId: text.dept }), L('已新建部门（待同步）', 'Department added (to sync)')))
           : prompt.kind === 'transfer'
-            ? system((c) => transferPerson(c, prompt.employeeId, text.dept), L('已调岗（待同步）', 'Transferred (to sync)'))
+            ? (await system((c) => transferPerson(c, prompt.employeeId, text.dept), L('已调岗（待同步）', 'Transferred (to sync)')))
             : prompt.kind === 'rename'
-              ? system((c) => renameDepartment(c, prompt.extId, text.name), L('已改名（待同步）', 'Renamed (to sync)'))
-              : system((c) => mergeDepartment(c, prompt.extId, text.dept), L('已合并（待同步）', 'Merged (to sync)'));
+              ? (await system((c) => renameDepartment(c, prompt.extId, text.name), L('已改名（待同步）', 'Renamed (to sync)')))
+              : (await system((c) => mergeDepartment(c, prompt.extId, text.dept), L('已合并（待同步）', 'Merged (to sync)')));
     if (ok !== undefined) setPrompt(null);
   };
 

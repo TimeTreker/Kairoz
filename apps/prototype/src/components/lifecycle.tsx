@@ -42,8 +42,8 @@ export function LifecycleModal({ target, onClose }: { target: LifecycleTarget | 
         : unitArchiveProblems(state, target.id);
   const what = { workspace: L('工作区', 'workspace'), group: L('业务分组', 'business group'), unit: L('组织节点', 'organization unit') }[target.object];
   const history = lifecycleOf(state, target.id);
-  const submit = () => {
-    const ok = run(
+  const submit = async () => {
+    const ok = (await run(
       (c) =>
         restore
           ? restoreWorkspace(c, target.id, reason)
@@ -53,7 +53,7 @@ export function LifecycleModal({ target, onClose }: { target: LifecycleTarget | 
               ? archiveGroup(c, target.id, reason)
               : archiveOrgUnit(c, target.id, reason),
       restore ? L('已恢复', 'Restored') : L('已归档', 'Archived'),
-    );
+    ));
     if (ok !== undefined) close();
   };
   return (

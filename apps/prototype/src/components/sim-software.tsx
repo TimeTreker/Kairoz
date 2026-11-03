@@ -115,7 +115,7 @@ export function SimSoftware({ resourceId }: { resourceId: string }) {
               placeholder={L('选择平台镜像', 'Choose a catalog image')}
               options={catalog.map((i) => ({ value: i.id, label: `${i.id} · ${i.integrationVersion ?? L('无整车版本', 'no whole-vehicle version')}` }))}
             />
-            <Button disabled={!target || running} onClick={() => run((c) => switchImage(c, r.id, target!), L('已请求切换，等待仿真服务', 'Switch requested; waiting for the provider')) && setTarget(undefined)}>
+            <Button disabled={!target || running} onClick={async () => (await run((c) => switchImage(c, r.id, target!), L('已请求切换，等待仿真服务', 'Switch requested; waiting for the provider'))) && setTarget(undefined)}>
               {L('切换基础镜像', 'Switch base image')}
             </Button>
             {rollback && (
@@ -135,8 +135,8 @@ export function SimSoftware({ resourceId }: { resourceId: string }) {
               <Input style={{ width: 160 }} value={ref} onChange={(e) => setRef(e.target.value)} placeholder={L('分支 / Tag / Commit', 'Branch / tag / commit')} />
               <Button
                 disabled={!!open}
-                onClick={() =>
-                  run((c) => requestBuild(c, r.id, { module, repository, ref }), L('已请求构建，等待构建服务', 'Build requested; waiting for the build provider')) && (setRepository(''), setRef(''))
+                onClick={async () =>
+                  (await run((c) => requestBuild(c, r.id, { module, repository, ref }), L('已请求构建，等待构建服务', 'Build requested; waiting for the build provider'))) && (setRepository(''), setRef(''))
                 }
               >
                 {L('构建模块', 'Build module')}

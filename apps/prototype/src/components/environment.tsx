@@ -34,8 +34,8 @@ export function EnvironmentModal({ resourceId, onClose }: { resourceId: string |
       okText={L('变更', 'Move')}
       okButtonProps={{ disabled: !to || problems.length > 0 || !reason.trim() }}
       onCancel={close}
-      onOk={() => {
-        if (to && run((c) => setResourceEnvironment(c, r.id, { env: to, reason }), L('已变更环境', 'Environment changed')) !== undefined) close();
+      onOk={async () => {
+        if (to && (await run((c) => setResourceEnvironment(c, r.id, { env: to, reason }), L('已变更环境', 'Environment changed'))) !== undefined) close();
       }}
     >
       <Hint>

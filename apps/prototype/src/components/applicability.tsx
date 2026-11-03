@@ -203,8 +203,8 @@ export function SoftwareVersionsCard({ modelId }: { modelId: string }) {
         title={L(`开启适用性确认 · ${modelId} ${opening}`, `Open an applicability check · ${modelId} ${opening}`)}
         okText={L('开启', 'Open')}
         onCancel={() => setOpening(null)}
-        onOk={() => {
-          if (run((c) => openApplicabilityCheck(c, { releaseId: releaseId!, version: opening! }), L('已开启适用性确认，等待集成测试', 'Check opened; waiting for integration testing')) !== undefined) setOpening(null);
+        onOk={async () => {
+          if ((await run((c) => openApplicabilityCheck(c, { releaseId: releaseId!, version: opening! }), L('已开启适用性确认，等待集成测试', 'Check opened; waiting for integration testing'))) !== undefined) setOpening(null);
         }}
       >
         <Hint>{L('选择要在该软件版本上验证的策略集。确认前会逐条检查策略，并在运行该软件的测试车上做集成测试。', 'Choose the set to verify on this software. Before confirmation every policy is checked and the set is tested on testing vehicles running that software.')}</Hint>
@@ -220,8 +220,8 @@ export function SoftwareVersionsCard({ modelId }: { modelId: string }) {
         title={withdrawing ? L(`撤销 ${withdrawing.release.dclVersion} 对 ${withdrawing.version} 的适用`, `Withdraw ${withdrawing.release.dclVersion} from ${withdrawing.version}`) : ''}
         okButtonProps={{ danger: true }}
         onCancel={() => setWithdrawing(null)}
-        onOk={() => {
-          if (withdrawing && run((c) => withdrawApplicability(c, { releaseId: withdrawing.release.id, version: withdrawing.version, reason }), L('已撤销适用', 'Applicability withdrawn')) !== undefined) setWithdrawing(null);
+        onOk={async () => {
+          if (withdrawing && (await run((c) => withdrawApplicability(c, { releaseId: withdrawing.release.id, version: withdrawing.version, reason }), L('已撤销适用', 'Applicability withdrawn'))) !== undefined) setWithdrawing(null);
         }}
       >
         <Hint>{L('只追加一条撤销记录。该软件版本的车辆回到仍适用的上一个策略集；没有时量产下发被阻止。', 'Only a withdrawal record is appended. Vehicles on that software fall back to the previous set that still applies; without one, production delivery is blocked.')}</Hint>
@@ -360,25 +360,25 @@ function CheckCard({ check }: { check: ApplicabilityCheck }) {
         vehicles={vehicles}
         emptyText={L('集成工作区没有测试车辆组或未归组的测试车辆', 'The integration workspace has no testing vehicle groups or ungrouped testing vehicles')}
         onClose={() => setDispatching(false)}
-        onDispatch={(vehicleGroupIds, _goal, resourceIds) =>
-          run((c) => dispatchApplicability(c, check.id, { vehicleGroupIds, resourceIds }), L('已下发；车辆回执后再登记结果', 'Dispatched; record results after the vehicles confirm')) !== undefined
+        onDispatch={async (vehicleGroupIds, _goal, resourceIds) =>
+          (await run((c) => dispatchApplicability(c, check.id, { vehicleGroupIds, resourceIds }), L('已下发；车辆回执后再登记结果', 'Dispatched; record results after the vehicles confirm'))) !== undefined
         }
       />
       <RecordTestModal
         resourceId={recording}
         onClose={() => setRecording(null)}
-        onRecord={(input) => run((c) => recordApplicabilityTest(c, check.id, { resourceId: recording!, ...input }), L('已登记', 'Recorded')) !== undefined}
+        onRecord={async (input) => (await run((c) => recordApplicabilityTest(c, check.id, { resourceId: recording!, ...input }), L('已登记', 'Recorded'))) !== undefined}
       />
       <Modal
         open={deciding !== null}
         title={deciding === 'confirm' ? L(`确认 ${release.dclVersion} 适用于 ${check.version}`, `Confirm ${release.dclVersion} for ${check.version}`) : L('取消适用性确认', 'Cancel the check')}
         okButtonProps={{ danger: deciding === 'cancel' }}
         onCancel={() => setDeciding(null)}
-        onOk={() => {
+        onOk={async () => {
           const ok =
             deciding === 'confirm'
-              ? run((c) => confirmApplicability(c, check.id, { note }), L('已确认适用；策略集内容与版本号不变', 'Confirmed; the set’s content and version are unchanged'))
-              : run((c) => cancelApplicabilityCheck(c, check.id, note), L('已取消', 'Cancelled'));
+              ? (await run((c) => confirmApplicability(c, check.id, { note }), L('已确认适用；策略集内容与版本号不变', 'Confirmed; the set’s content and version are unchanged')))
+              : (await run((c) => cancelApplicabilityCheck(c, check.id, note), L('已取消', 'Cancelled')));
           if (ok !== undefined) setDeciding(null);
         }}
       >

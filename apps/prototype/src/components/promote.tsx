@@ -46,13 +46,13 @@ export function PromoteModal({ candidate, onClose }: { candidate: Candidate; onC
       okButtonProps={{ disabled: moved }}
       onCancel={onClose}
       onOk={() =>
-        form.validateFields().then((v) => {
-          const id = run(
+        form.validateFields().then(async (v) => {
+          const id = (await run(
             (c) => promoteCandidate(c, candidate.id, { dclVersion: v.dclVersion, vehicleIntegrationVersions: v.versions ?? [], notes: v.notes }),
             call
               ? L(`已发布：新策略集对应工作名 ${call.vehicleModelId} ${call.targetVersion}，配置已导出，待 DCL 导出 DCL 件交给 PLM`, `Released: the set is related to working name ${call.vehicleModelId} ${call.targetVersion}; its configuration is exported for DCL to hand to PLM`)
               : L('已发布；车辆在 OTA 回执成功后才会运行新策略集', 'Released; vehicles run the set only after an OTA receipt'),
-          );
+          ));
           if (id !== undefined) onClose();
         })
       }

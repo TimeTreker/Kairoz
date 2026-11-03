@@ -185,8 +185,8 @@ export function DataCatalogPage({ tab = 'own' }: { tab?: string }) {
         open={asking !== null}
         title={L('申请只读引用', 'Request a read-only reference')}
         onCancel={() => setAsking(null)}
-        onOk={() => {
-          if (run((c) => requestReference(c, { dataKey: asking!, readerGroupId: group.id, reason }), L('已提交申请', 'Requested')) !== undefined) setAsking(null);
+        onOk={async () => {
+          if ((await run((c) => requestReference(c, { dataKey: asking!, readerGroupId: group.id, reason }), L('已提交申请', 'Requested'))) !== undefined) setAsking(null);
         }}
       >
         <Input.TextArea rows={3} value={reason} onChange={(e) => setReason(e.target.value)} placeholder={L('为什么需要这份数据', 'Why the data is needed')} />
@@ -195,12 +195,12 @@ export function DataCatalogPage({ tab = 'own' }: { tab?: string }) {
         open={deciding !== null}
         title={deciding?.action === 'REVOKE' ? L('撤销引用', 'Revoke reference') : deciding?.action === 'APPROVED' ? L('批准引用', 'Approve reference') : L('拒绝引用', 'Reject reference')}
         onCancel={() => setDeciding(null)}
-        onOk={() => {
+        onOk={async () => {
           const d = deciding!;
           const ok =
             d.action === 'REVOKE'
-              ? run((c) => revokeReference(c, d.id, { reason }), L('已撤销', 'Revoked'))
-              : run((c) => decideReference(c, d.id, { decision: d.action as 'APPROVED' | 'REJECTED', reason }), L('已处理', 'Done'));
+              ? (await run((c) => revokeReference(c, d.id, { reason }), L('已撤销', 'Revoked')))
+              : (await run((c) => decideReference(c, d.id, { decision: d.action as 'APPROVED' | 'REJECTED', reason }), L('已处理', 'Done')));
           if (ok !== undefined) setDeciding(null);
         }}
       >

@@ -40,7 +40,7 @@ export function BudgetLine({ budget }: { budget: Budget }) {
 }
 
 /** Edits a budget; `onSave` runs the engine operation and says whether it succeeded. */
-export function BudgetModal({ title, initial, open, onClose, onSave }: { title: string; initial: Budget; open: boolean; onClose: () => void; onSave: (b: Budget) => boolean }) {
+export function BudgetModal({ title, initial, open, onClose, onSave }: { title: string; initial: Budget; open: boolean; onClose: () => void; onSave: (b: Budget) => Promise<boolean> }) {
   const { L } = useI18n();
   const fields = useBudgetFields();
   const [form] = Form.useForm<Budget>();
@@ -50,7 +50,7 @@ export function BudgetModal({ title, initial, open, onClose, onSave }: { title: 
       destroyOnHidden
       title={title}
       onCancel={onClose}
-      onOk={() => form.validateFields().then((v) => onSave(v) && onClose())}
+      onOk={() => form.validateFields().then(async (v) => (await onSave(v)) && onClose())}
     >
       <Hint>{L('车端代理按滚动的一小时核算。高优先级采集超预算仍然采集；其他采集超出 CPU、存储或缓存时不保留，超出上传时排队到预算允许。', 'The vehicle agent counts a rolling hour. HIGH-priority captures are collected even over budget; others are dropped over CPU, storage or the buffer, and wait over upload until the budget allows.')}</Hint>
       <Form form={form} layout="vertical" initialValues={initial} preserve={false}>
@@ -172,8 +172,8 @@ export function PauseButton({ resourceId }: { resourceId: string }) {
         okButtonProps={{ disabled: !reason.trim(), danger: !paused }}
         okText={paused ? L('恢复', 'Resume') : L('暂停', 'Pause')}
         onCancel={() => setOpen(false)}
-        onOk={() => {
-          const ok = run((c) => (paused ? resumeCollection(c, resourceId, { reason }) : pauseCollection(c, resourceId, { reason })), paused ? L('已请求恢复，等待车辆确认', 'Resume asked; waiting for the vehicle') : L('已请求暂停，车辆立即拒绝新的触发', 'Pause asked; the vehicle refuses new triggers at once'));
+        onOk={async () => {
+          const ok = (await run((c) => (paused ? resumeCollection(c, resourceId, { reason }) : pauseCollection(c, resourceId, { reason })), paused ? L('已请求恢复，等待车辆确认', 'Resume asked; waiting for the vehicle') : L('已请求暂停，车辆立即拒绝新的触发', 'Pause asked; the vehicle refuses new triggers at once')));
           if (ok !== undefined) setOpen(false);
         }}
       >

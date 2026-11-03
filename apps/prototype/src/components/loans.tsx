@@ -72,10 +72,10 @@ export function LoanVehicleTag({ resourceId, workspaceId }: { resourceId: string
 
 const wsName = (s: State, id: string) => s.workspaces[id]?.name ?? id;
 
-function NoteModal({ title, required, placeholder, onOk, onClose }: { title: string; required: boolean; placeholder: string; onOk: (note: string) => boolean; onClose: () => void }) {
+function NoteModal({ title, required, placeholder, onOk, onClose }: { title: string; required: boolean; placeholder: string; onOk: (note: string) => Promise<boolean>; onClose: () => void }) {
   const [note, setNote] = useState('');
   return (
-    <Modal open title={title} okButtonProps={{ disabled: required && !note.trim() }} onCancel={onClose} onOk={() => onOk(note) && onClose()}>
+    <Modal open title={title} okButtonProps={{ disabled: required && !note.trim() }} onCancel={onClose} onOk={async () => (await onOk(note)) && onClose()}>
       <Input.TextArea rows={3} value={note} onChange={(e) => setNote(e.target.value)} placeholder={placeholder} />
     </Modal>
   );
@@ -95,8 +95,8 @@ function RequestModal({ workspaceId, entry, onClose }: { workspaceId: string; en
       okText={L('提交申请', 'Send request')}
       onCancel={onClose}
       onOk={() =>
-        form.validateFields().then((v) => {
-          if (run((c) => requestLoan(c, { workspaceId, resourceId: entry.resourceId, ...v }), L('已提交借用申请', 'Loan requested')) !== undefined) onClose();
+        form.validateFields().then(async (v) => {
+          if ((await run((c) => requestLoan(c, { workspaceId, resourceId: entry.resourceId, ...v }), L('已提交借用申请', 'Loan requested'))) !== undefined) onClose();
         })
       }
     >
@@ -212,8 +212,8 @@ function ExtendModal({ loan, onClose }: { loan: Loan; onClose: () => void }) {
       open
       title={`${L('申请延期', 'Ask for more time')} · ${loan.resourceId}`}
       onCancel={onClose}
-      onOk={() => {
-        if (run((c) => requestExtension(c, loan.id, { dueDate, reason }), L('已申请延期', 'Extension requested')) !== undefined) onClose();
+      onOk={async () => {
+        if ((await run((c) => requestExtension(c, loan.id, { dueDate, reason }), L('已申请延期', 'Extension requested'))) !== undefined) onClose();
       }}
     >
       <Space orientation="vertical" style={{ width: '100%' }}>
@@ -303,8 +303,8 @@ function BorrowedCard({ workspaceId }: { workspaceId: string }) {
         title={`${L('归还', 'Return')} · ${returning?.resourceId}`}
         okText={L('归还', 'Return')}
         onCancel={() => setReturning(null)}
-        onOk={() => {
-          if (returning && run((c) => returnLoan(c, returning.id), L('已归还', 'Returned')) !== undefined) setReturning(null);
+        onOk={async () => {
+          if (returning && (await run((c) => returnLoan(c, returning.id), L('已归还', 'Returned'))) !== undefined) setReturning(null);
         }}
       >
         <Typography.Paragraph>
@@ -373,7 +373,7 @@ function LentCard({ workspaceId }: { workspaceId: string }) {
           required
           placeholder={L('原因，例如：本周路测在用', 'Reason, e.g. on road tests this week')}
           onClose={() => setDeclining(null)}
-          onOk={(note) => run((c) => answerLoanAsLender(c, declining.id, { workspaceId, agree: false, note }), L('已答复', 'Answered')) !== undefined}
+          onOk={async (note) => (await run((c) => answerLoanAsLender(c, declining.id, { workspaceId, agree: false, note }), L('已答复', 'Answered'))) !== undefined}
         />
       )}
     </Card>
@@ -510,7 +510,7 @@ function ApprovalsCard() {
           required
           placeholder={L('原因', 'Reason')}
           onClose={() => setRejecting(null)}
-          onOk={(note) => run((c) => decideLoan(c, rejecting.id, { approve: false, note }), L('已驳回', 'Rejected')) !== undefined}
+          onOk={async (note) => (await run((c) => decideLoan(c, rejecting.id, { approve: false, note }), L('已驳回', 'Rejected'))) !== undefined}
         />
       )}
       {recalling && (
@@ -519,7 +519,7 @@ function ApprovalsCard() {
           required
           placeholder={L('原因，例如：到期未还、需要年检', 'Reason, e.g. overdue, due for inspection')}
           onClose={() => setRecalling(null)}
-          onOk={(note) => run((c) => recallLoan(c, recalling.id, note), L('已收回', 'Recalled')) !== undefined}
+          onOk={async (note) => (await run((c) => recallLoan(c, recalling.id, note), L('已收回', 'Recalled'))) !== undefined}
         />
       )}
     </Card>

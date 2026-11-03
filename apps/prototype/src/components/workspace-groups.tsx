@@ -25,8 +25,8 @@ export function WorkspaceGroups({ workspaceId, onArchive }: { workspaceId: strin
   const domains = DOMAINS.filter((d) => workspace.scopes.includes(d));
   const close = () => (setOpen(false), form.resetFields());
   const save = () =>
-    form.validateFields().then((v) => {
-      const ok = run((c) => createGroup(c, { ...v, workspaceId }), L('已创建，并加入本工作区；创建分组不授予任何人权限', 'Created and added to this workspace; creating a group grants nobody anything'));
+    form.validateFields().then(async (v) => {
+      const ok = (await run((c) => createGroup(c, { ...v, workspaceId }), L('已创建，并加入本工作区；创建分组不授予任何人权限', 'Created and added to this workspace; creating a group grants nobody anything')));
       if (ok !== undefined) close();
     });
   return (

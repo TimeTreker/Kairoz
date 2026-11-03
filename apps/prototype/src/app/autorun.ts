@@ -3,7 +3,7 @@
 
 import { useSyncExternalStore } from 'react';
 import { tick } from '../engine/simulator.ts';
-import { engine } from './store.ts';
+import { runOperation } from './store.ts';
 
 let timer: ReturnType<typeof setInterval> | undefined;
 let failures = 0;
@@ -15,9 +15,9 @@ const MAX_FAILURES = 5;
 export function setAutoRun(on: boolean): void {
   if (on && !timer) {
     failures = 0;
-    timer = setInterval(() => {
+    timer = setInterval(async () => {
       try {
-        engine.run(null, (c) => tick(c));
+        await runOperation(null, (c) => tick(c));
         failures = 0;
       } catch (e) {
         // A step that cannot run now is tried again on the next one, a few times.

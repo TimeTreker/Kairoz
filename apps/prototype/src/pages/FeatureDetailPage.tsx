@@ -152,8 +152,8 @@ export function FeatureDetailPage({ featureId, tab = 'files' }: { featureId: str
         title={L('提交 Feature', 'Submit Feature')}
         okText={L('提交', 'Submit')}
         onCancel={() => setSubmitting(false)}
-        onOk={() => {
-          const r = run((c) => submitFeature(c, feature.id, { message: text }));
+        onOk={async () => {
+          const r = (await run((c) => submitFeature(c, feature.id, { message: text })));
           if (r) {
             setSubmitting(false);
             modal.success({
@@ -186,8 +186,8 @@ export function FeatureDetailPage({ featureId, tab = 'files' }: { featureId: str
         okText={L('退回', 'Return')}
         okButtonProps={{ danger: true }}
         onCancel={() => setReturning(false)}
-        onOk={() => {
-          if (run((c) => returnFeature(c, feature.id, { reason: text }), L('已退回', 'Returned')) !== undefined) setReturning(false);
+        onOk={async () => {
+          if ((await run((c) => returnFeature(c, feature.id, { reason: text }), L('已退回', 'Returned'))) !== undefined) setReturning(false);
         }}
       >
         <Input.TextArea rows={3} placeholder={L('需要修改的内容', 'What needs to change')} value={text} onChange={(e) => setText(e.target.value)} />

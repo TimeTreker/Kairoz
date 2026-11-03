@@ -218,8 +218,8 @@ export function ValidationTab({ feature }: { feature: Feature }) {
         switchable={switchable}
         emptyText=""
         onClose={() => setRequesting(false)}
-        onDispatch={(ids, goal, _direct, disabledPolicies) =>
-          run((c) => requestTeamTest(c, feature.id, { commitId: feature.headCommitId!, vehicleGroupIds: ids, disabledPolicies, goal }), L('已提交申请，等待工作区管理员审批', 'Request submitted; waiting for the workspace admin')) !== undefined
+        onDispatch={async (ids, goal, _direct, disabledPolicies) =>
+          (await run((c) => requestTeamTest(c, feature.id, { commitId: feature.headCommitId!, vehicleGroupIds: ids, disabledPolicies, goal }), L('已提交申请，等待工作区管理员审批', 'Request submitted; waiting for the workspace admin'))) !== undefined
         }
       />
       <DispatchModal
@@ -228,14 +228,14 @@ export function ValidationTab({ feature }: { feature: Feature }) {
         switchable={switchable}
         emptyText={L('本工作区没有服务该分组的车辆组；请联系工作区管理员。', 'No vehicle group serves this group here; ask the workspace admin.')}
         onClose={() => setDispatching(false)}
-        onDispatch={(ids, _goal, _direct, disabledPolicies) =>
-          run((c) => dispatchFeature(c, feature.id, { commitId: commitId!, vehicleGroupIds: ids, disabledPolicies }), L('已下发：车辆上线时推送，回执后生效', 'Dispatched: pushed when each vehicle is on, applied after its receipt')) !== undefined
+        onDispatch={async (ids, _goal, _direct, disabledPolicies) =>
+          (await run((c) => dispatchFeature(c, feature.id, { commitId: commitId!, vehicleGroupIds: ids, disabledPolicies }), L('已下发：车辆上线时推送，回执后生效', 'Dispatched: pushed when each vehicle is on, applied after its receipt'))) !== undefined
         }
       />
       <RecordTestModal
         resourceId={testing}
         onClose={() => setTesting(null)}
-        onRecord={(v) => run((c) => recordFeatureTest(c, feature.id, { commitId: commitId!, resourceId: testing!, ...v }), L('已登记', 'Recorded')) !== undefined}
+        onRecord={async (v) => (await run((c) => recordFeatureTest(c, feature.id, { commitId: commitId!, resourceId: testing!, ...v }), L('已登记', 'Recorded'))) !== undefined}
       />
     </Space>
   );

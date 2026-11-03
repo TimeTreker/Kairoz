@@ -75,12 +75,12 @@ export function EmergencyStopsCard({ modelId }: { modelId: string }) {
         title={deciding?.decision === 'APPROVED' ? L(`批准紧急停用 ${deciding.stop.policyId}`, `Approve stopping ${deciding.stop.policyId}`) : L('拒绝紧急停用', 'Reject the stop')}
         okButtonProps={{ danger: deciding?.decision === 'APPROVED' }}
         onCancel={() => setDeciding(null)}
-        onOk={() => {
+        onOk={async () => {
           if (!deciding) return;
-          const ok = run(
+          const ok = (await run(
             (c) => decideEmergencyStop(c, deciding.stop.id, { decision: deciding.decision, note }),
             deciding.decision === 'APPROVED' ? L('已发布紧急策略集；用配置 OTA 下发到量产车', 'Emergency set published; deliver it with a configuration OTA') : L('已拒绝', 'Rejected'),
-          );
+          ));
           if (ok !== undefined) setDeciding(null);
         }}
       >
@@ -103,9 +103,9 @@ export function RequestStopModal({ target, onClose }: { target: { release: Relea
       okText={L('提交申请', 'Submit request')}
       onCancel={onClose}
       afterOpenChange={(open) => open && setReason('')}
-      onOk={() => {
+      onOk={async () => {
         if (!target) return;
-        if (run((c) => requestEmergencyStop(c, { releaseId: target.release.id, policyId: target.policyId, reason }), L('已提交，等待另一名配置发布批准', 'Submitted; another release person decides')) !== undefined) onClose();
+        if ((await run((c) => requestEmergencyStop(c, { releaseId: target.release.id, policyId: target.policyId, reason }), L('已提交，等待另一名配置发布批准', 'Submitted; another release person decides'))) !== undefined) onClose();
       }}
     >
       {target && (

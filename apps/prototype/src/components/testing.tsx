@@ -224,7 +224,7 @@ export function DispatchModal({
   /** Ask for an approved team test instead of dispatching. */
   request?: boolean;
   onClose: () => void;
-  onDispatch: (vehicleGroupIds: string[], goal: string, resourceIds: string[], disabledPolicies: string[]) => boolean;
+  onDispatch: (vehicleGroupIds: string[], goal: string, resourceIds: string[], disabledPolicies: string[]) => Promise<boolean>;
 }) {
   const state = useEngineState();
   const { L } = useI18n();
@@ -246,7 +246,7 @@ export function DispatchModal({
       title={request ? L('申请团队测试', 'Request a team test') : groups.length === 0 && vehicles.length > 0 ? L('下发到车辆', 'Dispatch to vehicles') : L('按车辆组下发', 'Dispatch to vehicle groups')}
       okText={request ? L('提交申请', 'Submit request') : L('下发', 'Dispatch')}
       onCancel={onClose}
-      onOk={() => onDispatch(chosen, goal, direct, disabled) && onClose()}
+      onOk={async () => (await onDispatch(chosen, goal, direct, disabled)) && onClose()}
     >
       <Hint>
         {request
@@ -324,7 +324,7 @@ export interface TestResultInput {
 }
 
 /** Records one test result for a vehicle. `onRecord` returns whether it succeeded. */
-export function RecordTestModal({ resourceId, onClose, onRecord }: { resourceId: string | null; onClose: () => void; onRecord: (input: TestResultInput) => boolean }) {
+export function RecordTestModal({ resourceId, onClose, onRecord }: { resourceId: string | null; onClose: () => void; onRecord: (input: TestResultInput) => Promise<boolean> }) {
   const { L } = useI18n();
   const [form] = Form.useForm<TestResultInput>();
   useEffect(() => {
@@ -335,7 +335,7 @@ export function RecordTestModal({ resourceId, onClose, onRecord }: { resourceId:
       open={resourceId !== null}
       title={`${L('登记测试结果', 'Record a test result')} · ${resourceId}`}
       onCancel={onClose}
-      onOk={() => form.validateFields().then((v) => onRecord(v) && onClose())}
+      onOk={() => form.validateFields().then(async (v) => (await onRecord(v)) && onClose())}
     >
       <Form form={form} name="test-run" layout="vertical" initialValues={{ result: 'PASS' }}>
         <Form.Item name="result" label={L('结果', 'Result')}>

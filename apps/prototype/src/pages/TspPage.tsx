@@ -7,7 +7,7 @@ import { MinusCircleOutlined, PlusOutlined } from '@ant-design/icons';
 import { App, Button, Card, Input, Modal, Select, Space, Table, Tag, Typography } from 'antd';
 import { useState } from 'react';
 import { useErrorText } from '../app/hooks.ts';
-import { engine, useEngineState } from '../app/store.ts';
+import { runOperation, useEngineState } from '../app/store.ts';
 import { Hint, Mono, PageHeader } from '../components/common.tsx';
 import { HardwareTags } from '../components/tsp.tsx';
 import type { Ctx } from '../engine/engine.ts';
@@ -27,9 +27,9 @@ export function TspPage() {
   const pending = state.tsp.revision !== state.tspSync.revision;
   const models = Object.keys(state.vehicleModels).sort();
 
-  const system = <R,>(op: (c: Ctx) => R, ok?: string) => {
+  const system = async <R,>(op: (c: Ctx) => R, ok?: string) => {
     try {
-      const r = engine.run(null, op);
+      const r = await runOperation(null, op);
       if (ok) message.success(ok);
       return r;
     } catch (e) {
@@ -39,13 +39,13 @@ export function TspPage() {
   };
 
   const registered = (vin: string) => Object.values(state.resources).find((r) => r.vin === vin);
-  const save = () => {
+  const save = async () => {
     if (!form) return;
     const hardware = form.hardware.filter((h) => h.item.trim() || h.value.trim());
     const done =
       form.kind === 'add'
-        ? system((c) => addTspVehicle(c, { vin: form.vin, vehicleModelId: form.model, licensePlate: form.plate, hardware, expectedVersion: form.expected }), L('TSP 已收录（待同步）', 'Added to TSP (to sync)'))
-        : system((c) => updateTspVehicle(c, form.vin, { expectedVersion: form.expected, hardware }), L('TSP 记录已修改（待同步）', 'TSP record changed (to sync)'));
+        ? (await system((c) => addTspVehicle(c, { vin: form.vin, vehicleModelId: form.model, licensePlate: form.plate, hardware, expectedVersion: form.expected }), L('TSP 已收录（待同步）', 'Added to TSP (to sync)')))
+        : (await system((c) => updateTspVehicle(c, form.vin, { expectedVersion: form.expected, hardware }), L('TSP 记录已修改（待同步）', 'TSP record changed (to sync)')));
     if (done !== undefined) setForm(null);
   };
   const edit = (v: TspVehicle) => setForm({ kind: 'edit', vin: v.vin, model: v.vehicleModelId, plate: v.licensePlate ?? '', expected: v.expectedVersion ?? '', hardware: v.hardware.map((h) => ({ ...h })) });

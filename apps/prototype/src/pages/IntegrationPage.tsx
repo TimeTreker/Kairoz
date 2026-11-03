@@ -398,8 +398,8 @@ function MergeTab({ projectId, onCandidate }: { projectId: string; onCandidate: 
         title={L(`${closing?.name ?? ''} 不合入主线`, `Close ${closing?.name ?? ''} for the mainline`)}
         okButtonProps={{ disabled: !reason.trim() }}
         onCancel={() => setClosing(null)}
-        onOk={() => {
-          if (closing && run((c) => closeForMainline(c, closing.id, { reason }), L('已关闭，不合入主线', 'Closed for the mainline')) !== undefined) setClosing(null);
+        onOk={async () => {
+          if (closing && (await run((c) => closeForMainline(c, closing.id, { reason }), L('已关闭，不合入主线', 'Closed for the mainline'))) !== undefined) setClosing(null);
         }}
       >
         <Hint>{L('主线不需要这个修复时（例如主线已重写了这条策略），关闭它并写明理由；理由记录在 Feature 上。', 'When the mainline does not need the fix (say it already rewrote the policy), close it with a reason; the reason stays with the Feature.')}</Hint>
@@ -667,8 +667,8 @@ function PlanCard({ plan, onCandidate }: { plan: MergePlan; onCandidate: (id: st
         title={L('确认最终处理集合', 'Confirm the final processing set')}
         okText={L('确认', 'Confirm')}
         onCancel={() => setConfirming(false)}
-        onOk={() => {
-          if (run((c) => confirmProcessing(c, plan.id, { note }), L('已确认处理集合', 'Processing set confirmed')) !== undefined) setConfirming(false);
+        onOk={async () => {
+          if ((await run((c) => confirmProcessing(c, plan.id, { note }), L('已确认处理集合', 'Processing set confirmed'))) !== undefined) setConfirming(false);
         }}
       >
         <Hint>
@@ -684,8 +684,8 @@ function PlanCard({ plan, onCandidate }: { plan: MergePlan; onCandidate: (id: st
         title={L('冻结为集成候选', 'Freeze as candidate')}
         okText={L('冻结', 'Freeze')}
         onCancel={() => setFreezing(false)}
-        onOk={() => {
-          const id = run((c) => freezeCandidate(c, plan.id, { label }), L('已冻结候选，交给集成测试', 'Candidate frozen; handed to integration testing'));
+        onOk={async () => {
+          const id = (await run((c) => freezeCandidate(c, plan.id, { label }), L('已冻结候选，交给集成测试', 'Candidate frozen; handed to integration testing')));
           if (id !== undefined) {
             setFreezing(false);
             onCandidate(id);
@@ -984,16 +984,16 @@ function CandidateDetail({ candidate: c }: { candidate: Candidate }) {
         vehicles={ungrouped}
         emptyText={L('集成测试工作区没有测试车辆；请联系车辆资源或工作区管理员。', 'The integration workspace has no testing vehicles; ask vehicle resources or its admin.')}
         onClose={() => setDispatching(false)}
-        onDispatch={(ids, _goal, direct) => run((cx) => dispatchCandidate(cx, c.id, { vehicleGroupIds: ids, resourceIds: direct }), L('已下发：车辆上线时推送，回执后生效', 'Dispatched: pushed when each vehicle is on, applied after its receipt')) !== undefined}
+        onDispatch={async (ids, _goal, direct) => (await run((cx) => dispatchCandidate(cx, c.id, { vehicleGroupIds: ids, resourceIds: direct }), L('已下发：车辆上线时推送，回执后生效', 'Dispatched: pushed when each vehicle is on, applied after its receipt'))) !== undefined}
       />
-      <RecordTestModal resourceId={testing} onClose={() => setTesting(null)} onRecord={(v) => run((cx) => recordCandidateTest(cx, c.id, { resourceId: testing!, ...v }), L('已登记', 'Recorded')) !== undefined} />
+      <RecordTestModal resourceId={testing} onClose={() => setTesting(null)} onRecord={async (v) => (await run((cx) => recordCandidateTest(cx, c.id, { resourceId: testing!, ...v }), L('已登记', 'Recorded'))) !== undefined} />
       <Modal
         open={publishing}
         title={L(`发布子系统 · ${c.label}`, `Publish subsystem · ${c.label}`)}
         okText={L('发布子系统', 'Publish subsystem')}
         onCancel={() => setPublishing(false)}
-        onOk={() => {
-          if (run((cx) => publishSubsystem(cx, c.id, { notes }), L('已发布子系统，可供整车集成收集', 'Subsystem published; whole-vehicle integration can collect it')) !== undefined) setPublishing(false);
+        onOk={async () => {
+          if ((await run((cx) => publishSubsystem(cx, c.id, { notes }), L('已发布子系统，可供整车集成收集', 'Subsystem published; whole-vehicle integration can collect it'))) !== undefined) setPublishing(false);
         }}
       >
         <Hint>
@@ -1010,8 +1010,8 @@ function CandidateDetail({ candidate: c }: { candidate: Candidate }) {
         okText={L('取消候选', 'Cancel candidate')}
         okButtonProps={{ danger: true }}
         onCancel={() => setCancelling(false)}
-        onOk={() => {
-          if (run((cx) => cancelCandidate(cx, c.id, { reason }), L('已取消候选，来源 Feature 恢复为 Verified', 'Cancelled; source Features are Verified again')) !== undefined) setCancelling(false);
+        onOk={async () => {
+          if ((await run((cx) => cancelCandidate(cx, c.id, { reason }), L('已取消候选，来源 Feature 恢复为 Verified', 'Cancelled; source Features are Verified again'))) !== undefined) setCancelling(false);
         }}
       >
         <Input.TextArea rows={2} value={reason} onChange={(e) => setReason(e.target.value)} placeholder={L('原因', 'Reason')} />

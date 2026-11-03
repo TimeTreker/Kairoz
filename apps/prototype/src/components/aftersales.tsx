@@ -50,8 +50,8 @@ export function AfterSalesRequests({ workspaceId }: { workspaceId: string }) {
           <Button
             type="primary"
             disabled={!vehicle || !policy || !reason.trim()}
-            onClick={() => {
-              if (run((c) => requestAfterSalesCapture(c, { workspaceId, resourceId: vehicle!, policyId: policy!, reason }), L('已请求，车辆下次连线时采集', 'Requested; the vehicle captures on its next connection')) !== undefined) setReason('');
+            onClick={async () => {
+              if ((await run((c) => requestAfterSalesCapture(c, { workspaceId, resourceId: vehicle!, policyId: policy!, reason }), L('已请求，车辆下次连线时采集', 'Requested; the vehicle captures on its next connection'))) !== undefined) setReason('');
             }}
           >
             {L('请求采集', 'Request capture')}

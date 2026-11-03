@@ -93,12 +93,12 @@ export function PoliciesTab({ feature }: { feature: Feature }) {
         okText={L('保存到草稿', 'Save to draft')}
         onCancel={() => setEditing(null)}
         onOk={() =>
-          form.validateFields().then((v) => {
+          form.validateFields().then(async (v) => {
             const id = editing === 'new' ? `${prefix}${v.suffix}` : editing!;
-            const ok = run(
+            const ok = (await run(
               (c) => putPolicy(c, feature.id, id, { name: v.name, trigger: v.trigger, captures: v.captures, preSeconds: v.preSeconds, postSeconds: v.postSeconds, priority: v.priority }),
               L('已保存到草稿', 'Saved to draft'),
-            );
+            ));
             if (ok !== undefined) setEditing(null);
           })
         }

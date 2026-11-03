@@ -87,8 +87,8 @@ export function IntakePage() {
         open={deciding !== null}
         title={L('判定来源重叠', 'Decide overlap')}
         onCancel={() => setDeciding(null)}
-        onOk={() => {
-          if (run((c) => reviewOverlap(c, deciding!, { decision, note }), L('已判定', 'Decided')) !== undefined) setDeciding(null);
+        onOk={async () => {
+          if ((await run((c) => reviewOverlap(c, deciding!, { decision, note }), L('已判定', 'Decided'))) !== undefined) setDeciding(null);
         }}
       >
         <Radio.Group value={decision} onChange={(e) => setDecision(e.target.value)} style={{ marginBottom: 12 }}>

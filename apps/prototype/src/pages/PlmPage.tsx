@@ -8,7 +8,7 @@ import { MinusCircleOutlined, PlusOutlined } from '@ant-design/icons';
 import { App, Button, Card, Input, Modal, Radio, Select, Space, Table, Tag, Tooltip, Typography } from 'antd';
 import { useState } from 'react';
 import { useErrorText } from '../app/hooks.ts';
-import { engine, useEngineState } from '../app/store.ts';
+import { runOperation, useEngineState } from '../app/store.ts';
 import { Hint, Mono, PageHeader, ShortId, when } from '../components/common.tsx';
 import { sha256Hex } from '../domain/canonical.ts';
 import type { Ctx } from '../engine/engine.ts';
@@ -37,9 +37,9 @@ export function PlmPage() {
   const retry = held.some((c) => c.kind === 'OTHER_NAME');
   const models = Object.keys(state.vehicleModels).sort();
 
-  const system = <R,>(op: (c: Ctx) => R, ok?: string) => {
+  const system = async <R,>(op: (c: Ctx) => R, ok?: string) => {
     try {
-      const r = engine.run(null, op);
+      const r = await runOperation(null, op);
       if (ok) message.success(ok);
       return r;
     } catch (e) {
@@ -65,7 +65,7 @@ export function PlmPage() {
   }
 
   const start = (model: string) => setForm({ model, version: '', modules: (latestPlmVersion(state.plm, model)?.modules ?? []).map((m) => ({ ...m })), part: NONE, stage: form?.stage ?? 'TEST' });
-  const publish = () => {
+  const publish = async () => {
     if (!form) return;
     const known = choices.get(form.part);
     const dclPart: Part | null =
@@ -75,7 +75,7 @@ export function PlmPage() {
           ? { clientVersion: known.part.clientVersion, setVersion: known.part.setVersion, digest: known.part.digest }
           : null;
     const ok = form.stage === 'TEST' ? L('PLM 已出测试版本（待同步到平台）', 'Test version issued in PLM (to sync)') : L('PLM 已发布（待同步到平台）', 'Published in PLM (to sync)');
-    if (system((c) => publishPlmVersion(c, { vehicleModelId: form.model, version: form.version, modules: form.modules, dclPart, stage: form.stage }), ok) !== undefined) setForm(null);
+    if ((await system((c) => publishPlmVersion(c, { vehicleModelId: form.model, version: form.version, modules: form.modules, dclPart, stage: form.stage }), ok)) !== undefined) setForm(null);
   };
   const setModule = (i: number, key: 'name' | 'version', value: string) => form && setForm({ ...form, modules: form.modules.map((m, j) => (j === i ? { ...m, [key]: value } : m)) });
 

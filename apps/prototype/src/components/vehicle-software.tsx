@@ -64,8 +64,8 @@ export function UpdateSoftwareModal({ workspaceId, resourceId, onClose }: { work
       okButtonProps={{ disabled: !!pending || !version }}
       onCancel={close}
       footer={pending ? null : undefined}
-      onOk={() => {
-        if (run((c) => requestVehicleSoftware(c, workspaceId, r.id, { version: version!, reason }), L('已提交整车 OTA', 'Sent to vehicle OTA')) !== undefined) close();
+      onOk={async () => {
+        if ((await run((c) => requestVehicleSoftware(c, workspaceId, r.id, { version: version!, reason }), L('已提交整车 OTA', 'Sent to vehicle OTA'))) !== undefined) close();
       }}
     >
       <Hint>

@@ -80,8 +80,8 @@ export function FeaturesPage() {
         title={L('创建 Feature', 'New Feature')}
         onCancel={() => setOpen(false)}
         onOk={() =>
-          form.validateFields().then((v) => {
-            const id = run((c) => createFeature(c, { workspaceId: workspace.id, groupId: v.groupId, name: v.name, description: v.description, baseReleaseId: v.baseReleaseId || null }), L('已创建', 'Created'));
+          form.validateFields().then(async (v) => {
+            const id = (await run((c) => createFeature(c, { workspaceId: workspace.id, groupId: v.groupId, name: v.name, description: v.description, baseReleaseId: v.baseReleaseId || null }), L('已创建', 'Created')));
             if (id) {
               setOpen(false);
               form.resetFields();

@@ -95,26 +95,26 @@ export function OrgPage() {
   const kind = Form.useWatch('kind', form);
 
   const save = () =>
-    form.validateFields().then((v) => {
+    form.validateFields().then(async (v) => {
       let ok: unknown;
-      if (modal === 'unit') ok = run((c) => createOrgUnit(c, { id: v.id, name: v.name, parentId: v.parentId ?? null }), L('已创建', 'Created'));
-      else if (modal === 'project') ok = run((c) => createProject(c, v), L('已创建', 'Created'));
-      else if (modal === 'model') ok = run((c) => createVehicleModel(c, v), L('已创建', 'Created'));
-      else if (modal === 'group') ok = run((c) => createGroup(c, v), L('已创建', 'Created'));
+      if (modal === 'unit') ok = (await run((c) => createOrgUnit(c, { id: v.id, name: v.name, parentId: v.parentId ?? null }), L('已创建', 'Created')));
+      else if (modal === 'project') ok = (await run((c) => createProject(c, v), L('已创建', 'Created')));
+      else if (modal === 'model') ok = (await run((c) => createVehicleModel(c, v), L('已创建', 'Created')));
+      else if (modal === 'group') ok = (await run((c) => createGroup(c, v), L('已创建', 'Created')));
       else if (modal === 'workspace')
-        ok = run((c) => createWorkspace(c, { ...v, groupIds: v.groupIds ?? [], scopes: v.scopes ?? [], sourceWorkspaceIds: v.sourceWorkspaceIds ?? [] }), L('已创建', 'Created'));
+        ok = (await run((c) => createWorkspace(c, { ...v, groupIds: v.groupIds ?? [], scopes: v.scopes ?? [], sourceWorkspaceIds: v.sourceWorkspaceIds ?? [] }), L('已创建', 'Created')));
       else if (modal === 'rule')
-        ok = run(
+        ok = (await run(
           (c) => createGrantRule(c, { orgUnitId: v.orgUnitId, includeSubunits: !!v.includeSubunits, role: 'BUSINESS_DEV', workspaces: v.workspaces ?? [], groups: v.groups ?? [], scopes: [], envs: ['development'] }),
           L('已创建；该组织节点的成员立即获得这条基础权限', 'Created; members of the unit get this base right at once'),
-        );
-      else if (modal && 'edit' in modal) ok = run((c) => updateOrgUnit(c, modal.edit, { name: v.name, parentId: v.parentId ?? null }), L('已保存', 'Saved'));
-      else if (modal && 'ws' in modal) ok = run((c) => updateWorkspace(c, modal.ws, v), L('已保存', 'Saved'));
+        ));
+      else if (modal && 'edit' in modal) ok = (await run((c) => updateOrgUnit(c, modal.edit, { name: v.name, parentId: v.parentId ?? null }), L('已保存', 'Saved')));
+      else if (modal && 'ws' in modal) ok = (await run((c) => updateWorkspace(c, modal.ws, v), L('已保存', 'Saved')));
       else if (modal && 'rehome' in modal)
         ok =
           modal.rehome === 'workspace'
-            ? run((c) => moveWorkspaceUnit(c, modal.id, v.orgUnitId), L('已重新挂靠；业务分组代码、数据键和授权不变', 'Re-attached; group codes, data keys and grants are unchanged'))
-            : run((c) => moveGroupUnit(c, modal.id, v.orgUnitId), L('已重新挂靠', 'Re-attached'));
+            ? (await run((c) => moveWorkspaceUnit(c, modal.id, v.orgUnitId), L('已重新挂靠；业务分组代码、数据键和授权不变', 'Re-attached; group codes, data keys and grants are unchanged')))
+            : (await run((c) => moveGroupUnit(c, modal.id, v.orgUnitId), L('已重新挂靠', 'Re-attached')));
       if (ok !== undefined) close();
     });
 

@@ -2,6 +2,7 @@
 // current workspace, and React hooks. Each browser keeps its own copy of the platform.
 
 import { useCallback, useSyncExternalStore } from 'react';
+import type { Ctx } from '../engine/engine.ts';
 import { Engine } from '../engine/engine.ts';
 import { migrate, unreadableReason } from '../engine/migrate.ts';
 import { cleanState, demoState } from '../engine/seed.ts';
@@ -32,7 +33,7 @@ function safeSet(key: string, value: string | null): boolean {
 
 /**
  * What went wrong with this browser's saved platform, shown as a banner. SAVE_FAILED: storage is
- * unavailable or full, so changes last only until the page is closed. UNREADABLE_SAVE: the saved
+ * unavailable or full, so the attempted change was not committed. UNREADABLE_SAVE: the saved
  * state could not be read (a newer version, or damaged); it is kept aside and the demo was loaded.
  */
 export type StorageProblem = { kind: 'SAVE_FAILED' } | { kind: 'UNREADABLE_SAVE'; reason: 'NOT_STATE' | 'TOO_OLD' | 'NEWER' | 'DAMAGED'; raw: string };
@@ -57,7 +58,7 @@ export function dismissStorageProblem(): void {
 
 const UNREADABLE_KEY = 'kairoz.state.unreadable.v1';
 
-function loadState(): State {
+function loadState(writable: boolean): State {
   const raw = safeGet(STATE_KEY);
   if (raw) {
     let reason: 'NOT_STATE' | 'TOO_OLD' | 'NEWER' | 'DAMAGED' = 'DAMAGED';
@@ -67,43 +68,83 @@ function loadState(): State {
       reason = unreadableReason(parsed) ?? 'DAMAGED';
       const state = migrate(parsed);
       if (state) {
-        if (upgraded) safeSet(STATE_KEY, JSON.stringify(state));
+        if (upgraded && writable) safeSet(STATE_KEY, JSON.stringify(state));
         return state;
       }
     } catch {
       // Not JSON, or a migration failed: damaged.
     }
     // Keep what could not be read, so nothing is lost by loading the demo instead.
-    safeSet(UNREADABLE_KEY, raw);
+    if (writable) safeSet(UNREADABLE_KEY, raw);
     storageProblem = { kind: 'UNREADABLE_SAVE', reason, raw };
   }
   // Save a fresh demo at once, so its ids (and links to them) survive a reload.
   const fresh = demoState();
-  safeSet(STATE_KEY, JSON.stringify(fresh));
+  if (writable && !safeSet(STATE_KEY, JSON.stringify(fresh)) && !storageProblem) {
+    storageProblem = { kind: 'SAVE_FAILED' };
+  }
   return fresh;
 }
 
-let saveTimer: ReturnType<typeof setTimeout> | undefined;
-function persist(state: State): void {
-  clearTimeout(saveTimer);
-  saveTimer = setTimeout(() => {
-    const saved = safeSet(STATE_KEY, JSON.stringify(state));
-    if (!saved && storageProblem?.kind !== 'SAVE_FAILED') setStorageProblem({ kind: 'SAVE_FAILED' });
-    if (saved && storageProblem?.kind === 'SAVE_FAILED') setStorageProblem(null);
-  }, 150);
+export let engine: Engine;
+let savedState: string | null;
+
+function withStateLock<R>(operation: () => R): Promise<R> {
+  if (!navigator.locks) return Promise.reject(new Error('This browser cannot safely coordinate prototype writes across tabs.'));
+  return navigator.locks.request(STATE_KEY, operation);
 }
 
-export const engine = new Engine(loadState(), persist);
+export async function initializeStore(): Promise<void> {
+  const initialize = (writable: boolean) => {
+    engine = new Engine(loadState(writable));
+    savedState = safeGet(STATE_KEY);
+  };
+  if (navigator.locks) await withStateLock(() => initialize(true));
+  else initialize(false);
+}
 
-// Tabs of one browser share the saved platform. When another tab saves, follow it, so an older
-// tab never writes stale data back (and a tab signed in as a disabled account drops to sign-in).
+function refreshState(): void {
+  const raw = localStorage.getItem(STATE_KEY);
+  if (!raw || raw === savedState) return;
+  const state = migrate(JSON.parse(raw));
+  if (!state) throw new Error('The saved prototype state could not be read. Reload before editing.');
+  savedState = raw;
+  engine.replace(state);
+}
+
+function saveState(state: State): void {
+  const raw = JSON.stringify(state);
+  if (!safeSet(STATE_KEY, raw)) {
+    setStorageProblem({ kind: 'SAVE_FAILED' });
+    throw new Error('The change could not be saved to browser storage.');
+  }
+  savedState = raw;
+  engine.replace(state);
+  if (storageProblem?.kind === 'SAVE_FAILED') setStorageProblem(null);
+}
+
+/** Re-read, authorize, execute and persist under one origin-wide lock. */
+export function runOperation<R>(username: string | null, operation: (ctx: Ctx) => R): Promise<R> {
+  return withStateLock(() => {
+    refreshState();
+    const initial = engine.getState();
+    const transaction = new Engine(initial);
+    try {
+      return transaction.run(username, operation);
+    } finally {
+      // Denied operations can also change state by recording an audit entry.
+      if (transaction.getState() !== initial) saveState(transaction.getState());
+    }
+  });
+}
+
 window.addEventListener('storage', (e) => {
-  if (e.key !== STATE_KEY || !e.newValue) return;
+  if (!engine || e.key !== STATE_KEY) return;
   try {
-    const state = migrate(JSON.parse(e.newValue));
-    if (state) engine.replace(state);
+    // A queued event may describe an older write. Always read the current snapshot.
+    refreshState();
   } catch {
-    // Ignore a save this version cannot read.
+    // Keep the last readable snapshot visible. A write will fail until the save is readable.
   }
 });
 
@@ -164,8 +205,8 @@ export function useSession(): Session {
   );
 }
 
-export function resetPlatform(kind: 'demo' | 'clean'): void {
-  engine.replace(kind === 'demo' ? demoState() : cleanState());
+export async function resetPlatform(kind: 'demo' | 'clean'): Promise<void> {
+  await withStateLock(() => saveState(kind === 'demo' ? demoState() : cleanState()));
   safeSet(LAST_WORKSPACE_KEY, null);
   setSession({ username: null, workspaceId: null });
 }
@@ -191,8 +232,8 @@ export function readStateText(json: string): StateText {
 }
 
 /** Replaces this browser's platform with an imported one; everyone signs in again. */
-export function importState(state: State): void {
-  engine.replace(state);
+export async function importState(state: State): Promise<void> {
+  await withStateLock(() => saveState(state));
   safeSet(LAST_WORKSPACE_KEY, null);
   setSession({ username: null, workspaceId: null });
 }

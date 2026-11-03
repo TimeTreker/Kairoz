@@ -27,8 +27,8 @@ export function IntakeTab({ feature }: { feature: Feature }) {
   const canReview = inIntake && can('feature.review', { workspaceId: feature.workspaceId, groupId: feature.groupId });
 
   const submitDecision = () =>
-    form.validateFields().then((v) => {
-      const ok = run(
+    form.validateFields().then(async (v) => {
+      const ok = (await run(
         (c) =>
           reviewFile(c, feature.id, {
             commitId: feature.headCommitId!,
@@ -49,7 +49,7 @@ export function IntakeTab({ feature }: { feature: Feature }) {
               : {}),
           }),
         deciding!.decision === 'APPROVED' ? L('已批准', 'Approved') : L('已拒绝，Feature 退回草稿', 'Rejected; the Feature is back in Draft'),
-      );
+      ));
       if (ok !== undefined) {
         setDeciding(null);
         form.resetFields();

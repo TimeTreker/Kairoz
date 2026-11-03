@@ -70,7 +70,7 @@ export function FilesTab({ feature }: { feature: Feature }) {
   };
 
   const saveFile = () =>
-    form.validateFields().then((v) => {
+    form.validateFields().then(async (v) => {
       const attrs = {
         name: v.name,
         purpose: v.purpose,
@@ -81,8 +81,8 @@ export function FilesTab({ feature }: { feature: Feature }) {
         ...(v.priority ? { priority: v.priority as FileSpecContent['priority'] } : {}),
       };
       const ok = editing
-        ? run((c) => updateFile(c, feature.id, editing, attrs), L('已保存到草稿', 'Saved to draft'))
-        : run((c) => addFile(c, feature.id, { ...attrs, source: { unit: v.unit, directory: v.directory, pattern: v.pattern } }), L('已加入草稿', 'Added to draft'));
+        ? (await run((c) => updateFile(c, feature.id, editing, attrs), L('已保存到草稿', 'Saved to draft')))
+        : (await run((c) => addFile(c, feature.id, { ...attrs, source: { unit: v.unit, directory: v.directory, pattern: v.pattern } }), L('已加入草稿', 'Added to draft')));
       if (ok !== undefined) {
         setAdding(false);
         setEditing(null);
@@ -331,10 +331,10 @@ export function FilesTab({ feature }: { feature: Feature }) {
         title={L('调整处理绑定（DCL 工程）', 'Adjust processing binding (DCL)')}
         onCancel={() => setBindingKey(null)}
         onOk={() =>
-          bindForm.validateFields().then((v) => {
+          bindForm.validateFields().then(async (v) => {
             const done = technical
-              ? run((c) => setTechnicalBinding(c, feature.id, binding!, v), L('已调整处理绑定，提交后由本组测试验证', 'Binding changed; submit it for the group’s testers'))
-              : run((c) => setBinding(c, feature.id, binding!, v), L('已调整，Feature 回到草稿', 'Changed; the Feature is back in Draft'));
+              ? (await run((c) => setTechnicalBinding(c, feature.id, binding!, v), L('已调整处理绑定，提交后由本组测试验证', 'Binding changed; submit it for the group’s testers')))
+              : (await run((c) => setBinding(c, feature.id, binding!, v), L('已调整，Feature 回到草稿', 'Changed; the Feature is back in Draft')));
             if (done !== undefined) setBindingKey(null);
           })
         }
@@ -385,8 +385,8 @@ export function FilesTab({ feature }: { feature: Feature }) {
                 <Button
                   size="small"
                   type="primary"
-                  onClick={() => {
-                    if (run((ctx) => putReference(ctx, feature.id, c.dataKey), L('已引用', 'Referenced')) !== undefined) setReferencing(false);
+                  onClick={async () => {
+                    if ((await run((ctx) => putReference(ctx, feature.id, c.dataKey), L('已引用', 'Referenced'))) !== undefined) setReferencing(false);
                   }}
                 >
                   {L('引用', 'Reference')}

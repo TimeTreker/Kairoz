@@ -8,7 +8,7 @@ import { grantsOf, workspaceAccess } from '../engine/identity.ts';
 import { useI18n } from '../i18n/i18n.tsx';
 import { issueLabel } from '../i18n/issues.ts';
 import { DENY_REASON_LABELS, ERROR_LABELS } from '../i18n/vocab.ts';
-import { engine, setSession, useEngineState, useSession } from './store.ts';
+import { engine, runOperation, setSession, useEngineState, useSession } from './store.ts';
 
 /** The signed-in account as an engine actor, or null. */
 export function useActor(): Actor | null {
@@ -70,9 +70,9 @@ export function useRun() {
   const { username } = useSession();
   const errorText = useErrorText();
   return useCallback(
-    <R,>(operation: (ctx: Ctx) => R, success?: string): Ran<R> | undefined => {
+    async <R,>(operation: (ctx: Ctx) => R, success?: string): Promise<Ran<R> | undefined> => {
       try {
-        const result = engine.run(username, operation);
+        const result = await runOperation(username, operation);
         if (success) message.success(success);
         return (result === undefined ? true : result) as Ran<R>;
       } catch (e) {
